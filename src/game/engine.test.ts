@@ -403,11 +403,12 @@ describe('special powers', () => {
 });
 
 describe("D-Class's Standard Expendability Clause", () => {
-  it('pays only half the Clearance Fee', () => {
+  it('is never billed the Clearance Fee', () => {
     let game = makeGame(['boot', 'battleship']);
     game = withPlayer(game, 'p1', { inJail: true, position: 10 });
     game = payClearanceFee(game, 'p1');
-    expect(game.players.p1.credits).toBe(1500 - 25);
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.players.p1.inJail).toBe(false);
   });
 
   it('survives its first Termination by respawning with reduced Credits', () => {
@@ -450,15 +451,24 @@ describe("Janitor's Below the Floor Plan", () => {
     expect(game.players.p1.credits).toBe(1500 - 50);
   });
 
-  it('moves directly to a chosen Maintenance Tunnel instead of rolling', () => {
+  it('moves directly to a chosen Maintenance Tunnel from another one', () => {
     let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p1', { position: 5 });
     game = useJanitorTunnelTravel(game, 'p1', 15);
     expect(game.players.p1.position).toBe(15);
     expect(game.pendingDecision).toEqual({ type: 'purchase', tileId: 15 });
   });
 
+  it('refuses to travel unless currently standing on a Maintenance Tunnel', () => {
+    let game = makeGame(['iron', 'boot']);
+    const before = game; // starts at position 0 (the Site Entrance), not a tunnel
+    game = useJanitorTunnelTravel(game, 'p1', 15);
+    expect(game).toEqual(before);
+  });
+
   it('never pays toll on a Maintenance Tunnel someone else owns', () => {
     let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p1', { position: 25 });
     game = withPlayer(game, 'p2', { ownedTileIds: [5] });
     game = useJanitorTunnelTravel(game, 'p1', 5);
     expect(game.players.p1.credits).toBe(1500);
@@ -467,8 +477,9 @@ describe("Janitor's Below the Floor Plan", () => {
 
   it("refuses to travel once the player has already rolled this turn", () => {
     let game = makeGame(['iron', 'boot']);
-    game = devSetForcedRoll(game, [4, 6]); // 0 -> 10, Containment Chamber (just visiting, no decision)
-    game = rollDice(game);
+    game = withPlayer(game, 'p1', { position: 5 });
+    game = devSetForcedRoll(game, [2, 3]);
+    game = rollDice(game); // 5 -> 10, Containment Chamber (just visiting, no decision)
     const before = game;
     game = useJanitorTunnelTravel(game, 'p1', 15);
     expect(game).toEqual(before);

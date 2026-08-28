@@ -261,14 +261,17 @@ export function rollDice(state: GameState, rng: () => number = Math.random): Gam
 }
 
 /**
- * Charges the Clearance Fee, applying D-Class's half-price discount
- * ("Standard Expendability Clause") and Janitor's one-time free pass
- * ("Below the Floor Plan" - the master keyring). Returns the resulting
- * state either way - check .pendingDecision for whether a debtSettlement
- * opened instead of actually deducting anything.
+ * Charges the Clearance Fee (50 Credits), applying D-Class's standing
+ * exemption ("Standard Expendability Clause") and Janitor's one-time
+ * free pass ("Below the Floor Plan" - the master keyring). Returns the
+ * resulting state either way - check .pendingDecision for whether a
+ * debtSettlement opened instead of actually deducting anything.
  */
 function chargeClearanceFee(state: GameState, playerId: string): GameState {
   const piece = pieceOf(state, playerId);
+  if (piece === 'boot') {
+    return logEvent(state, "No questions asked - D-Class isn't billed a Clearance Fee.");
+  }
   if (piece === 'iron' && !state.players[playerId].usedMasterKey) {
     return updatePlayer(
       logEvent(state, 'Used the master keyring - no Clearance Fee.'),
@@ -276,8 +279,7 @@ function chargeClearanceFee(state: GameState, playerId: string): GameState {
       { usedMasterKey: true },
     );
   }
-  const fee = piece === 'boot' ? Math.floor(CLEARANCE_FEE / 2) : CLEARANCE_FEE;
-  return chargePlayer(state, playerId, fee, null);
+  return chargePlayer(state, playerId, CLEARANCE_FEE, null);
 }
 
 function resolveJailRoll(state: GameState, playerId: string, roll: [number, number], isDoubles: boolean): GameState {
@@ -645,21 +647,25 @@ export function resolveRubberDuckEncounter(state: GameState, sendToJailChoice: b
 // --- Janitor's Special Power ---------------------------------------------
 
 /**
- * "Below the Floor Plan": Janitor moves directly to any Maintenance
- * Tunnel, replacing their roll for the turn - only usable on their own
- * turn, before they've rolled, and not while in the Containment
- * Chamber (the tunnels don't help you there). Landing this way still
- * resolves normally (an unowned Tunnel can be bought), it just never
- * charges Janitor rent - see resolveOwnableLanding.
+ * "Below the Floor Plan": from one Maintenance Tunnel, Janitor moves
+ * directly to any other one, replacing their roll for the turn - only
+ * usable on their own turn, before they've rolled, not while in the
+ * Containment Chamber (the tunnels don't help you there), and only
+ * when they're currently standing on a Tunnel themselves - the service
+ * corridors connect the tunnels to each other, not to the rest of the
+ * board. Landing this way still resolves normally (an unowned Tunnel
+ * can be bought), it just never charges Janitor rent - see
+ * resolveOwnableLanding.
  */
 export function useJanitorTunnelTravel(state: GameState, playerId: string, targetTileId: number): GameState {
   if (state.pendingDecision || state.winnerId) return state;
   if (currentPlayerId(state) !== playerId || pieceOf(state, playerId) !== 'iron') return state;
   if (state.players[playerId].inJail || state.lastRoll) return state;
+  if (getTile(state.players[playerId].position).kind !== 'tunnel') return state;
   if (getTile(targetTileId).kind !== 'tunnel') return state;
 
   const next = updatePlayer(state, playerId, { position: targetTileId });
-  return resolveLanding(logEvent(next, 'Used the service corridors to reach a Maintenance Tunnel.'), playerId, targetTileId);
+  return resolveLanding(logEvent(next, 'Used the service corridors to reach another Maintenance Tunnel.'), playerId, targetTileId);
 }
 
 // --- Houses & mortgages ------------------------------------------------

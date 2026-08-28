@@ -300,23 +300,28 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             </div>
           )}
 
-          {isMyTurn && !game.pendingDecision && !game.lastRoll && me?.pieceId === 'iron' && !me.inJail && (
-            <div className="actions">
-              <label>
-                Below the Floor Plan:{' '}
-                <select value={selectedTunnelId} onChange={(event) => setSelectedTunnelId(Number(event.target.value))}>
-                  {TUNNEL_TILES.map((tile) => (
-                    <option key={tile.id} value={tile.id}>
-                      {tile.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button onClick={() => useJanitorTunnelTravelAndSync(roomCode, game, playerId, selectedTunnelId)}>
-                Use Service Corridors
-              </button>
-            </div>
-          )}
+          {isMyTurn &&
+            !game.pendingDecision &&
+            !game.lastRoll &&
+            me?.pieceId === 'iron' &&
+            !me.inJail &&
+            getTile(me.position).kind === 'tunnel' && (
+              <div className="actions">
+                <label>
+                  Below the Floor Plan:{' '}
+                  <select value={selectedTunnelId} onChange={(event) => setSelectedTunnelId(Number(event.target.value))}>
+                    {TUNNEL_TILES.filter((tile) => tile.id !== me.position).map((tile) => (
+                      <option key={tile.id} value={tile.id}>
+                        {tile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button onClick={() => useJanitorTunnelTravelAndSync(roomCode, game, playerId, selectedTunnelId)}>
+                  Use Service Corridors
+                </button>
+              </div>
+            )}
 
           {isMyTurn && pendingTile && game.pendingDecision?.type === 'purchase' && (
             <ActionModal>
