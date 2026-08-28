@@ -9,6 +9,7 @@ import {
   declinePurchaseAndSync,
   endTurnAndSync,
   mortgageTileAndSync,
+  payClearanceFeeAndSync,
   rejoinFromAfkAndSync,
   rollDiceAndSync,
   useJanitorTunnelTravelAndSync,
@@ -293,6 +294,19 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
                   {isRolling ? 'Rolling...' : 'Roll Dice'}
                 </button>
               )}
+              {/* Only before rolling - once they've rolled (and failed to
+                  roll doubles), resolveJailRoll already either freed them
+                  or forced the fee, so there's nothing left to pay. */}
+              {!game.lastRoll && me?.inJail && (
+                <button onClick={() => payClearanceFeeAndSync(roomCode, game, playerId)}>
+                  Pay Clearance Fee{' '}
+                  {me.pieceId === 'boot'
+                    ? '(free - D-Class isn\'t billed)'
+                    : me.pieceId === 'iron' && !me.usedMasterKey
+                      ? '(free - master keyring)'
+                      : '(50 Credits)'}
+                </button>
+              )}
               {game.lastRoll && !game.lastRollWasDoubles && (
                 <button onClick={() => endTurnAndSync(roomCode, game)}>End Turn</button>
               )}
@@ -305,23 +319,36 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             !game.lastRoll &&
             me?.pieceId === 'iron' &&
             !me.inJail &&
-            getTile(me.position).kind === 'tunnel' && (
-              <div className="actions">
-                <label>
-                  Below the Floor Plan:{' '}
-                  <select value={selectedTunnelId} onChange={(event) => setSelectedTunnelId(Number(event.target.value))}>
-                    {TUNNEL_TILES.filter((tile) => tile.id !== me.position).map((tile) => (
-                      <option key={tile.id} value={tile.id}>
-                        {tile.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button onClick={() => useJanitorTunnelTravelAndSync(roomCode, game, playerId, selectedTunnelId)}>
-                  Use Service Corridors
-                </button>
-              </div>
-            )}
+            getTile(me.position).kind === 'tunnel' &&
+            (() => {
+              // selectedTunnelId can go stale (e.g. it still points at
+              // the tunnel Janitor is currently standing on, which isn't
+              // a valid destination) without the dropdown ever firing
+              // onChange to update it - always fall back to the first
+              // real option rather than silently submitting a same-tile
+              // "move" that looks like nothing happened.
+              const otherTunnels = TUNNEL_TILES.filter((tile) => tile.id !== me.position);
+              const effectiveTunnelId = otherTunnels.some((tile) => tile.id === selectedTunnelId)
+                ? selectedTunnelId
+                : otherTunnels[0].id;
+              return (
+                <div className="actions">
+                  <label>
+                    Below the Floor Plan:{' '}
+                    <select value={effectiveTunnelId} onChange={(event) => setSelectedTunnelId(Number(event.target.value))}>
+                      {otherTunnels.map((tile) => (
+                        <option key={tile.id} value={tile.id}>
+                          {tile.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button onClick={() => useJanitorTunnelTravelAndSync(roomCode, game, playerId, effectiveTunnelId)}>
+                    Use Service Corridors
+                  </button>
+                </div>
+              );
+            })()}
 
           {isMyTurn && pendingTile && game.pendingDecision?.type === 'purchase' && (
             <ActionModal>
