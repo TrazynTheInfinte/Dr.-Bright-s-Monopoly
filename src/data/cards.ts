@@ -1,0 +1,209 @@
+import type { CardDeck } from '../types/game';
+
+export type CardEffect =
+  | { type: 'collect'; amount: number }
+  | { type: 'pay'; amount: number }
+  | { type: 'moveTo'; tileId: number }
+  | { type: 'moveToNearestTunnel' }
+  | { type: 'moveToNearestUtility' }
+  | { type: 'moveBackSpaces'; spaces: number }
+  | { type: 'goToJail' }
+  | { type: 'getOutOfJailFree' }
+  | { type: 'collectFromEachPlayer'; amount: number }
+  | { type: 'payEachPlayer'; amount: number }
+  | { type: 'repairs'; perHouse: number; perHotel: number };
+
+export interface CardDefinition {
+  id: string;
+  deck: CardDeck;
+  title: string;
+  text: string;
+  effect: CardEffect;
+}
+
+// Standard classic Monopoly card effects, reskinned to SCP flavor - see
+// CONTEXT.md's Cards section. Every card automates its effect directly
+// (no read-it-aloud cards); "Get Out of Containment Free" cards are
+// held (see GamePlayerState.heldCardIds) rather than resolved
+// immediately.
+export const ANOMALOUS_EVENT_CARDS: CardDefinition[] = [
+  {
+    id: 'realityAnchorMalfunction',
+    deck: 'anomalousEvent',
+    title: 'Reality Anchor Malfunction',
+    text: 'Advance to the Site Entrance. Collect your Foundation Credits as you pass.',
+    effect: { type: 'moveTo', tileId: 0 },
+  },
+  {
+    id: 'emergencySiteTransfer',
+    deck: 'anomalousEvent',
+    title: 'Emergency Site Transfer',
+    text: 'Advance to Site-01.',
+    effect: { type: 'moveTo', tileId: 39 },
+  },
+  {
+    id: 'requisitionOrder',
+    deck: 'anomalousEvent',
+    title: 'Requisition Order',
+    text: 'Advance to the nearest Maintenance Tunnel. If unowned, you may buy it. If owned, pay the owner double the usual toll.',
+    effect: { type: 'moveToNearestTunnel' },
+  },
+  {
+    id: 'powerGridFailure',
+    deck: 'anomalousEvent',
+    title: 'Power Grid Failure',
+    text: 'Advance to the nearest utility. If unowned, you may buy it. If owned, roll the dice and pay the owner ten times the total.',
+    effect: { type: 'moveToNearestUtility' },
+  },
+  {
+    id: 'hazardPayBonus',
+    deck: 'anomalousEvent',
+    title: 'Hazard Pay Bonus',
+    text: 'Collect 50 Foundation Credits.',
+    effect: { type: 'collect', amount: 50 },
+  },
+  {
+    id: 'clearanceRevokedAnomalous',
+    deck: 'anomalousEvent',
+    title: 'Clearance Revoked',
+    text: 'This card may be kept until needed, or sold. Get Out of the Containment Chamber Free.',
+    effect: { type: 'getOutOfJailFree' },
+  },
+  {
+    id: 'emergencyRecall',
+    deck: 'anomalousEvent',
+    title: 'Emergency Recall',
+    text: 'Go back 3 spaces.',
+    effect: { type: 'moveBackSpaces', spaces: 3 },
+  },
+  {
+    id: 'containmentBreachAnomalous',
+    deck: 'anomalousEvent',
+    title: 'Containment Breach',
+    text: 'Go directly to the Containment Chamber. Do not pass the Site Entrance, do not collect 200 Credits.',
+    effect: { type: 'goToJail' },
+  },
+  {
+    id: 'structuralDamageAssessment',
+    deck: 'anomalousEvent',
+    title: 'Structural Damage Assessment',
+    text: 'Make general repairs on all your Wings: 25 Credits per house, 100 Credits per hotel.',
+    effect: { type: 'repairs', perHouse: 25, perHotel: 100 },
+  },
+  {
+    id: 'hazardZoneFine',
+    deck: 'anomalousEvent',
+    title: 'Hazard Zone Fine',
+    text: 'Pay a fine of 15 Foundation Credits.',
+    effect: { type: 'pay', amount: 15 },
+  },
+  {
+    id: 'advanceToO5Chamber',
+    deck: 'anomalousEvent',
+    title: 'Summoned to the O5 Council Chamber',
+    text: 'Advance to the O5 Council Chamber.',
+    effect: { type: 'moveTo', tileId: 37 },
+  },
+  {
+    id: 'mandatoryTeamBuildingRetreat',
+    deck: 'anomalousEvent',
+    title: 'Mandatory Team-Building Retreat',
+    text: "You're funding it. Pay each other player 50 Foundation Credits.",
+    effect: { type: 'payEachPlayer', amount: 50 },
+  },
+];
+
+export const FOUNDATION_DIRECTIVE_CARDS: CardDefinition[] = [
+  {
+    id: 'budgetSurplus',
+    deck: 'foundationDirective',
+    title: 'Budget Surplus',
+    text: 'Collect 200 Foundation Credits.',
+    effect: { type: 'collect', amount: 200 },
+  },
+  {
+    id: 'fieldInjuryTreatment',
+    deck: 'foundationDirective',
+    title: 'Field Injury Treatment',
+    text: 'Pay 50 Foundation Credits.',
+    effect: { type: 'pay', amount: 50 },
+  },
+  {
+    id: 'stockDividend',
+    deck: 'foundationDirective',
+    title: 'Stock Dividend',
+    text: 'From a Foundation front-company sale, collect 50 Credits.',
+    effect: { type: 'collect', amount: 50 },
+  },
+  {
+    id: 'clearanceRevokedDirective',
+    deck: 'foundationDirective',
+    title: 'Clearance Revoked',
+    text: 'This card may be kept until needed, or sold. Get Out of the Containment Chamber Free.',
+    effect: { type: 'getOutOfJailFree' },
+  },
+  {
+    id: 'reassignedToContainmentDuty',
+    deck: 'foundationDirective',
+    title: 'Reassigned to Containment Duty',
+    text: 'Go directly to the Containment Chamber. Do not pass the Site Entrance, do not collect 200 Credits.',
+    effect: { type: 'goToJail' },
+  },
+  {
+    id: 'foundersDayGala',
+    deck: 'foundationDirective',
+    title: "Founder's Day Gala",
+    text: 'Collect 50 Foundation Credits from every other player.',
+    effect: { type: 'collectFromEachPlayer', amount: 50 },
+  },
+  {
+    id: 'pensionFundMatures',
+    deck: 'foundationDirective',
+    title: 'Pension Fund Matures',
+    text: 'Collect 100 Foundation Credits.',
+    effect: { type: 'collect', amount: 100 },
+  },
+  {
+    id: 'taxRefund',
+    deck: 'foundationDirective',
+    title: 'Tax Refund',
+    text: 'Collect 20 Foundation Credits.',
+    effect: { type: 'collect', amount: 20 },
+  },
+  {
+    id: 'consultancyFee',
+    deck: 'foundationDirective',
+    title: 'Consultancy Fee',
+    text: 'Receive 25 Foundation Credits.',
+    effect: { type: 'collect', amount: 25 },
+  },
+  {
+    id: 'facilityAssessmentLevy',
+    deck: 'foundationDirective',
+    title: 'Facility Assessment Levy',
+    text: 'You are assessed for facility repairs: 40 Credits per house, 115 Credits per hotel.',
+    effect: { type: 'repairs', perHouse: 40, perHotel: 115 },
+  },
+  {
+    id: 'siteTalentShow',
+    deck: 'foundationDirective',
+    title: 'Second Place, Site Talent Show',
+    text: 'Collect 10 Foundation Credits.',
+    effect: { type: 'collect', amount: 10 },
+  },
+  {
+    id: 'colleagueInheritance',
+    deck: 'foundationDirective',
+    title: 'Inheritance from a Deceased Colleague',
+    text: 'Collect 100 Foundation Credits.',
+    effect: { type: 'collect', amount: 100 },
+  },
+];
+
+export const ALL_CARDS: CardDefinition[] = [...ANOMALOUS_EVENT_CARDS, ...FOUNDATION_DIRECTIVE_CARDS];
+
+export function findCard(cardId: string): CardDefinition {
+  const card = ALL_CARDS.find((c) => c.id === cardId);
+  if (!card) throw new Error(`Unknown card id: ${cardId}`);
+  return card;
+}

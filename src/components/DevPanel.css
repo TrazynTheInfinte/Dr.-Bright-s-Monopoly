@@ -1,0 +1,65 @@
+.dev-panel {
+  border: 3px dashed var(--color-red);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.dev-panel-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--color-red);
+}
+
+.dev-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dev-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dev-panel-row input {
+  width: 5rem;
+  min-width: 0;
+  font-family: var(--font-mono);
+  border: 2px solid var(--color-black);
+  padding: 0.25em;
+  background: var(--color-paper);
+}
+
+.dev-panel-row select {
+  /* min-width: 0 overrides a flex item's default min-width:auto, which
+     otherwise refuses to shrink a <select> below its own content size -
+     that was pushing the Jump button out past the panel's border. */
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  border: 2px solid var(--color-black);
+  padding: 0.25em;
+  background: var(--color-paper);
+}
+
+.dev-panel-row button {
+  flex-shrink: 0;
+}
+
+/* Visually flags the one truly irreversible-for-everyone action in
+   here (ending the whole match) as distinct from the rest, which just
+   nudge state around. */
+.dev-panel-section-danger {
+  border: 2px solid var(--color-red);
+  padding: 0.5em;
+}
+
+.dev-panel-section-danger button {
+  background: var(--color-black);
+}

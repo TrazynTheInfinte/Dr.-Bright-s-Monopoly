@@ -1,0 +1,655 @@
+.board {
+  position: relative;
+  display: grid;
+  /* minmax(0, 1fr), not a bare 1fr - a bare 1fr's implicit minimum is
+     "auto" (each track's content size), so tall tile text/icons were
+     forcing every row taller than its fair square share and stretching
+     the whole board vertically. minmax(0, 1fr) lets tracks actually
+     shrink to fit the square instead of growing to fit content. */
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  grid-template-rows: repeat(11, minmax(0, 1fr));
+  aspect-ratio: 1;
+  width: 100%;
+  margin: 0 auto;
+  border: 3px solid var(--color-black);
+  background: var(--color-paper);
+  font-family: var(--font-mono);
+}
+
+.board-center {
+  grid-row: 2 / 11;
+  grid-column: 2 / 11;
+  background: var(--color-paper);
+  border: 2px solid var(--color-black);
+  overflow: hidden;
+  position: relative;
+}
+
+/* The banner is rotated, so its visual footprint is wider/taller than
+   its own unrotated box (the corners swing out) - it's positioned
+   independently of the two deck placeholders below rather than stacked
+   in flow with them, so that swing can't overlap anything. */
+.board-center-banner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-18deg);
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-paper);
+  background: var(--color-red);
+  border: 3px solid var(--color-black);
+  padding: 0.5em 2.5em;
+  font-size: clamp(0.8rem, 2.6vw, 1.5rem);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.board-center-deck {
+  all: unset;
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15em;
+  border: 2px dashed var(--color-grey);
+  color: var(--color-grey);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5em 0.75em;
+  background: var(--color-paper);
+  cursor: default;
+}
+
+/* Stamp-style icon per deck, rotated slightly like it was pressed on
+   with a rubber stamp rather than printed straight. */
+.board-center-deck-icon {
+  width: 1.6em;
+  height: 1.6em;
+  color: currentColor;
+  opacity: 0.7;
+  transform: rotate(-8deg);
+}
+
+.board-center-deck-communist {
+  top: 14%;
+  left: 8%;
+}
+
+.board-center-deck-nochance {
+  bottom: 14%;
+  right: 8%;
+}
+
+/* The pile matching an awaitingCardDraw decision - everyone sees which
+   pile is "hot" (border + pulse), but only the current player's own
+   client can actually trigger the draw, so only theirs also gets
+   is-clickable (pointer cursor + hover swap). Without that split, every
+   other player saw what looked like a clickable button that silently
+   did nothing when clicked. */
+.board-center-deck.is-hot {
+  border-style: solid;
+  border-color: var(--color-red);
+  color: var(--color-red);
+  animation: deck-pulse 1.1s ease-in-out infinite;
+}
+
+.board-center-deck.is-clickable {
+  cursor: pointer;
+}
+
+.board-center-deck.is-clickable:hover {
+  background: var(--color-red);
+  color: var(--color-paper);
+}
+
+@keyframes deck-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(179, 0, 0, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(179, 0, 0, 0);
+  }
+}
+
+.board-tile {
+  position: relative;
+  display: flex;
+  border: 1px solid var(--color-black);
+  background: var(--color-paper);
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.board-tile-corner {
+  align-items: center;
+  justify-content: center;
+  background: var(--color-grey-light);
+}
+
+.tile-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15em;
+  width: 100%;
+  padding: 0.2em;
+  text-align: center;
+  overflow: hidden;
+}
+
+.tile-icon {
+  /* clamp() instead of em - em was relative to the inherited root font
+     size, not the tile's own (much smaller, on a phone) size, so the
+     icon stayed full-size regardless of how small the board got and
+     ate most of a mobile tile's limited height, leaving no room for
+     the name below it to actually fit within its line-clamp. */
+  width: clamp(7px, 2.6vw, 15px);
+  height: clamp(7px, 2.6vw, 15px);
+  color: var(--color-black);
+  flex-shrink: 0;
+}
+
+.board-tile-corner .tile-icon {
+  width: clamp(11px, 4vw, 22px);
+  height: clamp(11px, 4vw, 22px);
+}
+
+.tile-name {
+  /* clamp(), not a fixed size - a fixed size only looked right at
+     whatever viewport width it was last tuned against. Single line,
+     not wrapped - a regular (non-corner) tile is too short on a phone
+     to fit an icon, a 2-line name, and the price all at once; letting
+     the name wrap just meant its second line got cut off by the
+     tile's own edge before the ellipsis could apply cleanly. Tap the
+     tile (see BoardPopup/openTileId in Board.tsx) to read the full
+     name if it's truncated here. */
+  font-size: clamp(0.3rem, 1.6vw, 0.42rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Corner tiles are much bigger (they're a full square themselves,
+   same as any other tile, but hold far less other content - no price
+   row on most of them) - plenty of room for 2 lines. */
+.board-tile-corner .tile-name {
+  font-size: clamp(0.34rem, 1.9vw, 0.5rem);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.tile-price {
+  font-size: clamp(0.24rem, 1.3vw, 0.35rem);
+  color: var(--color-grey);
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Color-group stripe on the outer edge of the tile, matching whichever
+   side of the board it sits on - the physical board's convention. */
+.tile-colorbar {
+  position: absolute;
+  background: var(--group-color);
+}
+
+.board-tile-bottom .tile-colorbar {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 22%;
+}
+
+.board-tile-left .tile-colorbar {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 22%;
+}
+
+.board-tile-top .tile-colorbar {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 22%;
+}
+
+.board-tile-right .tile-colorbar {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 22%;
+}
+
+.board-tile-wing .tile-body,
+.board-tile-utility .tile-body {
+  color: var(--color-black);
+}
+
+.board-tile-utility {
+  background: var(--color-grey-light);
+}
+
+.tile-owner-mark {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--color-black);
+  /* Only plays once, the moment this element first mounts (i.e. the
+     instant the tile actually changes from unowned to owned) - it
+     stays the same DOM node (and doesn't replay) across later renders
+     where the owner is unchanged, or even reassigned to someone else
+     by a forced-transfer mechanic, since only the buy flow ever
+     unmounts/remounts this element. */
+  animation: tile-owner-mark-pop 0.35s ease-out;
+}
+
+@keyframes tile-owner-mark-pop {
+  from {
+    transform: scale(2.5) rotate(-15deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Brief flash on the tile itself when it's bought or its rent is paid
+   - see useRecentTileFlashes. Uses box-shadow/background rather than
+   border so it doesn't shift the tile's layout. */
+.tile-flash-buy {
+  animation: tile-flash-buy 0.9s ease-out;
+}
+
+.tile-flash-rent {
+  animation: tile-flash-rent 0.9s ease-out;
+}
+
+@keyframes tile-flash-buy {
+  0% {
+    box-shadow: inset 0 0 0 3px var(--color-red);
+    background: rgba(179, 0, 0, 0.18);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(179, 0, 0, 0);
+    background: transparent;
+  }
+}
+
+@keyframes tile-flash-rent {
+  0% {
+    box-shadow: inset 0 0 0 3px var(--color-black);
+    background: rgba(17, 17, 17, 0.15);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(17, 17, 17, 0);
+    background: transparent;
+  }
+}
+
+/* A property forcibly changing hands (Kulak's/T-Rex's auto-seize,
+   Siege of Stalingrad) - a harder, darker flash than a normal buy,
+   since nobody paid for this one. */
+.tile-flash-seize {
+  animation: tile-flash-seize 0.9s ease-out;
+}
+
+@keyframes tile-flash-seize {
+  0% {
+    box-shadow: inset 0 0 0 4px var(--color-black);
+    background: rgba(17, 17, 17, 0.35);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(17, 17, 17, 0);
+    background: transparent;
+  }
+}
+
+/* Poster-stamp overlay for a jail/Disappear moment - see useBoardStamps.
+   Positioned via inline top/left (percentage of the board, computed
+   from the target tile's grid cell) rather than grid placement, so it
+   can be centered over a tile without being constrained to that
+   tile's own (quite small) box. */
+.board-stamp {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  z-index: 5;
+  pointer-events: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: clamp(0.6rem, 2.2vw, 1rem);
+  color: var(--color-red);
+  border: 3px solid var(--color-red);
+  padding: 0.3em 0.6em;
+  background: rgba(240, 236, 224, 0.9);
+  white-space: nowrap;
+  animation: board-stamp-in 1.4s ease-out forwards;
+}
+
+.board-stamp-disappear {
+  color: var(--color-black);
+  border-color: var(--color-black);
+}
+
+@keyframes board-stamp-in {
+  0% {
+    transform: translate(-50%, -50%) rotate(-12deg) scale(2.4);
+    opacity: 0;
+  }
+  12% {
+    transform: translate(-50%, -50%) rotate(-12deg) scale(0.92);
+    opacity: 1;
+  }
+  20% {
+    transform: translate(-50%, -50%) rotate(-12deg) scale(1);
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.tile-mortgaged {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 17, 17, 0.55);
+  color: var(--color-paper);
+  font-size: 0.32rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  z-index: 2;
+}
+
+/* Permanent marker for a Chernobyl-destroyed tile - never buyable
+   again, so this (unlike the mortgaged overlay) has no "for now"
+   quality to it. Same layered-overlay structure, radioactive instead
+   of grey. */
+.tile-destroyed {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background: rgba(80, 10, 10, 0.7);
+  color: var(--color-paper);
+  font-size: 0.28rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.tile-destroyed-icon {
+  width: 1em;
+  height: 1em;
+  color: var(--color-red);
+}
+
+.board-tile-corner .tile-destroyed {
+  font-size: 0.4rem;
+}
+
+.board-tile-corner .tile-destroyed-icon {
+  width: 1.6em;
+  height: 1.6em;
+}
+
+/* A one-time radial burst the instant a tile is destroyed - see
+   useDestructionBursts. Rendered as a board-level overlay (like
+   PosterStamp), not nested in the tile, for the same clipping reason. */
+.tile-burst {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(0.2);
+  width: 12%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  z-index: 7;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(255, 200, 90, 0.95) 0%,
+    rgba(179, 0, 0, 0.7) 45%,
+    rgba(17, 17, 17, 0) 75%
+  );
+  animation: tile-burst 0.9s ease-out forwards;
+}
+
+@keyframes tile-burst {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+
+.tile-houses {
+  position: absolute;
+  bottom: 1px;
+  left: 1px;
+  right: 1px;
+  display: flex;
+  gap: 1px;
+  justify-content: center;
+  z-index: 1;
+}
+
+.tile-house {
+  width: 5px;
+  height: 5px;
+  background: var(--group-green);
+  border: 1px solid var(--color-black);
+  /* Only plays once, the instant this particular span first mounts -
+     each house is its own element (Array.from({length: houses}) in
+     Board.tsx), so building a 3rd house doesn't replay the pop on the
+     1st/2nd, which are already-existing, unchanged DOM nodes. */
+  animation: tile-house-pop 0.3s ease-out;
+}
+
+.tile-hotel {
+  font-size: 0.3rem;
+  font-weight: 700;
+  color: var(--color-paper);
+  background: var(--color-red);
+  border: 1px solid var(--color-black);
+  padding: 0 2px;
+  animation: tile-house-pop 0.3s ease-out;
+}
+
+@keyframes tile-house-pop {
+  from {
+    transform: scale(2.2) translateY(-3px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.tile-occupants {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  z-index: 3;
+}
+
+.tile-token {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* clamp() rather than a fixed size (or a size that only changes at a
+     breakpoint) so the token scales continuously with the board itself
+     - on a narrow phone the whole 11x11 grid is much smaller, and a
+     fixed 40px token would overflow a tile a fraction of that size.
+     Further scaled by --occupant-scale (set in Board.tsx) when more
+     than one player shares a tile, so e.g. every player starting on
+     STOY doesn't overflow that one square at full size regardless of
+     how roomy the board otherwise is. */
+  width: calc(clamp(18px, 6vw, 40px) * var(--occupant-scale, 1));
+  height: calc(clamp(18px, 6vw, 40px) * var(--occupant-scale, 1));
+  border-radius: 50%;
+  border: 2px solid var(--color-black);
+  color: var(--color-paper);
+  cursor: pointer;
+  /* Fakes a lit dome (light top-left, dark bottom-right) plus a drop
+     shadow underneath, so the token reads as a small raised piece
+     sitting up off the board instead of a flat sticker - no image
+     assets, just gradients/shadows toward the 2.5D look. */
+  background-image: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 55%),
+    radial-gradient(circle at 68% 78%, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 60%);
+  background-blend-mode: overlay;
+  box-shadow:
+    0 3px 0 rgba(17, 17, 17, 0.55),
+    0 5px 5px rgba(17, 17, 17, 0.4);
+  animation: tile-token-hop 0.16s ease-out;
+}
+
+.tile-token-icon {
+  width: calc(clamp(11px, 3.6vw, 24px) * var(--occupant-scale, 1));
+  height: calc(clamp(11px, 3.6vw, 24px) * var(--occupant-scale, 1));
+  filter: drop-shadow(0 1px 0.5px rgba(17, 17, 17, 0.5));
+}
+
+/* Whoever's turn it currently is, glows on the board itself - playtest
+   feedback that there was no way to tell at a glance without reading
+   the sidebar or the "Your turn" text. Layers a pulsing red ring on
+   top of the token's existing drop-shadow (both animations run at
+   once) rather than replacing it. */
+.tile-token.is-current-turn {
+  animation:
+    tile-token-hop 0.16s ease-out,
+    tile-token-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes tile-token-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 3px 0 rgba(17, 17, 17, 0.55),
+      0 5px 5px rgba(17, 17, 17, 0.4),
+      0 0 0 2px var(--color-red),
+      0 0 10px 4px rgba(179, 0, 0, 0.7);
+  }
+  50% {
+    box-shadow:
+      0 3px 0 rgba(17, 17, 17, 0.55),
+      0 5px 5px rgba(17, 17, 17, 0.4),
+      0 0 0 2px var(--color-red),
+      0 0 18px 8px rgba(179, 0, 0, 0.9);
+  }
+}
+
+/* Shared bubble for BoardPopup (a tapped/clicked token's owner, or a
+   tapped/clicked tile's full name) - see Board.tsx. Rendered as a
+   sibling of the tile grid (like PosterStamp) rather than nested
+   inside the tile itself, since tiles clip overflow and this needs to
+   float above one, not be squeezed inside its tiny box. */
+.board-popup {
+  position: absolute;
+  /* --popup-translate-x defaults to centered (-50%); Board.tsx
+     overrides it for left/right-column tiles so the popup grows
+     inward from the tile's edge instead of hanging off the screen.
+     --popup-translate-y defaults to growing upward off the tile;
+     Board.tsx overrides it for top-row tiles (nothing above them to
+     grow into without clipping the viewport) to grow downward instead. */
+  transform: translate(var(--popup-translate-x, -50%), var(--popup-translate-y, -160%));
+  z-index: 15;
+  cursor: default;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--color-black);
+  background: var(--color-paper);
+  border: 2px solid var(--color-black);
+  padding: 0.3em 0.6em;
+  box-shadow: 2px 2px 0 rgba(17, 17, 17, 0.3);
+}
+
+.board-popup-price {
+  display: block;
+  margin-top: 0.2em;
+  font-weight: 700;
+}
+
+.board-popup-price-struck {
+  text-decoration: line-through;
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+.board-popup-rent {
+  margin: 0.3em auto 0;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.board-popup-rent td {
+  padding: 0.05em 0.5em;
+  text-align: left;
+}
+
+.board-popup-rent td:last-child {
+  text-align: right;
+  color: var(--color-red);
+}
+
+/* Plays every time a token's displayed tile changes (see
+   useStagedGame, which feeds Board the incremental positions during a
+   move) - a little pop on each hop rather than a smooth continuous
+   slide, since the token is re-parented into a different tile's DOM
+   node each step rather than tweened across pixel coordinates. */
+@keyframes tile-token-hop {
+  from {
+    transform: scale(0.4);
+  }
+  to {
+    transform: scale(1);
+  }
+}

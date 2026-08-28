@@ -1,0 +1,59 @@
+/* Full-width fixed track the banner sweeps through, anchored to the
+   bottom edge of the screen - pointer-events none so it never blocks a
+   click while it's crossing. */
+.now-playing-banner-track {
+  position: fixed;
+  bottom: 6%;
+  left: 0;
+  width: 100%;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Inverted from YourTurnBanner (black on paper, not red on paper) -
+   distinct enough that the two are never confused for each other even
+   if they were ever visible at the same time. */
+.now-playing-banner {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45em 0;
+  background: var(--color-black);
+  color: var(--color-paper);
+  border-top: 3px solid var(--color-red);
+  border-bottom: 3px solid var(--color-red);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 -4px 0 rgba(17, 17, 17, 0.3);
+  /* Quick slide in, a long hold fully on-screen (actually readable),
+     then a quick slide out - not a constant-speed sweep all the way
+     across, which was too fast to read the track name during. */
+  animation: now-playing-banner-sweep 4.8s ease-in-out;
+}
+
+@keyframes now-playing-banner-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  8% {
+    transform: translateX(0);
+  }
+  92% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 900px) {
+  .now-playing-banner {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+  }
+}

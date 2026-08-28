@@ -1,0 +1,359 @@
+.game-board {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  max-width: 1550px;
+  margin: 0 auto;
+  font-family: var(--font-mono);
+}
+
+.turn-indicator {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-red);
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .turn-indicator {
+    /* Clears the fixed Sound toggle in the top-left corner - on mobile
+       this is the first thing in normal flow (the piece info panel
+       moved to the bottom of the page - see PieceInfoPanel.css), so it
+       needs the same clearance that panel used to. */
+    margin-top: 3rem;
+  }
+}
+
+/* "Are you still there?" prompt (useAfkSelfCheck) - a full-screen
+   overlay, deliberately hard to miss, since the entire point is
+   catching a player who might not be looking at the board at all. */
+.afk-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 17, 17, 0.75);
+}
+
+.afk-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  border: 3px solid var(--color-red);
+  background: var(--color-paper);
+  padding: 1.5rem 2rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-red);
+}
+
+.afk-prompt-countdown {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-grey);
+  font-size: 0.85rem;
+}
+
+.afk-rejoin-banner {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Named grid areas rather than DOM order, so the exact same five
+   sections (status/actions/log/board/dice) can be rearranged wholesale
+   between the desktop 3-column layout and the mobile tabbed one below,
+   without duplicating any of them in the JSX. The sidebar column is
+   itself split into three separate areas (status/actions/log) stacked
+   in that order, purely so "actions" - the one part that always has to
+   stay reachable - can be repositioned independently of the other two
+   on mobile; on desktop all three just land in their old positions. */
+.board-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr 340px;
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    'status  board dice'
+    'actions board dice'
+    'log     board dice';
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.layout-status,
+.layout-actions,
+.layout-log {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.layout-status {
+  grid-area: status;
+}
+
+.layout-actions {
+  grid-area: actions;
+}
+
+.layout-log {
+  grid-area: log;
+}
+
+.board-column {
+  grid-area: board;
+  display: flex;
+  justify-content: center;
+}
+
+.board-column .board {
+  max-width: 760px;
+}
+
+.dice-column {
+  grid-area: dice;
+  min-width: 0;
+  /* Clears the fixed-position piece info panel floating over the
+     top-right corner of the page. That panel's height isn't fixed - it
+     grows with each Piece's Win Condition text, and some (T-Rex's,
+     especially) run considerably longer than others - so this is sized
+     for the longest one plus room to spare, not just whatever happened
+     to be showing when this was last tuned. */
+  margin-top: 15rem;
+}
+
+/* Tab switcher for the mobile layout below - stays hidden (and its
+   state inert) above the breakpoint, where every section is shown at
+   once regardless of which tab is "active". */
+.mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .board-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas:
+      'tabs'
+      'actions'
+      'board'
+      'dice'
+      'status'
+      'log';
+  }
+
+  .dice-column {
+    /* The fixed piece-info panel this clears on desktop sits well
+       above the single mobile column instead of over it. */
+    margin-top: 0;
+  }
+
+  .mobile-tabs {
+    grid-area: tabs;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .mobile-tabs button {
+    flex: 1;
+  }
+
+  .mobile-tabs button:not(.is-active) {
+    background: var(--color-grey-light);
+    color: var(--color-black);
+  }
+
+  /* Board tab active: hide the status/log groups. Status tab active:
+     hide the board/dice groups. "actions" is in neither rule, so
+     whatever needs a response (Roll Dice, a card reveal, a vote) stays
+     visible no matter which tab is showing. */
+  .board-layout[data-mobile-tab='board'] .layout-status,
+  .board-layout[data-mobile-tab='board'] .layout-log {
+    display: none;
+  }
+
+  .board-layout[data-mobile-tab='status'] .board-column,
+  .board-layout[data-mobile-tab='status'] .dice-column {
+    display: none;
+  }
+}
+
+.dice-result {
+  color: var(--color-grey);
+}
+
+.trotsky-banner {
+  font-size: 0.8rem;
+  color: var(--color-red);
+  border: 2px dashed var(--color-red);
+  padding: 0.5em;
+}
+
+.player-summary {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.player-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 2px solid var(--color-black);
+  background: var(--color-grey-light);
+  padding: 0.5em 0.75em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.player-summary li.is-current {
+  background: var(--color-red);
+  color: var(--color-paper);
+  animation: player-summary-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes player-summary-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--color-red);
+  }
+  50% {
+    box-shadow: 0 0 10px 3px rgba(179, 0, 0, 0.8);
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* .actions only ever renders while it's genuinely this player's move to
+   make (see the isMyTurn guard in GameBoard.tsx) - so every button in
+   it always needs a click, and can pulse unconditionally rather than
+   needing its own "does this need attention" check. */
+.actions button:not(:disabled) {
+  animation: action-button-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes action-button-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(179, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(179, 0, 0, 0);
+  }
+}
+
+.purchase-prompt {
+  border: 3px solid var(--color-black);
+  background: var(--color-grey-light);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+
+/* Buy/Skip, Give It Up/Decline, etc. - a row of its own below the
+   prompt text, rather than sharing a line with it (some browsers were
+   wrapping/overlapping that instead of cleanly breaking). */
+.purchase-prompt-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* LiquidationChoicePrompt's house/mortgage lists - a labeled row of
+   small buttons, one per liquidatable tile. */
+.liquidation-choice-group {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.liquidation-choice-group .hint {
+  width: 100%;
+  margin: 0;
+}
+
+.card-prompt {
+  flex-direction: column;
+  align-items: flex-start;
+  border-color: var(--color-red);
+}
+
+.card-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-red);
+}
+
+/* A quick flourish for a just-drawn card - flips face-up like it just
+   came off the pile, echoing the click that drew it (see the deck
+   piles in Board.tsx). Re-plays every time (keyed by cardId in
+   GameBoard.tsx, so React treats each new card as a fresh element). */
+.card-reveal {
+  animation: card-flip-reveal 0.35s ease-out;
+  transform-origin: center;
+}
+
+@keyframes card-flip-reveal {
+  from {
+    transform: rotateY(90deg) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.event-log {
+  list-style: none;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.25rem;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 2px solid var(--color-black);
+  padding: 0.5em;
+  font-size: 0.8rem;
+  color: var(--color-grey);
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: var(--color-grey);
+}
+
+/* Fills the empty space at the bottom of the sidebar once the status/
+   actions/log above it settle into their normal (fairly short) height. */
+.propaganda-banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 3px solid var(--color-black);
+}

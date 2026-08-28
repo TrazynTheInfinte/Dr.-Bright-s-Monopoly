@@ -1,0 +1,56 @@
+/* Full-width fixed track the banner sweeps through - pointer-events
+   none so it never blocks a click on the board/dice underneath while
+   it's crossing. */
+.your-turn-banner-track {
+  position: fixed;
+  top: 12%;
+  left: 0;
+  width: 100%;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.your-turn-banner {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6em 0;
+  background: var(--color-red);
+  color: var(--color-paper);
+  border-top: 3px solid var(--color-black);
+  border-bottom: 3px solid var(--color-black);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 4px 0 rgba(17, 17, 17, 0.3);
+  /* Quick slide in, a long hold fully on-screen, then a quick slide
+     out - not a constant-speed sweep clear across, which didn't leave
+     enough time to actually read it. Same shape as NowPlayingBanner. */
+  animation: your-turn-banner-sweep 2.4s ease-in-out;
+}
+
+@keyframes your-turn-banner-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  8% {
+    transform: translateX(0);
+  }
+  92% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 900px) {
+  .your-turn-banner {
+    font-size: 1.1rem;
+    letter-spacing: 0.15em;
+  }
+}

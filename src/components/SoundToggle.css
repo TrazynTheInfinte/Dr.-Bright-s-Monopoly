@@ -1,0 +1,36 @@
+.sound-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.sound-toggle button {
+  padding: 0.5em 0.9em;
+}
+
+.sound-volume {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  background: var(--color-paper);
+  border: 2px solid var(--color-black);
+  padding: 0.35em 0.6em;
+}
+
+.sound-volume input[type='range'] {
+  width: 5rem;
+}
+
+@media (max-width: 900px) {
+  .sound-toggle button {
+    padding: 0.4em 0.7em;
+  }
+
+  .sound-volume {
+    padding: 0.25em 0.5em;
+  }
+
+  .sound-volume input[type='range'] {
+    width: 3.5rem;
+  }
+}

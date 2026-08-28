@@ -1,0 +1,142 @@
+import { useState } from 'react';
+import { STARTING_PIECES } from '../data/pieces';
+import { startGame } from '../lib/gameSync';
+import { isPlayerAway } from '../lib/presence';
+import { choosePiece, closeLobby, leaveRoom } from '../lib/rooms';
+import type { PieceId } from '../types/game';
+import type { Room } from '../types/room';
+import RoomQrCode from './RoomQrCode';
+import './LobbyScreen.css';
+
+interface LobbyScreenProps {
+  room: Room;
+  roomCode: string;
+  playerId: string;
+  /** Navigates this browser back to the landing screen - see RoomView's onLeaveRoom. Closing the lobby (host) doesn't need to call this directly; deleting the Room triggers it automatically for everyone, including the host's own client. */
+  onLeave: () => void;
+}
+
+function pieceName(pieceId: PieceId): string {
+  return STARTING_PIECES.find((piece) => piece.id === pieceId)?.name ?? pieceId;
+}
+
+function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
+  const [error, setError] = useState('');
+  const players = Object.entries(room.players);
+  const isHost = room.hostId === playerId;
+  const me = room.players[playerId];
+  const claimedPieceIds = players.map(([, player]) => player.pieceId);
+  const everyoneHasAPiece = players.every(([, player]) => player.pieceId !== null);
+  const selectablePieces = STARTING_PIECES;
+
+  async function handleChoosePiece(pieceId: PieceId) {
+    setError('');
+    try {
+      await choosePiece(roomCode, playerId, pieceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  }
+
+  function handleStartGame() {
+    const assignments = players
+      .filter(([, player]) => player.pieceId !== null)
+      .map(([id, player]) => ({ playerId: id, pieceId: player.pieceId! }));
+    void startGame(roomCode, assignments);
+  }
+
+  function handleCloseLobby() {
+    if (!window.confirm('Close this Room for everyone? This cannot be undone.')) return;
+    void closeLobby(roomCode);
+  }
+
+  async function handleLeaveLobby() {
+    await leaveRoom(roomCode, playerId);
+    onLeave();
+  }
+
+  async function handleRemoveBot(botId: string) {
+    await leaveRoom(roomCode, botId);
+  }
+
+  return (
+    <main className="lobby">
+      <p className="lobby-label">Room Code</p>
+      <h1 className="lobby-code">{roomCode}</h1>
+      <p className="lobby-hint">Send this code to your fellow agents.</p>
+      <RoomQrCode roomCode={roomCode} />
+
+      <ul className="player-list">
+        {players.map(([id, player]) => (
+          <li key={id} className={id === playerId ? 'is-you' : ''}>
+            <span className={`presence-dot ${isPlayerAway(player) ? 'is-away' : ''}`} title={isPlayerAway(player) ? 'Away' : 'Online'} />
+            {player.name}
+            {player.isBot && <span className="bot-badge">BOT {player.botDifficulty}</span>}
+            {id === playerId ? ' (you)' : ''}
+            {id === room.hostId ? ' ★' : ''}
+            {player.pieceId
+              ? ` - ${pieceName(player.pieceId)}`
+              : ' - choosing...'}
+            {isHost && player.isBot && (
+              <button
+                type="button"
+                className="lobby-remove-bot"
+                onClick={() => handleRemoveBot(id)}
+              >
+                Remove
+              </button>
+            )}
+          </li>
+        ))}
+        {players.length === 0 && <li>Waiting for players...</li>}
+      </ul>
+
+      {room.mode === 'beginner' && me && !me.pieceId && (
+        <div className="piece-picker">
+          <p className="lobby-hint">
+            Choose your Personnel - its Special Power stays hidden until the game starts.
+          </p>
+          <ul className="piece-picker-list">
+            {selectablePieces.map((piece) => {
+              const taken = claimedPieceIds.includes(piece.id);
+              return (
+                <li key={piece.id}>
+                  <button
+                    type="button"
+                    disabled={taken}
+                    onClick={() => handleChoosePiece(piece.id)}
+                  >
+                    {piece.name}
+                    <span className="piece-picker-title">{piece.title}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
+
+      {isHost && (
+        <button onClick={handleStartGame} disabled={players.length === 0 || !everyoneHasAPiece}>
+          Start Game
+        </button>
+      )}
+      {isHost && players.length > 0 && !everyoneHasAPiece && (
+        <p className="lobby-hint">Waiting for everyone to have a Piece.</p>
+      )}
+
+      <div className="lobby-leave-actions">
+        {isHost ? (
+          <button className="danger-button" onClick={handleCloseLobby}>
+            Close Lobby
+          </button>
+        ) : (
+          <button onClick={handleLeaveLobby}>Leave Lobby</button>
+        )}
+      </div>
+    </main>
+  );
+}
+
+export default LobbyScreen;

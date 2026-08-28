@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Matches the client-authoritative trust model in
+// docs/adr/0001-client-authoritative-sync.md: there's no server checking
+// that a game move is legal, only that you're not overwriting someone
+// else's Room by accident. Paste this into the Firebase Console under
+// Firestore Database > Rules (this file isn't deployed automatically -
+// there's no Firebase CLI/hosting setup here, it's just kept in the repo
+// as the source of truth for what should be pasted in).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomCode} {
+      // Anyone can read a Room if they know its code (no accounts).
+      allow read: if true;
+
+      // Creating a new Room is only allowed if that code isn't already
+      // taken - this is what makes createRoom's "retry with a different
+      // code on collision" logic in lib/rooms.ts actually safe.
+      allow create: if !exists(/databases/$(database)/documents/rooms/$(roomCode));
+
+      // Once a Room exists, anyone who knows its code can update it
+      // (joining, every game move, leaving) or delete it (closing the
+      // lobby). No move validation - see the ADR for why.
+      allow update, delete: if true;
+    }
+  }
+}

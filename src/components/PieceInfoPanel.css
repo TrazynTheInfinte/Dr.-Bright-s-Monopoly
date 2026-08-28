@@ -1,0 +1,58 @@
+.piece-info-panel {
+  /* Floats fixed over the top-right corner - the side panel is on the
+     left now (see GameBoard.css), so there's nothing there for it to
+     overlap. */
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: min(220px, 40vw);
+  border: 2px solid var(--color-black);
+  background: var(--color-paper);
+  padding: 0.6em;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-align: left;
+  z-index: 2;
+}
+
+.piece-info-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-red);
+  font-size: 0.95rem;
+}
+
+.piece-info-title {
+  color: var(--color-grey);
+  margin-bottom: 0.4em;
+}
+
+.piece-info-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  margin-top: 0.4em;
+}
+
+.piece-info-text {
+  color: var(--color-black);
+}
+
+@media (max-width: 900px) {
+  /* Fixed-over-the-corner only works when there's a wide, mostly-empty
+     margin for it to float in (the desktop 3-column layout). Below the
+     breakpoint everything's full-width, so a fixed panel here would sit
+     on top of other content instead - drop it into normal flow, and
+     push it to the bottom of the page (below the board/status tabs and
+     the Hand) via flex order, since .game-board is a flex column and
+     every other child keeps its default order: 0. */
+  .piece-info-panel {
+    position: static;
+    order: 1;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.75rem;
+  }
+}

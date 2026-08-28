@@ -1,0 +1,583 @@
+import { describe, expect, it } from 'vitest';
+import { getTile } from '../data/board';
+import {
+  acceptTrade,
+  acknowledgeCard,
+  afkSkipTurn,
+  buildHouse,
+  buyTile,
+  catRedirectCard,
+  chooseCardFromChoices,
+  confirmStillHere,
+  createInitialGameState,
+  declareBankruptcy,
+  declinePurchase,
+  declineTrade,
+  devForceSkipTurn,
+  devJumpToTile,
+  devKickPlayer,
+  devRevivePlayer,
+  devSetCredits,
+  devSetForcedCard,
+  devSetForcedRoll,
+  drawFromPile,
+  endTurn,
+  mortgageProperty,
+  payClearanceFee,
+  proposeTrade,
+  rejoinFromAfk,
+  resolveRubberDuckEncounter,
+  rollDice,
+  sellHouse,
+  settleDebt,
+  unmortgageProperty,
+  useGetOutOfJailCard,
+  withdrawTrade,
+} from './engine';
+import type { GamePlayerState, GameState, PieceId } from '../types/game';
+
+function makeGame(pieceIds: PieceId[] = ['boot', 'battleship']): GameState {
+  const assignments = pieceIds.map((pieceId, i) => ({ playerId: `p${i + 1}`, pieceId }));
+  return createInitialGameState(assignments, () => 0.42);
+}
+
+function withPlayer(state: GameState, playerId: string, patch: Partial<GamePlayerState>): GameState {
+  return { ...state, players: { ...state.players, [playerId]: { ...state.players[playerId], ...patch } } };
+}
+
+describe('createInitialGameState', () => {
+  it('starts every player at the Site Entrance with 1500 Credits', () => {
+    const game = makeGame();
+    expect(game.turnOrder).toEqual(['p1', 'p2']);
+    for (const id of game.turnOrder) {
+      expect(game.players[id].position).toBe(0);
+      expect(game.players[id].credits).toBe(1500);
+      expect(game.players[id].ownedTileIds).toEqual([]);
+    }
+    expect(game.winnerId).toBeNull();
+    expect(game.currentTurnIndex).toBe(0);
+  });
+});
+
+describe('rolling and movement', () => {
+  it('passing the Site Entrance collects 200 Credits', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 38 });
+    game = devSetForcedRoll(game, [3, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.position).toBe(1);
+    expect(game.players.p1.credits).toBe(1700);
+  });
+
+  it("Intern (Thimble) rolls only one die", () => {
+    let game = makeGame(['thimble', 'boot']);
+    game = devSetForcedRoll(game, [4, 0]);
+    game = rollDice(game);
+    expect(game.lastRoll).toEqual([4, 0]);
+    expect(game.players.p1.position).toBe(4);
+  });
+
+  it('rolling doubles three times in a row sends the player to the Containment Chamber', () => {
+    // Each landing must stay on a tile with no pendingDecision (jail as
+    // "just visiting", then Break Room) so the next forced roll isn't
+    // blocked - only the 3rd doubles itself matters for this rule.
+    let game = makeGame();
+    game = devSetForcedRoll(game, [5, 5]);
+    game = rollDice(game); // 1st doubles: 0 -> 10 (Containment Chamber, visiting)
+    expect(game.players.p1.inJail).toBe(false);
+    game = devSetForcedRoll(game, [5, 5]);
+    game = rollDice(game); // 2nd doubles: 10 -> 20 (Break Room)
+    expect(game.players.p1.inJail).toBe(false);
+    game = devSetForcedRoll(game, [2, 2]);
+    game = rollDice(game); // 3rd doubles - jailed instead of moving
+    expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.position).toBe(10);
+  });
+
+  it('landing on Reassigned sends the player to the Containment Chamber', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 28 });
+    game = devSetForcedRoll(game, [2, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.position).toBe(10);
+  });
+});
+
+describe('the Containment Chamber', () => {
+  it('rolling doubles releases the player and moves them', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = devSetForcedRoll(game, [3, 3]);
+    game = rollDice(game);
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.players.p1.position).toBe(16);
+  });
+
+  it('failing to roll doubles three times forces the Clearance Fee and a move', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = devSetForcedRoll(game, [1, 2]);
+    game = rollDice(game); // attempt 1
+    expect(game.players.p1.inJail).toBe(true);
+    game = devSetForcedRoll(game, [1, 2]);
+    game = rollDice(game); // attempt 2
+    expect(game.players.p1.inJail).toBe(true);
+    game = devSetForcedRoll(game, [1, 2]);
+    game = rollDice(game); // attempt 3 - forced out
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.players.p1.credits).toBe(1450);
+    expect(game.players.p1.position).toBe(13);
+  });
+
+  it('paying the Clearance Fee voluntarily leaves immediately', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = payClearanceFee(game, 'p1');
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.players.p1.credits).toBe(1450);
+  });
+
+  it('a held Get Out of Containment Free card releases the player for free', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { inJail: true, position: 10, heldCardIds: ['clearanceRevokedAnomalous'] });
+    game = useGetOutOfJailCard(game, 'p1', 'clearanceRevokedAnomalous');
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+  });
+});
+
+describe('buying and rent', () => {
+  it('buying an unowned Wing deducts its price and transfers ownership', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 1 });
+    game = devSetForcedRoll(game, [1, 0]); // no-op roll just to land again isn't needed; simulate landing directly
+    game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
+    game = buyTile(game, 'p1');
+    expect(game.players.p1.ownedTileIds).toEqual([1]);
+    expect(game.players.p1.credits).toBe(1450);
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it('declining a purchase leaves the tile unowned', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
+    game = declinePurchase(game);
+    expect(game.pendingDecision).toBeNull();
+    expect(game.players.p1.ownedTileIds).toEqual([]);
+  });
+
+  it('landing on an owned Wing charges rent to the owner', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [6] });
+    game = withPlayer(game, 'p2', { position: 5 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.players.p2.credits).toBe(1494); // 6 rent at 0 houses
+    expect(game.players.p1.credits).toBe(1506);
+  });
+
+  it('rent doubles on an unimproved Wing if the owner has the full Sector', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.players.p2.credits).toBe(1500 - 4); // tile 1 rent (2) doubled to 4
+  });
+
+  it('Maintenance Tunnel rent scales with how many the owner has', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [5, 15] });
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [5, 0]);
+    game = rollDice(game);
+    expect(game.players.p2.credits).toBe(1500 - 50); // 2 owned = 50 rent
+  });
+
+  it('utility rent is 4x the dice roll with one owned, 10x with both', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [12] });
+    game = withPlayer(game, 'p2', { position: 8 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [2, 2]);
+    game = rollDice(game); // lands on 12, rolled 4 total -> 4x4=16... but doubles also moves again
+    expect(game.players.p2.credits).toBe(1500 - 16);
+  });
+
+  it("D-Class (Boot) buys utilities at half price", () => {
+    let game = makeGame(['boot', 'battleship']);
+    game = withPlayer(game, 'p1', { position: 12 });
+    game = { ...game, pendingDecision: { type: 'purchase', tileId: 12 } };
+    game = buyTile(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500 - 75);
+  });
+
+  it('MTF Operative (Battleship) buys Maintenance Tunnels at half price', () => {
+    let game = makeGame(['battleship', 'boot']);
+    game = { ...game, pendingDecision: { type: 'purchase', tileId: 5 } };
+    game = buyTile(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500 - 100);
+  });
+});
+
+describe('houses and mortgages', () => {
+  it('building a house costs Credits and increases the Wing rent tier', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.houses[1]).toBe(1);
+    expect(game.players.p1.credits).toBe(1500 - 50);
+    expect(game.housesRemaining).toBe(31);
+  });
+
+  it('refuses to build without owning the full Sector', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.houses[1] ?? 0).toBe(0);
+  });
+
+  it('selling a house refunds half its cost', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    game = sellHouse(game, 'p1', 1);
+    expect(game.houses[1]).toBe(0);
+    expect(game.players.p1.credits).toBe(1500 - 50 + 25);
+  });
+
+  it('mortgaging pays half price and blocks rent collection', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = mortgageProperty(game, 'p1', 1);
+    expect(game.players.p1.credits).toBe(1525);
+    expect(game.mortgagedTileIds).toContain(1);
+
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.players.p2.credits).toBe(1500); // no rent - mortgaged
+  });
+
+  it('paying off a mortgage costs the payout plus 10% interest', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = mortgageProperty(game, 'p1', 1);
+    game = unmortgageProperty(game, 'p1', 1);
+    expect(game.mortgagedTileIds).not.toContain(1);
+    expect(game.players.p1.credits).toBe(1500 + 25 - Math.ceil(25 * 1.1));
+  });
+});
+
+describe('cards', () => {
+  it('a collect-effect card pays out to the drawer', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p1' });
+    game = acknowledgeCard(game);
+    expect(game.players.p1.credits).toBe(1550);
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it('a moveTo-effect card relocates the player and can award passing the Site Entrance', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 35 });
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'realityAnchorMalfunction'); // moveTo tile 0
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.position).toBe(0);
+    expect(game.players.p1.credits).toBe(1700);
+  });
+
+  it('a goToJail-effect card sends the player to the Containment Chamber', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
+    game = devSetForcedCard(game, 'reassignedToContainmentDuty');
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.position).toBe(10);
+  });
+
+  it('a getOutOfJailFree-effect card is held rather than resolved immediately', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'clearanceRevokedAnomalous');
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.heldCardIds).toEqual(['clearanceRevokedAnomalous']);
+  });
+
+  it('collectFromEachPlayer takes Credits from every other active player', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
+    game = devSetForcedCard(game, 'foundersDayGala');
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.credits).toBe(1550);
+    expect(game.players.p2.credits).toBe(1450);
+  });
+
+  it("Site Director (Car) chooses which card to draw from an Anomalous Event tile", () => {
+    let game = makeGame(['car', 'boot']);
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = drawFromPile(game, 'p1');
+    expect(game.pendingDecision?.type).toBe('cardChoice');
+    const choiceIds = game.pendingDecision?.type === 'cardChoice' ? game.pendingDecision.choiceCardIds : [];
+    expect(choiceIds.length).toBeGreaterThan(0);
+    game = chooseCardFromChoices(game, 'p1', choiceIds[0]);
+    expect(game.pendingDecision?.type).toBe('cardDrawn');
+  });
+
+  it('Ethics Liaison (Cat) can hand a drawn card off to another player', () => {
+    let game = makeGame(['cat', 'boot']);
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    expect(game.pendingDecision?.type).toBe('catRedirect');
+    game = catRedirectCard(game, 'p1', 'p2');
+    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p2' });
+    game = acknowledgeCard(game);
+    expect(game.players.p2.credits).toBe(1550);
+    expect(game.players.p1.credits).toBe(1500);
+  });
+});
+
+describe('special powers', () => {
+  it('Logistics Officer (Wheel Barrel) auto-requisitions an unowned purple Wing', () => {
+    let game = makeGame(['wheelBarrel', 'boot']);
+    game = withPlayer(game, 'p1', { position: 0 });
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.ownedTileIds).toEqual([1]);
+    expect(game.players.p1.credits).toBe(1500); // free
+  });
+
+  it("Rogue Anomaly (T-Rex) can't buy but auto-seizes an owned Wing with no rent paid", () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [6] });
+    game = withPlayer(game, 'p1', { position: 0 });
+    game = devSetForcedRoll(game, [6, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.ownedTileIds).toEqual([6]);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.players.p1.credits).toBe(1500);
+  });
+
+  it("Security Officer (Rubber Duck) can send an occupant to the Containment Chamber", () => {
+    let game = makeGame(['rubberDuck', 'boot']);
+    game = withPlayer(game, 'p2', { position: 5 });
+    game = withPlayer(game, 'p1', { position: 0 });
+    game = devSetForcedRoll(game, [5, 0]);
+    game = rollDice(game);
+    expect(game.rubberDuckEncounter).toEqual({ rubberDuckPlayerId: 'p1', targetPlayerId: 'p2' });
+    game = resolveRubberDuckEncounter(game, true);
+    expect(game.players.p2.inJail).toBe(true);
+    expect(game.rubberDuckEncounter).toBeNull();
+  });
+
+  it('Site Administrator (Hat) gets a free house on completing a Sector', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { position: 1, ownedTileIds: [3] });
+    game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
+    game = buyTile(game, 'p1');
+    expect(game.houses[1] ?? game.houses[3]).toBe(1);
+    expect(game.hatFreeHouseSectors).toContain('purple');
+  });
+});
+
+describe('trading', () => {
+  it('accepting a trade exchanges Wings and Credits between both players', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 1000 });
+    game = withPlayer(game, 'p2', { ownedTileIds: [6], credits: 1000 });
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [1],
+      offerCredits: 50,
+      offerCardIds: [],
+      requestTileIds: [6],
+      requestCredits: 0,
+      requestCardIds: [],
+    });
+    expect(game.activeTrades).toHaveLength(1);
+    game = acceptTrade(game, game.activeTrades[0].id);
+    expect(game.players.p1.ownedTileIds).toEqual([6]);
+    expect(game.players.p2.ownedTileIds).toEqual([1]);
+    expect(game.players.p1.credits).toBe(950);
+    expect(game.players.p2.credits).toBe(1050);
+    expect(game.activeTrades).toHaveLength(0);
+  });
+
+  it('declining or withdrawing a trade removes it without side effects', () => {
+    let game = makeGame();
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [],
+      offerCredits: 10,
+      offerCardIds: [],
+      requestTileIds: [],
+      requestCredits: 0,
+      requestCardIds: [],
+    });
+    const tradeId = game.activeTrades[0].id;
+    game = declineTrade(game, tradeId);
+    expect(game.activeTrades).toHaveLength(0);
+    expect(game.players.p1.credits).toBe(1500);
+
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [],
+      offerCredits: 10,
+      offerCardIds: [],
+      requestTileIds: [],
+      requestCredits: 0,
+      requestCardIds: [],
+    });
+    game = withdrawTrade(game, game.activeTrades[0].id);
+    expect(game.activeTrades).toHaveLength(0);
+  });
+});
+
+describe('debt and bankruptcy', () => {
+  it('an unaffordable charge opens a debtSettlement decision instead of deducting anything', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { credits: 10 });
+    game = withPlayer(game, 'p1', { position: 10, inJail: true });
+    game = payClearanceFee(game, 'p1'); // 50 owed, only has 10
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 50, creditorId: null });
+    expect(game.players.p1.credits).toBe(10);
+  });
+
+  it('settleDebt pays off the debt once the player can afford it', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 50, creditorId: null } };
+    game = withPlayer(game, 'p1', { credits: 100 });
+    game = settleDebt(game, 'p1');
+    expect(game.pendingDecision).toBeNull();
+    expect(game.players.p1.credits).toBe(50);
+  });
+
+  it('declareBankruptcy to the bank returns Wings to the Foundation and Terminates the player', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 10 });
+    game = { ...game, houses: { 1: 2 }, housesRemaining: 30, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: null } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(true);
+    expect(game.players.p1.credits).toBe(0);
+    expect(game.players.p1.ownedTileIds).toEqual([]);
+    expect(game.houses[1]).toBe(0);
+    expect(game.housesRemaining).toBe(32);
+    expect(game.winnerId).toBe('p2'); // only one player left standing
+  });
+
+  it('declareBankruptcy to a player hands over the debtor Credits and Wings', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 25 });
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: 'p2' } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p2.ownedTileIds).toEqual([1]);
+    expect(game.players.p2.credits).toBe(1525);
+    expect(game.players.p1.isSpectating).toBe(true);
+  });
+});
+
+describe('AFK handling', () => {
+  it('repeated AFK skips eventually bench the player as a spectator', () => {
+    let game = makeGame();
+    game = afkSkipTurn(game);
+    expect(game.players.p1.consecutiveAfkSkips).toBe(1);
+    expect(game.players.p1.isAfkSpectating).toBe(false);
+
+    game = { ...game, currentTurnIndex: 0 };
+    game = afkSkipTurn(game);
+    game = { ...game, currentTurnIndex: 0 };
+    game = afkSkipTurn(game);
+    expect(game.players.p1.isAfkSpectating).toBe(true);
+  });
+
+  it('confirming presence resets the AFK-skip streak', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { consecutiveAfkSkips: 2 });
+    game = confirmStillHere(game, 'p1');
+    expect(game.players.p1.consecutiveAfkSkips).toBe(0);
+  });
+
+  it('rejoinFromAfk un-benches a player without touching Credits/Wings', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { isAfkSpectating: true, credits: 900 });
+    game = rejoinFromAfk(game, 'p1');
+    expect(game.players.p1.isAfkSpectating).toBe(false);
+    expect(game.players.p1.credits).toBe(900);
+  });
+});
+
+describe('dev panel helpers', () => {
+  it('devSetCredits sets a player\'s balance directly', () => {
+    let game = makeGame();
+    game = devSetCredits(game, 'p1', 42);
+    expect(game.players.p1.credits).toBe(42);
+  });
+
+  it('devJumpToTile teleports and resolves landing', () => {
+    let game = makeGame();
+    game = devJumpToTile(game, 'p1', 1);
+    expect(game.players.p1.position).toBe(1);
+    expect(game.pendingDecision).toEqual({ type: 'purchase', tileId: 1 });
+  });
+
+  it('devKickPlayer returns assets to the Foundation and Terminates the player', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = devKickPlayer(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(true);
+    expect(getTile(1)).toBeDefined(); // tile itself is unaffected, just unowned now
+    expect(game.winnerId).toBe('p2');
+  });
+
+  it('devRevivePlayer clears spectating flags', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { isSpectating: true });
+    game = devRevivePlayer(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(false);
+  });
+
+  it('devForceSkipTurn ends the turn even mid-decision', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
+    game = devForceSkipTurn(game);
+    expect(game.pendingDecision).toBeNull();
+    expect(game.currentTurnIndex).toBe(1);
+  });
+});
+
+describe('ending a turn', () => {
+  it('a non-doubles roll requires endTurn to advance to the next player', () => {
+    let game = makeGame();
+    game = devSetForcedRoll(game, [4, 6]); // 0 -> 10, Containment Chamber (just visiting, no decision)
+    game = rollDice(game);
+    expect(game.currentTurnIndex).toBe(0);
+    game = endTurn(game);
+    expect(game.currentTurnIndex).toBe(1);
+  });
+
+  it('doubles grant another roll instead of ending the turn', () => {
+    let game = makeGame();
+    game = devSetForcedRoll(game, [5, 5]); // 0 -> 10, Containment Chamber (just visiting, no decision)
+    game = rollDice(game);
+    game = endTurn(game);
+    expect(game.currentTurnIndex).toBe(0); // still p1's turn
+  });
+});
