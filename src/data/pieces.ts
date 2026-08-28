@@ -4,10 +4,10 @@ import type { PieceDefinition } from '../types/game';
 // SCP Foundation personnel types. Every Special Power that still
 // functions standalone under classic Monopoly rules (no Win
 // Conditions/Score, no West/Smuggling stash, no Stalin-only STOY fee)
-// is kept unchanged, just reworded. Two powers (Janitor, Cryptid
-// Handler) depended entirely on removed mechanics and are left
-// powerless for now - see CONTEXT.md's Personnel section - rather than
-// inventing new mechanics in what's meant to be a pure reskinning pass.
+// is kept unchanged, just reworded. Two powers (Janitor, Specialist)
+// depended entirely on removed mechanics and are left powerless for
+// now - see CONTEXT.md's Personnel section - rather than inventing
+// new mechanics in what's meant to be a pure reskinning pass.
 export const STARTING_PIECES: PieceDefinition[] = [
   {
     id: 'boot',
@@ -63,8 +63,8 @@ export const STARTING_PIECES: PieceDefinition[] = [
   },
   {
     id: 'penguin',
-    name: 'Cryptid Handler',
-    title: 'Anomalous Cryptid Handler',
+    name: 'Specialist',
+    title: 'Containment Specialist',
     // Comunopoly's Penguin was built entirely around Smuggling money to
     // the West - a house rule this build drops. Powerless until it
     // gets a real one.
@@ -72,8 +72,8 @@ export const STARTING_PIECES: PieceDefinition[] = [
   },
   {
     id: 'cat',
-    name: 'Ethics Liaison',
-    title: 'Ethics Committee Liaison',
+    name: 'Spy',
+    title: 'Chaos Insurgency Spy',
     powerDescription:
       'After reading a drawn Anomalous Event/Foundation Directive card, choose to keep it or hand its entire effect to another player instead.',
   },

@@ -338,7 +338,7 @@ describe('cards', () => {
     expect(game.pendingDecision?.type).toBe('cardDrawn');
   });
 
-  it('Ethics Liaison (Cat) can hand a drawn card off to another player', () => {
+  it('Chaos Insurgency Spy (Cat) can hand a drawn card off to another player', () => {
     let game = makeGame(['cat', 'boot']);
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'hazardPayBonus');

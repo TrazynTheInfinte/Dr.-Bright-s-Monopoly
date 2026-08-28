@@ -79,7 +79,7 @@ One of the selectable tokens a player plays as (the old "Piece"). Each has a Tit
 _Avoid_: Piece, token, character, avatar, mascot
 
 **Title**:
-The in-fiction role name for a Personnel (e.g. "D-Class Personnel", "Field Researcher", "MTF Operative", "Site Director"). The full 12-Personnel roster is still to be named — deferred until the code skeleton is in place.
+The in-fiction role name for a Personnel (e.g. "D-Class Personnel", "Field Researcher", "MTF Operative", "Site Director"). The full 12-Personnel roster is named in `data/pieces.ts`; two (Janitor, Containment Specialist) have no Special Power yet — see that file's comments.
 
 ### Multiplayer
 

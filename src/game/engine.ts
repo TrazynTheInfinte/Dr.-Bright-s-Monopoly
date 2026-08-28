@@ -490,7 +490,7 @@ function applyDrawnCard(state: GameState, playerId: string, cardId: string): Gam
   return next;
 }
 
-/** Ethics Liaison's (Cat's) Special Power: keep the drawn card themselves, or hand its whole effect to another player instead. */
+/** Chaos Insurgency Spy's (Cat's) Special Power: keep the drawn card themselves, or hand its whole effect to another player instead. */
 export function catRedirectCard(state: GameState, playerId: string, targetPlayerId: string | null): GameState {
   if (state.pendingDecision?.type !== 'catRedirect') return state;
   const { cardId } = state.pendingDecision;
