@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getTile } from '../data/board';
+import { BOARD, getTile } from '../data/board';
 import { STARTING_PIECES } from '../data/pieces';
 import { findCard } from '../data/cards';
 import type { CardDeck, GameState } from '../types/game';
@@ -11,6 +11,7 @@ import {
   mortgageTileAndSync,
   rejoinFromAfkAndSync,
   rollDiceAndSync,
+  useJanitorTunnelTravelAndSync,
 } from '../lib/gameSync';
 import { isPlayerAway } from '../lib/presence';
 import { playCardDraw } from '../lib/sound';
@@ -55,6 +56,8 @@ interface GameBoardProps {
 function pieceName(pieceId: string): string {
   return STARTING_PIECES.find((piece) => piece.id === pieceId)?.name ?? pieceId;
 }
+
+const TUNNEL_TILES = BOARD.filter((tile) => tile.kind === 'tunnel');
 
 /** Owned Wings/Tunnels `player` could mortgage right now to raise cash before deciding on a purchase - not already mortgaged, no houses on the specific tile. Mirrors DebtSettlementPrompt's own filter (mortgageProperty itself still rejects one with houses elsewhere in its Sector, logging why, if this lighter check lets one through). */
 function mortgageableForPurchase(
@@ -102,6 +105,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   // buttons themselves stay hidden, so this state is simply inert on a
   // wide screen rather than needing its own "are we on mobile" check.
   const [mobileTab, setMobileTab] = useState<'board' | 'status'>('board');
+  const [selectedTunnelId, setSelectedTunnelId] = useState(TUNNEL_TILES[0].id);
   // Drives the desktop-only dice-roller swap below (playtest feedback) -
   // see useIsDesktop for why this needs to be a real JS check rather
   // than pure CSS: only one DiceRoller can ever be mounted at a time,
@@ -293,6 +297,24 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
                 <button onClick={() => endTurnAndSync(roomCode, game)}>End Turn</button>
               )}
               {game.lastRollWasDoubles && <p className="hint">Doubles! Roll again.</p>}
+            </div>
+          )}
+
+          {isMyTurn && !game.pendingDecision && !game.lastRoll && me?.pieceId === 'iron' && !me.inJail && (
+            <div className="actions">
+              <label>
+                Below the Floor Plan:{' '}
+                <select value={selectedTunnelId} onChange={(event) => setSelectedTunnelId(Number(event.target.value))}>
+                  {TUNNEL_TILES.map((tile) => (
+                    <option key={tile.id} value={tile.id}>
+                      {tile.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button onClick={() => useJanitorTunnelTravelAndSync(roomCode, game, playerId, selectedTunnelId)}>
+                Use Service Corridors
+              </button>
             </div>
           )}
 

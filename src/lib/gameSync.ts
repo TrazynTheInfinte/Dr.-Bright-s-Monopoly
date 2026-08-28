@@ -35,6 +35,7 @@ import {
   settleDebt,
   unmortgageProperty,
   useGetOutOfJailCard,
+  useJanitorTunnelTravel,
   withdrawTrade,
 } from '../game/engine';
 
@@ -149,6 +150,10 @@ export async function payClearanceFeeAndSync(roomCode: string, game: GameState, 
 
 export async function useGetOutOfJailCardAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
   await writeGameState(roomCode, useGetOutOfJailCard(game, playerId, cardId));
+}
+
+export async function useJanitorTunnelTravelAndSync(roomCode: string, game: GameState, playerId: string, targetTileId: number) {
+  await writeGameState(roomCode, useJanitorTunnelTravel(game, playerId, targetTileId));
 }
 
 /** Pays off a pending debtSettlement, if selling/mortgaging (sellHouseAndSync/mortgageTileAndSync above) has raised enough since it opened. */

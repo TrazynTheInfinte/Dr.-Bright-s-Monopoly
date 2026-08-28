@@ -3,6 +3,8 @@ import { ANOMALOUS_EVENT_CARDS, FOUNDATION_DIRECTIVE_CARDS, findCard, type CardE
 import type { CardDeck, ColorGroup, GameState, GamePlayerState, PieceId, TradeOffer } from '../types/game';
 
 const STARTING_CREDITS = 1500;
+/** D-Class's "Standard Expendability Clause": reduced funding for the one-time requisitioned replacement. */
+const RESPAWN_CREDITS = 750;
 const GO_BONUS = 200;
 const JAIL_POSITION = 10;
 /** Classic Monopoly's jail fine - the Clearance Fee, per CONTEXT.md. */
@@ -56,6 +58,8 @@ export function createInitialGameState(
       isSpectating: false,
       consecutiveAfkSkips: 0,
       isAfkSpectating: false,
+      usedExpendabilityClause: false,
+      usedMasterKey: false,
     };
   }
 
@@ -256,6 +260,26 @@ export function rollDice(state: GameState, rng: () => number = Math.random): Gam
   return moveAndResolve(next, playerId, roll[0] + roll[1]);
 }
 
+/**
+ * Charges the Clearance Fee, applying D-Class's half-price discount
+ * ("Standard Expendability Clause") and Janitor's one-time free pass
+ * ("Below the Floor Plan" - the master keyring). Returns the resulting
+ * state either way - check .pendingDecision for whether a debtSettlement
+ * opened instead of actually deducting anything.
+ */
+function chargeClearanceFee(state: GameState, playerId: string): GameState {
+  const piece = pieceOf(state, playerId);
+  if (piece === 'iron' && !state.players[playerId].usedMasterKey) {
+    return updatePlayer(
+      logEvent(state, 'Used the master keyring - no Clearance Fee.'),
+      playerId,
+      { usedMasterKey: true },
+    );
+  }
+  const fee = piece === 'boot' ? Math.floor(CLEARANCE_FEE / 2) : CLEARANCE_FEE;
+  return chargePlayer(state, playerId, fee, null);
+}
+
 function resolveJailRoll(state: GameState, playerId: string, roll: [number, number], isDoubles: boolean): GameState {
   if (isDoubles) {
     const freed = updatePlayer(state, playerId, { inJail: false, turnsInJail: 0 });
@@ -264,11 +288,9 @@ function resolveJailRoll(state: GameState, playerId: string, roll: [number, numb
 
   const turnsInJail = state.players[playerId].turnsInJail + 1;
   if (turnsInJail >= MAX_TURNS_IN_JAIL) {
-    const charged = chargePlayer(
+    const charged = chargeClearanceFee(
       logEvent(state, `Failed to roll doubles ${MAX_TURNS_IN_JAIL} times - must pay the Clearance Fee.`),
       playerId,
-      CLEARANCE_FEE,
-      null,
     );
     if (charged.pendingDecision) return charged; // couldn't afford it - debtSettlement takes over
     const freed = updatePlayer(charged, playerId, { inJail: false, turnsInJail: 0 });
@@ -282,7 +304,7 @@ function resolveJailRoll(state: GameState, playerId: string, roll: [number, numb
 export function payClearanceFee(state: GameState, playerId: string): GameState {
   if (state.pendingDecision || !state.players[playerId].inJail) return state;
   if (currentPlayerId(state) !== playerId) return state;
-  const charged = chargePlayer(state, playerId, CLEARANCE_FEE, null);
+  const charged = chargeClearanceFee(state, playerId);
   if (charged.pendingDecision) return charged;
   return updatePlayer(logEvent(charged, 'Paid the Clearance Fee.'), playerId, { inJail: false, turnsInJail: 0 });
 }
@@ -367,6 +389,11 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
 
   if (piece === 'trex' || (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP)) {
     return logEvent(transferTile(state, tileId, playerId), 'Automatically seized - no rent paid.');
+  }
+
+  // Janitor's "Below the Floor Plan" - never pays toll on a Maintenance Tunnel.
+  if (piece === 'iron' && getTile(tileId).kind === 'tunnel') {
+    return logEvent(state, 'Janitor walks right through - no toll on the tunnels.');
   }
 
   const rent = calculateRent(state, tileId, owner);
@@ -615,6 +642,26 @@ export function resolveRubberDuckEncounter(state: GameState, sendToJailChoice: b
   return next;
 }
 
+// --- Janitor's Special Power ---------------------------------------------
+
+/**
+ * "Below the Floor Plan": Janitor moves directly to any Maintenance
+ * Tunnel, replacing their roll for the turn - only usable on their own
+ * turn, before they've rolled, and not while in the Containment
+ * Chamber (the tunnels don't help you there). Landing this way still
+ * resolves normally (an unowned Tunnel can be bought), it just never
+ * charges Janitor rent - see resolveOwnableLanding.
+ */
+export function useJanitorTunnelTravel(state: GameState, playerId: string, targetTileId: number): GameState {
+  if (state.pendingDecision || state.winnerId) return state;
+  if (currentPlayerId(state) !== playerId || pieceOf(state, playerId) !== 'iron') return state;
+  if (state.players[playerId].inJail || state.lastRoll) return state;
+  if (getTile(targetTileId).kind !== 'tunnel') return state;
+
+  const next = updatePlayer(state, playerId, { position: targetTileId });
+  return resolveLanding(logEvent(next, 'Used the service corridors to reach a Maintenance Tunnel.'), playerId, targetTileId);
+}
+
 // --- Houses & mortgages ------------------------------------------------
 
 export function buildHouse(state: GameState, playerId: string, tileId: number): GameState {
@@ -724,6 +771,24 @@ export function declareBankruptcy(state: GameState, playerId: string): GameState
     next = { ...next, mortgagedTileIds: next.mortgagedTileIds.filter((id) => id !== tileId) };
   }
   if (creditorId) next = giveCredits(next, creditorId, next.players[playerId].credits);
+
+  // D-Class's "Standard Expendability Clause": the first Termination is
+  // survivable - requisitioned back into play instead of going out for
+  // good. Only once - a second Termination is permanent like anyone
+  // else's.
+  if (pieceOf(next, playerId) === 'boot' && !next.players[playerId].usedExpendabilityClause) {
+    next = updatePlayer(next, playerId, {
+      credits: RESPAWN_CREDITS,
+      position: 0,
+      ownedTileIds: [],
+      heldCardIds: [],
+      inJail: false,
+      turnsInJail: 0,
+      usedExpendabilityClause: true,
+    });
+    return logEvent(next, 'Requisitioned a replacement D-Class - back in play with reduced funding.');
+  }
+
   next = updatePlayer(next, playerId, { credits: 0, isSpectating: true, ownedTileIds: [], heldCardIds: [] });
   next = logEvent(next, `${creditorId ? 'Terminated' : 'Terminated - assets returned to the Foundation'}.`);
 

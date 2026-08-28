@@ -1,19 +1,20 @@
 import type { PieceDefinition } from '../types/game';
 
 // All 12 tokens, reskinned from Comunopoly's communist-themed roster to
-// SCP Foundation personnel types. Every Special Power that still
-// functions standalone under classic Monopoly rules (no Win
-// Conditions/Score, no West/Smuggling stash, no Stalin-only STOY fee)
-// is kept unchanged, just reworded. Two powers (Janitor, Specialist)
-// depended entirely on removed mechanics and are left powerless for
-// now - see CONTEXT.md's Personnel section - rather than inventing
-// new mechanics in what's meant to be a pure reskinning pass.
+// SCP Foundation personnel types. Most Special Powers are kept
+// unchanged from the original Piece they're reskinned from, just
+// reworded - see CONTEXT.md's Personnel section. D-Class and Janitor
+// are the exceptions: their original powers depended on mechanics this
+// build dropped, so they got new, purpose-built powers instead (see
+// game/engine.ts's usedExpendabilityClause/usedMasterKey handling and
+// useJanitorTunnelTravel). Specialist (Penguin) is still powerless.
 export const STARTING_PIECES: PieceDefinition[] = [
   {
     id: 'boot',
     name: 'D-Class',
     title: 'D-Class Personnel',
-    powerDescription: 'Utilities are half price.',
+    powerDescription:
+      "Standard Expendability Clause: docile and compliant - pays only half the usual Clearance Fee to leave the Containment Chamber, no questions asked. The first time this D-Class would be Terminated, Personnel Records instead files a requisition for a replacement: they're back in play immediately with reduced starting Credits, no memory of the incident. Doesn't happen twice.",
   },
   {
     id: 'battleship',
@@ -31,10 +32,8 @@ export const STARTING_PIECES: PieceDefinition[] = [
     id: 'iron',
     name: 'Janitor',
     title: 'Janitorial Staff',
-    // Comunopoly's Iron never had to pay the bribe to pass STOY - a
-    // Stalin-only fee that classic rules never charge anyone, so this
-    // Piece is powerless until it gets a real one.
-    powerDescription: null,
+    powerDescription:
+      'Below the Floor Plan: knows every service corridor the Foundation never bothered to blueprint. Can move directly between any two Maintenance Tunnels for free, and never pays toll to use one. Keeps a master keyring from decades of unsupervised access - once per game, walks straight out of the Containment Chamber without paying the Clearance Fee.',
   },
   {
     id: 'thimble',

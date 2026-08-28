@@ -32,11 +32,18 @@ import {
   settleDebt,
   unmortgageProperty,
   useGetOutOfJailCard,
+  useJanitorTunnelTravel,
   withdrawTrade,
 } from './engine';
 import type { GamePlayerState, GameState, PieceId } from '../types/game';
 
-function makeGame(pieceIds: PieceId[] = ['boot', 'battleship']): GameState {
+// Defaults to two Personnel with no passive Special Power side effects
+// (Site Director's/Field Researcher's card-choice power only triggers
+// via drawFromPile's canChoose path, which every card test here bypasses
+// by using devSetForcedCard first) - so generic mechanics tests aren't
+// quietly perturbed by D-Class/Battleship/Janitor/etc.'s own powers.
+// Tests for a specific Personnel's power pass their own pieceIds.
+function makeGame(pieceIds: PieceId[] = ['dog', 'car']): GameState {
   const assignments = pieceIds.map((pieceId, i) => ({ playerId: `p${i + 1}`, pieceId }));
   return createInitialGameState(assignments, () => 0.42);
 }
@@ -392,6 +399,79 @@ describe('special powers', () => {
     game = buyTile(game, 'p1');
     expect(game.houses[1] ?? game.houses[3]).toBe(1);
     expect(game.hatFreeHouseSectors).toContain('purple');
+  });
+});
+
+describe("D-Class's Standard Expendability Clause", () => {
+  it('pays only half the Clearance Fee', () => {
+    let game = makeGame(['boot', 'battleship']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = payClearanceFee(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500 - 25);
+  });
+
+  it('survives its first Termination by respawning with reduced Credits', () => {
+    let game = makeGame(['boot', 'battleship']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 5 });
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: null } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(false);
+    expect(game.players.p1.credits).toBe(750);
+    expect(game.players.p1.position).toBe(0);
+    expect(game.players.p1.ownedTileIds).toEqual([]);
+    expect(game.players.p1.usedExpendabilityClause).toBe(true);
+    expect(game.winnerId).toBeNull();
+  });
+
+  it('is Terminated for real the second time', () => {
+    let game = makeGame(['boot', 'battleship']);
+    game = withPlayer(game, 'p1', { credits: 5, usedExpendabilityClause: true });
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: null } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(true);
+    expect(game.winnerId).toBe('p2');
+  });
+});
+
+describe("Janitor's Below the Floor Plan", () => {
+  it('leaves the Containment Chamber for free once, using the master keyring', () => {
+    let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = payClearanceFee(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.players.p1.usedMasterKey).toBe(true);
+    expect(game.players.p1.inJail).toBe(false);
+  });
+
+  it('pays the normal Clearance Fee once the master keyring is already used', () => {
+    let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10, usedMasterKey: true });
+    game = payClearanceFee(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500 - 50);
+  });
+
+  it('moves directly to a chosen Maintenance Tunnel instead of rolling', () => {
+    let game = makeGame(['iron', 'boot']);
+    game = useJanitorTunnelTravel(game, 'p1', 15);
+    expect(game.players.p1.position).toBe(15);
+    expect(game.pendingDecision).toEqual({ type: 'purchase', tileId: 15 });
+  });
+
+  it('never pays toll on a Maintenance Tunnel someone else owns', () => {
+    let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [5] });
+    game = useJanitorTunnelTravel(game, 'p1', 5);
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it("refuses to travel once the player has already rolled this turn", () => {
+    let game = makeGame(['iron', 'boot']);
+    game = devSetForcedRoll(game, [4, 6]); // 0 -> 10, Containment Chamber (just visiting, no decision)
+    game = rollDice(game);
+    const before = game;
+    game = useJanitorTunnelTravel(game, 'p1', 15);
+    expect(game).toEqual(before);
   });
 });
 

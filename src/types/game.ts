@@ -121,6 +121,10 @@ export interface GamePlayerState {
   consecutiveAfkSkips: number;
   /** True only while spectating because afkSkipTurn benched them for being away too long - distinct from isSpectating alone (a real Termination), since this one can be undone with rejoinFromAfk. */
   isAfkSpectating: boolean;
+  /** D-Class's Special Power ("Standard Expendability Clause"): the first time this player would be Terminated, they're requisitioned back into play instead - this flags that it's already happened once, so a second Termination is permanent like anyone else's. */
+  usedExpendabilityClause: boolean;
+  /** Janitor's Special Power ("Below the Floor Plan"): the master keyring only works once - this flags that it's already been used to skip a Clearance Fee for free. */
+  usedMasterKey: boolean;
 }
 
 /**
