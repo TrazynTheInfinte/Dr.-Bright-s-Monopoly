@@ -516,7 +516,7 @@ describe("Field Researcher's Grant Funding", () => {
     game = withPlayer(game, 'p1', { position: 1 }); // 1 -> 4 lands on a Foundation Directive tile
     game = devSetForcedRoll(game, [3, 0]);
     game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 + 25);
+    expect(game.players.p1.credits).toBe(1500 + 100);
     expect(game.pendingDecision?.type).toBe('awaitingCardDraw');
   });
 

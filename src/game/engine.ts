@@ -16,7 +16,7 @@ const MAX_DOUBLES_BEFORE_JAIL = 3;
 const MAX_TURNS_IN_JAIL = 3;
 const PURPLE_SEIZE_GROUP: ColorGroup = 'purple';
 /** Field Researcher's "Grant Funding": a flat stipend for landing on either card tile. */
-const GRANT_FUNDING_AMOUNT = 25;
+const GRANT_FUNDING_AMOUNT = 100;
 /** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds. */
 const BULK_REQUISITION_MULTIPLIER = 0.75;
 // Half real Monopoly's bank supply (32/12) - makes the shared pool a

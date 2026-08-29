@@ -48,7 +48,7 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Field Researcher',
     title: 'Field Researcher',
     powerDescription:
-      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile. Grant Funding: cleared for a modest research stipend (25 Credits) any time fieldwork puts them on a card tile, Directive or Event alike, whatever the card turns out to say.",
+      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile. Grant Funding: cleared for a research stipend (100 Credits) any time fieldwork puts them on a card tile, Directive or Event alike, whatever the card turns out to say.",
   },
   {
     id: 'wheelBarrel',

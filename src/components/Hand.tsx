@@ -136,11 +136,17 @@ function HouseControls({ roomCode, playerId, game, tileId }: HouseControlsProps)
 
   const houses = game.houses[tileId] ?? 0;
   const isHotel = houses === 5;
+  // Logistics Officer's "Bulk Requisition" (25% off) and "Overstock"
+  // (never blocked by the shared supply) - mirrors buildHouse in
+  // game/engine.ts exactly, so this button's price/enabled state don't
+  // silently disagree with what actually gets charged.
+  const isLogisticsOfficer = me.pieceId === 'wheelBarrel';
+  const buildCost = isLogisticsOfficer ? Math.floor(tile.houseCost * 0.75) : tile.houseCost;
   const canBuild =
     !isHotel &&
-    me.credits >= tile.houseCost &&
-    (houses === 4 ? game.hotelsRemaining > 0 : game.housesRemaining > 0);
-  const canSell = houses > 0 && !(isHotel && game.housesRemaining < 4);
+    me.credits >= buildCost &&
+    (isLogisticsOfficer || (houses === 4 ? game.hotelsRemaining > 0 : game.housesRemaining > 0));
+  const canSell = houses > 0 && (isLogisticsOfficer || !(isHotel && game.housesRemaining < 4));
 
   return (
     <div className="hand-card-action">
@@ -149,7 +155,7 @@ function HouseControls({ roomCode, playerId, game, tileId }: HouseControlsProps)
         onClick={() => buildHouseAndSync(roomCode, game, playerId, tileId)}
         disabled={!canBuild}
       >
-        {houses === 4 ? `Build Hotel (₡${tile.houseCost})` : `Build House (₡${tile.houseCost})`}
+        {houses === 4 ? `Build Hotel (₡${buildCost})` : `Build House (₡${buildCost})`}
       </button>
       <button
         type="button"
