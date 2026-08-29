@@ -14,7 +14,7 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'D-Class',
     title: 'D-Class Personnel',
     powerDescription:
-      "Standard Expendability Clause: docile and compliant - never billed the Clearance Fee to leave the Containment Chamber, no questions asked. The first time this D-Class would be Terminated, Personnel Records instead files a requisition for a replacement: they're back in play immediately with reduced starting Credits, no memory of the incident. Doesn't happen twice.",
+      "Standard Expendability Clause: docile and compliant - never billed the Holding Fee or the Escape Fee for time spent in the Containment Chamber, no questions asked. The first time this D-Class would be Terminated, Personnel Records instead files a requisition for a replacement: they're back in play immediately with reduced starting Credits, no memory of the incident. Doesn't happen twice.",
   },
   {
     id: 'battleship',
@@ -33,7 +33,7 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Janitor',
     title: 'Janitorial Staff',
     powerDescription:
-      'Below the Floor Plan: knows every service corridor the Foundation never bothered to blueprint. Once per turn, from one Maintenance Tunnel, can move directly to any other one for free, and never pays toll on a Tunnel. Keeps a master keyring from decades of unsupervised access - once per game, walks straight out of the Containment Chamber without paying the Clearance Fee.',
+      'Below the Floor Plan: knows every service corridor the Foundation never bothered to blueprint. Once per turn, from one Maintenance Tunnel, can move directly to any other one for free, and never pays toll on a Tunnel. Keeps a master keyring from decades of unsupervised access - once per game, walks straight out of the Containment Chamber without paying the Escape Fee.',
   },
   {
     id: 'thimble',

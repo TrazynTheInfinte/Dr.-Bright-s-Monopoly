@@ -23,7 +23,7 @@ import {
   drawFromPile,
   endTurn,
   mortgageProperty,
-  payClearanceFee,
+  payEscapeFee,
   proposeTrade,
   rejoinFromAfk,
   resolveRubberDuckEncounter,
@@ -121,28 +121,30 @@ describe('the Containment Chamber', () => {
     expect(game.players.p1.position).toBe(16);
   });
 
-  it('failing to roll doubles three times forces the Clearance Fee and a move', () => {
+  it('charges the Holding Fee for each failed attempt, then releases for free on the 3rd', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { inJail: true, position: 10 });
     game = devSetForcedRoll(game, [1, 2]);
     game = rollDice(game); // attempt 1
     expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.credits).toBe(1450);
     game = devSetForcedRoll(game, [1, 2]);
     game = rollDice(game); // attempt 2
     expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.credits).toBe(1400);
     game = devSetForcedRoll(game, [1, 2]);
-    game = rollDice(game); // attempt 3 - forced out
+    game = rollDice(game); // attempt 3 - still charged for this turn, then released with no extra fee
     expect(game.players.p1.inJail).toBe(false);
-    expect(game.players.p1.credits).toBe(1450);
+    expect(game.players.p1.credits).toBe(1350);
     expect(game.players.p1.position).toBe(13);
   });
 
-  it('paying the Clearance Fee voluntarily leaves immediately', () => {
+  it('paying the Escape Fee voluntarily leaves immediately', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { inJail: true, position: 10 });
-    game = payClearanceFee(game, 'p1');
+    game = payEscapeFee(game, 'p1');
     expect(game.players.p1.inJail).toBe(false);
-    expect(game.players.p1.credits).toBe(1450);
+    expect(game.players.p1.credits).toBe(1300);
   });
 
   it('a held Get Out of Containment Free card releases the player for free', () => {
@@ -403,12 +405,21 @@ describe('special powers', () => {
 });
 
 describe("D-Class's Standard Expendability Clause", () => {
-  it('is never billed the Clearance Fee', () => {
+  it('is never billed the Escape Fee', () => {
     let game = makeGame(['boot', 'battleship']);
     game = withPlayer(game, 'p1', { inJail: true, position: 10 });
-    game = payClearanceFee(game, 'p1');
+    game = payEscapeFee(game, 'p1');
     expect(game.players.p1.credits).toBe(1500);
     expect(game.players.p1.inJail).toBe(false);
+  });
+
+  it('is never billed the Holding Fee', () => {
+    let game = makeGame(['boot', 'battleship']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = devSetForcedRoll(game, [1, 2]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.players.p1.inJail).toBe(true);
   });
 
   it('survives its first Termination by respawning with reduced Credits', () => {
@@ -438,17 +449,17 @@ describe("Janitor's Below the Floor Plan", () => {
   it('leaves the Containment Chamber for free once, using the master keyring', () => {
     let game = makeGame(['iron', 'boot']);
     game = withPlayer(game, 'p1', { inJail: true, position: 10 });
-    game = payClearanceFee(game, 'p1');
+    game = payEscapeFee(game, 'p1');
     expect(game.players.p1.credits).toBe(1500);
     expect(game.players.p1.usedMasterKey).toBe(true);
     expect(game.players.p1.inJail).toBe(false);
   });
 
-  it('pays the normal Clearance Fee once the master keyring is already used', () => {
+  it('pays the normal Escape Fee once the master keyring is already used', () => {
     let game = makeGame(['iron', 'boot']);
     game = withPlayer(game, 'p1', { inJail: true, position: 10, usedMasterKey: true });
-    game = payClearanceFee(game, 'p1');
-    expect(game.players.p1.credits).toBe(1500 - 50);
+    game = payEscapeFee(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500 - 200);
   });
 
   it('moves directly to a chosen Maintenance Tunnel from another one', () => {
@@ -566,8 +577,8 @@ describe('debt and bankruptcy', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { credits: 10 });
     game = withPlayer(game, 'p1', { position: 10, inJail: true });
-    game = payClearanceFee(game, 'p1'); // 50 owed, only has 10
-    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 50, creditorId: null });
+    game = payEscapeFee(game, 'p1'); // 200 owed, only has 10
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 200, creditorId: null });
     expect(game.players.p1.credits).toBe(10);
   });
 

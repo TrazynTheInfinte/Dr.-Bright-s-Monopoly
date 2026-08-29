@@ -109,7 +109,7 @@ export interface GamePlayerState {
   /** Tile IDs of Wings/Tunnels/utilities this player owns. */
   ownedTileIds: number[];
   inJail: boolean;
-  /** Turns spent stuck in the Containment Chamber so far this stay - classic rule: forced to pay the Clearance Fee (and leave) after the 3rd failed attempt. Reset to 0 on leaving. */
+  /** Turns spent stuck in the Containment Chamber so far this stay - the Holding Fee is charged each one, and the player is released for free after the 3rd. Reset to 0 on leaving. */
   turnsInJail: number;
   /** Consecutive doubles rolled during the current turn sequence - a 3rd sends this player to the Containment Chamber instead of moving again. Resets whenever a turn actually ends (a non-doubles roll, or this rule triggering). */
   doublesRolledCount: number;
@@ -123,7 +123,7 @@ export interface GamePlayerState {
   isAfkSpectating: boolean;
   /** D-Class's Special Power ("Standard Expendability Clause"): the first time this player would be Terminated, they're requisitioned back into play instead - this flags that it's already happened once, so a second Termination is permanent like anyone else's. */
   usedExpendabilityClause: boolean;
-  /** Janitor's Special Power ("Below the Floor Plan"): the master keyring only works once - this flags that it's already been used to skip a Clearance Fee for free. */
+  /** Janitor's Special Power ("Below the Floor Plan"): the master keyring only works once - this flags that it's already been used to skip the Escape Fee for free. */
   usedMasterKey: boolean;
   /** Janitor's Special Power: the tunnel-to-tunnel shortcut only works once per turn - cleared by endTurn the moment this player's turn actually ends. */
   usedTunnelTravelThisTurn: boolean;

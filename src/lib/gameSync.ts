@@ -26,7 +26,7 @@ import {
   drawFromPile,
   endTurn,
   mortgageProperty,
-  payClearanceFee,
+  payEscapeFee,
   proposeTrade,
   rejoinFromAfk,
   resolveRubberDuckEncounter,
@@ -144,8 +144,8 @@ export async function unmortgageTileAndSync(roomCode: string, game: GameState, p
   await writeGameState(roomCode, unmortgageProperty(game, playerId, tileId));
 }
 
-export async function payClearanceFeeAndSync(roomCode: string, game: GameState, playerId: string) {
-  await writeGameState(roomCode, payClearanceFee(game, playerId));
+export async function payEscapeFeeAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, payEscapeFee(game, playerId));
 }
 
 export async function useGetOutOfJailCardAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {

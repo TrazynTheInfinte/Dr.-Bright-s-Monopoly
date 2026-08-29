@@ -13,7 +13,7 @@ const HOUSE_LABELS = ['', '1 house', '2 houses', '3 houses', '4 houses', 'Hotel'
 
 /**
  * Shown when a player can't afford a payment (rent, a card effect, the
- * Clearance Fee...) but has something left to sell/mortgage -
+ * Holding/Escape Fee...) but has something left to sell/mortgage -
  * sellHouse/mortgageProperty are unrestricted by any pendingDecision,
  * so this just exposes them directly, with a running "can you afford it
  * yet" check and a Pay button that only lights up once you can.

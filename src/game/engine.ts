@@ -7,10 +7,12 @@ const STARTING_CREDITS = 1500;
 const RESPAWN_CREDITS = 750;
 const GO_BONUS = 200;
 const JAIL_POSITION = 10;
-/** Classic Monopoly's jail fine - the Clearance Fee, per CONTEXT.md. */
-const CLEARANCE_FEE = 50;
+/** Charged every turn a player fails to roll doubles while stuck in the Containment Chamber - a running cost of staying, not a one-time fine. D-Class is exempt. */
+const HOLDING_FEE = 50;
+/** The Escape Fee - paying to leave the Containment Chamber immediately, before even trying for doubles. Steeper than the Holding Fee since it buys certainty. D-Class never pays it; Janitor gets one free via the master keyring. */
+const ESCAPE_FEE = 200;
 const MAX_DOUBLES_BEFORE_JAIL = 3;
-/** Classic rule: after 3 turns stuck in the Containment Chamber without rolling doubles, you must pay the Clearance Fee and move. */
+/** After 3 turns stuck without rolling doubles, a player is released for free - they've already paid the Holding Fee each of those turns. */
 const MAX_TURNS_IN_JAIL = 3;
 const PURPLE_SEIZE_GROUP: ColorGroup = 'purple';
 // Standard Monopoly bank supply. Real Monopoly resolves a shortage with
@@ -262,25 +264,35 @@ export function rollDice(state: GameState, rng: () => number = Math.random): Gam
 }
 
 /**
- * Charges the Clearance Fee (50 Credits), applying D-Class's standing
- * exemption ("Standard Expendability Clause") and Janitor's one-time
- * free pass ("Below the Floor Plan" - the master keyring). Returns the
- * resulting state either way - check .pendingDecision for whether a
- * debtSettlement opened instead of actually deducting anything.
+ * Charges the Escape Fee (200 Credits) - paying to leave the
+ * Containment Chamber immediately rather than trying for doubles.
+ * Applies D-Class's standing exemption ("Standard Expendability
+ * Clause") and Janitor's one-time free pass ("Below the Floor Plan" -
+ * the master keyring). Returns the resulting state either way - check
+ * .pendingDecision for whether a debtSettlement opened instead of
+ * actually deducting anything.
  */
-function chargeClearanceFee(state: GameState, playerId: string): GameState {
+function chargeEscapeFee(state: GameState, playerId: string): GameState {
   const piece = pieceOf(state, playerId);
   if (piece === 'boot') {
-    return logEvent(state, "No questions asked - D-Class isn't billed a Clearance Fee.");
+    return logEvent(state, "No questions asked - D-Class isn't billed the Escape Fee.");
   }
   if (piece === 'iron' && !state.players[playerId].usedMasterKey) {
     return updatePlayer(
-      logEvent(state, 'Used the master keyring - no Clearance Fee.'),
+      logEvent(state, 'Used the master keyring - no Escape Fee.'),
       playerId,
       { usedMasterKey: true },
     );
   }
-  return chargePlayer(state, playerId, CLEARANCE_FEE, null);
+  return chargePlayer(state, playerId, ESCAPE_FEE, null);
+}
+
+/** Charges the Holding Fee (50 Credits) for another turn stuck in the Containment Chamber - D-Class is exempt. */
+function chargeHoldingFee(state: GameState, playerId: string): GameState {
+  if (pieceOf(state, playerId) === 'boot') {
+    return logEvent(state, "No questions asked - D-Class isn't billed the Holding Fee.");
+  }
+  return chargePlayer(state, playerId, HOLDING_FEE, null);
 }
 
 function resolveJailRoll(state: GameState, playerId: string, roll: [number, number], isDoubles: boolean): GameState {
@@ -289,27 +301,28 @@ function resolveJailRoll(state: GameState, playerId: string, roll: [number, numb
     return moveAndResolve(logEvent(freed, 'Rolled doubles - released from the Containment Chamber.'), playerId, roll[0] + roll[1]);
   }
 
-  const turnsInJail = state.players[playerId].turnsInJail + 1;
+  const charged = chargeHoldingFee(
+    logEvent(state, 'Failed to roll doubles - the Holding Fee is charged for another turn inside.'),
+    playerId,
+  );
+  if (charged.pendingDecision) return charged; // couldn't afford it - debtSettlement takes over
+
+  const turnsInJail = charged.players[playerId].turnsInJail + 1;
   if (turnsInJail >= MAX_TURNS_IN_JAIL) {
-    const charged = chargeClearanceFee(
-      logEvent(state, `Failed to roll doubles ${MAX_TURNS_IN_JAIL} times - must pay the Clearance Fee.`),
-      playerId,
-    );
-    if (charged.pendingDecision) return charged; // couldn't afford it - debtSettlement takes over
     const freed = updatePlayer(charged, playerId, { inJail: false, turnsInJail: 0 });
-    return moveAndResolve(freed, playerId, roll[0] + roll[1]);
+    return moveAndResolve(logEvent(freed, `Failed to roll doubles ${MAX_TURNS_IN_JAIL} times - released.`), playerId, roll[0] + roll[1]);
   }
 
-  return logEvent(updatePlayer(state, playerId, { turnsInJail }), 'Still in the Containment Chamber.');
+  return logEvent(updatePlayer(charged, playerId, { turnsInJail }), 'Still in the Containment Chamber.');
 }
 
-/** Voluntarily pays the Clearance Fee to leave the Containment Chamber right away, before rolling. */
-export function payClearanceFee(state: GameState, playerId: string): GameState {
+/** Voluntarily pays the Escape Fee to leave the Containment Chamber right away, before rolling. */
+export function payEscapeFee(state: GameState, playerId: string): GameState {
   if (state.pendingDecision || !state.players[playerId].inJail) return state;
   if (currentPlayerId(state) !== playerId) return state;
-  const charged = chargeClearanceFee(state, playerId);
+  const charged = chargeEscapeFee(state, playerId);
   if (charged.pendingDecision) return charged;
-  return updatePlayer(logEvent(charged, 'Paid the Clearance Fee.'), playerId, { inJail: false, turnsInJail: 0 });
+  return updatePlayer(logEvent(charged, 'Paid the Escape Fee.'), playerId, { inJail: false, turnsInJail: 0 });
 }
 
 /** Spends a held "Get Out of Containment Free" card to leave immediately, before rolling. */

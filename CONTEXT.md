@@ -11,16 +11,20 @@ The in-game currency. All players start with 1500.
 _Avoid_: Rouble, dollar, cash
 
 **The Foundation**:
-The entity that confiscates a Terminated player's assets, and that receives certain payments (e.g. Site Entrance fees, Clearance Fees).
+The entity that confiscates a Terminated player's assets, and that receives certain payments (e.g. Site Entrance fees, Holding/Escape Fees).
 _Avoid_: The State, bank, treasury, the house
 
 **Requisition**:
 The act of the Foundation confiscating a player's assets when they're Terminated.
 _Avoid_: Seize, Seizure
 
-**Clearance Fee**:
-The payment a player in the Containment Chamber must make to get released early, before rolling doubles resolves it naturally.
+**Holding Fee**:
+Charged to a player every turn they fail to roll doubles while stuck in the Containment Chamber - the ongoing cost of staying. D-Class is exempt. After 3 turns paying it, a player is released for free.
 _Avoid_: Bribe
+
+**Escape Fee**:
+A steeper, one-time payment a player in the Containment Chamber can make to leave immediately, before even trying for doubles - an alternative to the Holding Fee, not a discount on it. D-Class never pays it; Janitor's master keyring waives it once per game.
+_Avoid_: Bribe, Clearance Fee
 
 **Terminated**:
 The classic Monopoly "lose" state: a player who can't cover a debt is out for good, their Rooms and Credits return to the Foundation, and they're skipped in turn order for the rest of the match. The match ends the instant only one player is left.
@@ -41,7 +45,7 @@ The start tile (the old GO/STOY). Landing on or passing it collects the standard
 _Avoid_: GO, STOY
 
 **Containment Chamber**:
-The jail tile. A player sent here stays until they roll doubles, use a Get Out of Containment card, or pay the Clearance Fee.
+The jail tile. A player sent here stays until they roll doubles, use a Get Out of Containment card, or pay the Escape Fee - otherwise they're charged the Holding Fee each turn they remain, and released for free after 3 such turns.
 _Avoid_: Jail
 
 **Reassigned**:

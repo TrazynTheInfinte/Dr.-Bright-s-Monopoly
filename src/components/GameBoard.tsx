@@ -9,7 +9,7 @@ import {
   declinePurchaseAndSync,
   endTurnAndSync,
   mortgageTileAndSync,
-  payClearanceFeeAndSync,
+  payEscapeFeeAndSync,
   rejoinFromAfkAndSync,
   rollDiceAndSync,
   useJanitorTunnelTravelAndSync,
@@ -294,17 +294,17 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
                   {isRolling ? 'Rolling...' : 'Roll Dice'}
                 </button>
               )}
-              {/* Only before rolling - once they've rolled (and failed to
-                  roll doubles), resolveJailRoll already either freed them
-                  or forced the fee, so there's nothing left to pay. */}
+              {/* Only before rolling - once they've rolled, resolveJailRoll
+                  already charged the Holding Fee for this turn (or freed
+                  them), so there's nothing left to pay here. */}
               {!game.lastRoll && me?.inJail && (
-                <button onClick={() => payClearanceFeeAndSync(roomCode, game, playerId)}>
-                  Pay Clearance Fee{' '}
+                <button onClick={() => payEscapeFeeAndSync(roomCode, game, playerId)}>
+                  Pay Escape Fee{' '}
                   {me.pieceId === 'boot'
                     ? '(free - D-Class isn\'t billed)'
                     : me.pieceId === 'iron' && !me.usedMasterKey
                       ? '(free - master keyring)'
-                      : '(50 Credits)'}
+                      : '(200 Credits)'}
                 </button>
               )}
               {game.lastRoll && !game.lastRollWasDoubles && (
