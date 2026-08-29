@@ -11,6 +11,7 @@ import {
   buyTile,
   catRedirectCard,
   chooseCardFromChoices,
+  chooseNewPersonnel,
   confirmStillHere,
   createInitialGameState,
   declareBankruptcy,
@@ -28,6 +29,7 @@ import {
   mortgageProperty,
   payEscapeFee,
   proposeTrade,
+  purgeAnomalies,
   rejoinFromAfk,
   resolveMtfEncounter,
   resolveRubberDuckEncounter,
@@ -37,6 +39,7 @@ import {
   unmortgageProperty,
   useGetOutOfJailCard,
   useJanitorTunnelTravel,
+  viewAnomaly,
   withdrawTrade,
 } from '../game/engine';
 
@@ -229,4 +232,18 @@ export async function devKickPlayerAndSync(roomCode: string, game: GameState, pl
 
 export async function devRevivePlayerAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, devRevivePlayer(game, playerId));
+}
+
+// --- Hostile anomalies -----------------------------------------------------
+
+export async function viewAnomalyAndSync(roomCode: string, game: GameState, playerId: string, anomalyId: string) {
+  await writeGameState(roomCode, viewAnomaly(game, playerId, anomalyId));
+}
+
+export async function chooseNewPersonnelAndSync(roomCode: string, game: GameState, playerId: string, pieceId: PieceId) {
+  await writeGameState(roomCode, chooseNewPersonnel(game, playerId, pieceId));
+}
+
+export async function purgeAnomaliesAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, purgeAnomalies(game, playerId));
 }

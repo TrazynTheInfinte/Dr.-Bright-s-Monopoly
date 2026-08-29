@@ -1,6 +1,8 @@
+import { ANOMALIES, findAnomaly, type AnomalyId } from '../data/anomalies';
 import { BOARD, BOARD_SIZE, getTile, RAILROAD_RENT_BY_COUNT } from '../data/board';
 import { ANOMALOUS_EVENT_CARDS, FOUNDATION_DIRECTIVE_CARDS, findCard, type CardEffect } from '../data/cards';
-import type { CardDeck, ColorGroup, GameState, GamePlayerState, PieceId, TradeOffer } from '../types/game';
+import { STARTING_PIECES } from '../data/pieces';
+import type { CardDeck, ColorGroup, GameState, GamePlayerState, LooseAnomaly, PieceId, TradeOffer } from '../types/game';
 
 const STARTING_CREDITS = 1500;
 /** D-Class's "Standard Expendability Clause": reduced funding for the one-time requisitioned replacement. */
@@ -23,6 +25,13 @@ const BULK_REQUISITION_MULTIPLIER = 0.75;
 const CONTAINMENT_PROCEDURE_MULTIPLIER = 0.75;
 /** Specialist's "Redundant Safeguards": the one-time emergency grant when a forced payment would otherwise be unaffordable. */
 const REDUNDANT_SAFEGUARDS_AMOUNT = 300;
+/** Chance, checked once per completed turn, that a new hostile anomaly breaches containment. */
+const BREACH_CHANCE = 0.08;
+/** How many spaces a hunting anomaly closes the gap by per turn tick - fast enough that being hunted is genuinely urgent. */
+const ANOMALY_HUNT_SPEED = 6;
+/** The Site Warhead is tile 12 - see data/board.ts. Only its current owner can trigger a purge. */
+const SITE_WARHEAD_TILE_ID = 12;
+const SITE_WARHEAD_PURGE_COST = 500;
 // Half real Monopoly's bank supply (32/12) - makes the shared pool a
 // real constraint worth fighting over, and makes Logistics Officer's
 // Overstock (bypasses the shared pool entirely) noticeably stronger by
@@ -104,6 +113,8 @@ export function createInitialGameState(
     activeTrades: [],
     rubberDuckEncounter: null,
     mtfEncounter: null,
+    looseAnomalies: [],
+    pendingPieceChoice: null,
   };
 }
 
@@ -887,20 +898,24 @@ export function settleDebt(state: GameState, playerId: string): GameState {
   return chargePlayer({ ...state, pendingDecision: null }, playerId, amountOwed, creditorId);
 }
 
-/** Gives up rather than settling a debt: every asset (Credits, Wings, houses/hotels, mortgages, held cards) is either handed to the creditor (if a specific player) or returned to the Foundation, and this player is permanently out. */
-export function declareBankruptcy(state: GameState, playerId: string): GameState {
-  if (state.pendingDecision?.type !== 'debtSettlement' || state.pendingDecision.forPlayerId !== playerId) return state;
-  const { creditorId } = state.pendingDecision;
-  const player = state.players[playerId];
-
-  let next: GameState = { ...state, pendingDecision: null };
-  for (const tileId of [...player.ownedTileIds]) {
+/**
+ * Returns every Wing (and its houses/hotels) a player holds to the
+ * Foundation - or, if creditorId is given, hands them to that player
+ * instead - and pays over their remaining Credits the same way.
+ * Doesn't touch isSpectating, zero the player's own Credits, or apply
+ * D-Class's exemption - callers decide what happens to the player
+ * afterward. Shared by declareBankruptcy, devKickPlayer, and Shy Guy's
+ * catch effect.
+ */
+function seizeAssets(state: GameState, playerId: string, creditorId: string | null): GameState {
+  let next = state;
+  for (const tileId of [...state.players[playerId].ownedTileIds]) {
     const houses = next.houses[tileId] ?? 0;
     if (houses > 0) {
-      // Houses/hotels always return to the bank's supply on bankruptcy,
-      // even if the Wing itself goes to another player - matches the
-      // real rule that you must sell all houses before going bankrupt
-      // to another player (we don't enforce that directly, so this is
+      // Houses/hotels always return to the bank's supply, even if the
+      // Wing itself goes to another player - matches the real rule
+      // that you must sell all houses before going bankrupt to
+      // another player (we don't enforce that directly, so this is
       // the fallback that keeps the bank's supply from leaking).
       next = {
         ...next,
@@ -913,6 +928,14 @@ export function declareBankruptcy(state: GameState, playerId: string): GameState
     next = { ...next, mortgagedTileIds: next.mortgagedTileIds.filter((id) => id !== tileId) };
   }
   if (creditorId) next = giveCredits(next, creditorId, next.players[playerId].credits);
+  return next;
+}
+
+/** Gives up rather than settling a debt: every asset (Credits, Wings, houses/hotels, mortgages, held cards) is either handed to the creditor (if a specific player) or returned to the Foundation, and this player is permanently out. */
+export function declareBankruptcy(state: GameState, playerId: string): GameState {
+  if (state.pendingDecision?.type !== 'debtSettlement' || state.pendingDecision.forPlayerId !== playerId) return state;
+  const { creditorId } = state.pendingDecision;
+  let next: GameState = seizeAssets({ ...state, pendingDecision: null }, playerId, creditorId);
 
   // D-Class's "Standard Expendability Clause": the first Termination is
   // survivable - requisitioned back into play instead of going out for
@@ -943,6 +966,138 @@ function checkWinCondition(state: GameState): GameState {
     return logEvent({ ...state, winnerId: active[0] }, 'Only one player remains - the match is over.');
   }
   return state;
+}
+
+// --- Hostile anomalies ---------------------------------------------------
+//
+// A world event independent of any single player's turn: once a real
+// turn ends (not a doubles-continuation - see endTurn), a new anomaly
+// might breach containment, and any already-loose ones take a step.
+// Each anomaly gets its own bespoke behavior (only Shy Guy exists so
+// far) rather than a generic shared "AI" - see data/anomalies.ts.
+
+function updateAnomaly(state: GameState, anomalyId: string, patch: Partial<LooseAnomaly>): GameState {
+  return { ...state, looseAnomalies: state.looseAnomalies.map((a) => (a.anomalyId === anomalyId ? { ...a, ...patch } : a)) };
+}
+
+function maybeBreachContainment(state: GameState, rng: () => number): GameState {
+  if (rng() >= BREACH_CHANCE) return state;
+  const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
+  const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
+  if (candidates.length === 0) return state; // every anomaly type is already loose
+  const anomaly = candidates[Math.floor(rng() * candidates.length)];
+  const loose: LooseAnomaly = { anomalyId: anomaly.id, tileId: anomaly.spawnTileId, status: 'dormant', targetPlayerId: null };
+  return logEvent(
+    { ...state, looseAnomalies: [...state.looseAnomalies, loose] },
+    `Containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`,
+  );
+}
+
+/** Moves `from` toward `to` by at most `maxSteps`, going whichever way around the board (clockwise or counter-clockwise) is actually shorter. */
+function stepToward(from: number, to: number, maxSteps: number): number {
+  const clockwiseDistance = (to - from + BOARD_SIZE) % BOARD_SIZE;
+  if (clockwiseDistance === 0) return from;
+  const counterDistance = BOARD_SIZE - clockwiseDistance;
+  return clockwiseDistance <= counterDistance
+    ? (from + Math.min(clockwiseDistance, maxSteps)) % BOARD_SIZE
+    : (from - Math.min(counterDistance, maxSteps) + BOARD_SIZE) % BOARD_SIZE;
+}
+
+function availablePersonnelIds(state: GameState): PieceId[] {
+  const claimed = new Set(Object.values(state.players).filter((p) => !p.isSpectating).map((p) => p.pieceId));
+  return STARTING_PIECES.map((p) => p.id).filter((id) => !claimed.has(id));
+}
+
+/**
+ * Shy Guy's catch effect (the only one that exists so far, but written
+ * as "an anomaly's catch effect" since future ones may differ): every
+ * asset returns to the Foundation, exactly like a real Termination.
+ * D-Class's "Standard Expendability Clause" still applies first if
+ * they haven't used it. Otherwise, if any Personnel nobody else is
+ * playing exists, they're queued to pick one (see chooseNewPersonnel)
+ * instead of going out for good - only a real Termination if nothing's
+ * left to reassign. The anomaly itself goes back to dormant right
+ * where it caught them - still loose until someone purges it.
+ */
+function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number): GameState {
+  const anomaly = findAnomaly(anomalyId as AnomalyId);
+  let next = logEvent(state, `${anomaly.name} caught up with someone.`);
+  next = seizeAssets(next, targetPlayerId, null);
+
+  if (pieceOf(next, targetPlayerId) === 'boot' && !next.players[targetPlayerId].usedExpendabilityClause) {
+    next = updatePlayer(next, targetPlayerId, {
+      credits: RESPAWN_CREDITS,
+      position: 0,
+      ownedTileIds: [],
+      heldCardIds: [],
+      inJail: false,
+      turnsInJail: 0,
+      usedExpendabilityClause: true,
+    });
+    next = logEvent(next, 'Requisitioned a replacement D-Class - back in play with reduced funding.');
+  } else {
+    const available = availablePersonnelIds(next);
+    next = updatePlayer(next, targetPlayerId, { credits: 0, ownedTileIds: [], heldCardIds: [] });
+    if (available.length === 0) {
+      next = updatePlayer(next, targetPlayerId, { isSpectating: true });
+      next = checkWinCondition(logEvent(next, 'Terminated - no unclaimed Personnel left to reassign.'));
+    } else {
+      next = { ...next, pendingPieceChoice: { playerId: targetPlayerId, availablePieceIds: available } };
+      next = logEvent(next, 'Requisitioning a new Personnel assignment.');
+    }
+  }
+
+  return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+}
+
+function advanceHuntingAnomalies(state: GameState): GameState {
+  let next = state;
+  for (const anomaly of state.looseAnomalies) {
+    const current = next.looseAnomalies.find((a) => a.anomalyId === anomaly.anomalyId);
+    if (!current || current.status !== 'hunting' || !current.targetPlayerId) continue;
+
+    const target = next.players[current.targetPlayerId];
+    if (!target || target.isSpectating) {
+      // Target's really gone (Terminated some other way) - loses interest, stays put dormant.
+      next = updateAnomaly(next, current.anomalyId, { status: 'dormant', targetPlayerId: null });
+      continue;
+    }
+    if (target.isAfkSpectating) continue; // just paused, not lost - waits for them rather than giving up
+
+    const newTileId = stepToward(current.tileId, target.position, ANOMALY_HUNT_SPEED);
+    next =
+      newTileId === target.position
+        ? resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId)
+        : updateAnomaly(next, current.anomalyId, { tileId: newTileId });
+  }
+  return next;
+}
+
+/** A player "viewing" a dormant anomaly (Shy Guy: hovering its tile) - the first to do so becomes its target and it starts hunting them. No-op if it's already hunting someone, or isn't loose at all. */
+export function viewAnomaly(state: GameState, playerId: string, anomalyId: string): GameState {
+  const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId);
+  if (!anomaly || anomaly.status !== 'dormant') return state;
+  return logEvent(
+    updateAnomaly(state, anomalyId, { status: 'hunting', targetPlayerId: playerId }),
+    `${findAnomaly(anomalyId as AnomalyId).name} noticed it was being watched.`,
+  );
+}
+
+/** Resolves a pendingPieceChoice opened by resolveAnomalyCatch - picks any Personnel nobody else is currently playing. */
+export function chooseNewPersonnel(state: GameState, playerId: string, pieceId: PieceId): GameState {
+  if (!state.pendingPieceChoice || state.pendingPieceChoice.playerId !== playerId) return state;
+  if (!state.pendingPieceChoice.availablePieceIds.includes(pieceId)) return state;
+  const next = updatePlayer({ ...state, pendingPieceChoice: null }, playerId, { pieceId });
+  return logEvent(next, `Reassigned as ${STARTING_PIECES.find((p) => p.id === pieceId)?.name ?? pieceId}.`);
+}
+
+/** The Site Warhead's owner spending Credits to instantly recontain every currently loose anomaly. No-op (not even a charge) if nothing's loose, they don't own it, or they can't afford it - this is a voluntary action, not a forced payment, so it never opens a debtSettlement. */
+export function purgeAnomalies(state: GameState, playerId: string): GameState {
+  if (state.looseAnomalies.length === 0) return state;
+  if (findOwner(state, SITE_WARHEAD_TILE_ID) !== playerId) return state;
+  if (!canAfford(state, playerId, SITE_WARHEAD_PURGE_COST)) return state;
+  const next = chargePlayer(state, playerId, SITE_WARHEAD_PURGE_COST, null);
+  return logEvent({ ...next, looseAnomalies: [] }, 'Site Warhead activated - every loose anomaly has been recontained.');
 }
 
 // --- Trading -------------------------------------------------------------
@@ -996,7 +1151,7 @@ export function acceptTrade(state: GameState, tradeId: string): GameState {
 // --- Turn management -------------------------------------------------------
 
 /** Ends the current turn, unless the current player still owes another doubles-earned roll. Advances to the next non-spectating player. */
-export function endTurn(state: GameState): GameState {
+export function endTurn(state: GameState, rng: () => number = Math.random): GameState {
   if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter) return state;
   const playerId = currentPlayerId(state);
   if (state.lastRollWasDoubles && !state.players[playerId].inJail) return state; // they go again
@@ -1009,7 +1164,7 @@ export function endTurn(state: GameState): GameState {
   } while (state.players[state.turnOrder[nextIndex]].isSpectating || state.players[state.turnOrder[nextIndex]].isAfkSpectating);
 
   const cleared = updatePlayer(state, playerId, { usedTunnelTravelThisTurn: false });
-  return {
+  const next: GameState = {
     ...cleared,
     currentTurnIndex: nextIndex,
     lastRoll: null,
@@ -1017,6 +1172,10 @@ export function endTurn(state: GameState): GameState {
     lastJailRedirect: null,
     turnCount,
   };
+  // A real turn just ended (not a doubles-continuation) - the one place
+  // hostile-anomaly "world events" tick: a new one might breach
+  // containment, and any already loose ones take a step.
+  return advanceHuntingAnomalies(maybeBreachContainment(next, rng));
 }
 
 // --- AFK handling ------------------------------------------------------
@@ -1069,11 +1228,7 @@ export function devJumpToTile(state: GameState, playerId: string, tileId: number
 
 /** Forces a player out of the game - assets return to the Foundation, same as declareBankruptcy with no creditor. */
 export function devKickPlayer(state: GameState, playerId: string): GameState {
-  let next: GameState = state;
-  for (const tileId of [...state.players[playerId].ownedTileIds]) {
-    next = { ...next, houses: { ...next.houses, [tileId]: 0 }, mortgagedTileIds: next.mortgagedTileIds.filter((id) => id !== tileId) };
-    next = transferTile(next, tileId, null);
-  }
+  let next: GameState = seizeAssets(state, playerId, null);
   next = updatePlayer(next, playerId, { credits: 0, isSpectating: true, ownedTileIds: [], heldCardIds: [] });
   return checkWinCondition(logEvent(next, 'Kicked by the host.'));
 }
@@ -1083,6 +1238,6 @@ export function devRevivePlayer(state: GameState, playerId: string): GameState {
 }
 
 /** Forces the current turn to end right now, discarding any pending decision - a rescue tool for a genuinely stuck game. */
-export function devForceSkipTurn(state: GameState): GameState {
-  return endTurn({ ...state, pendingDecision: null, lastRollWasDoubles: false });
+export function devForceSkipTurn(state: GameState, rng: () => number = Math.random): GameState {
+  return endTurn({ ...state, pendingDecision: null, lastRollWasDoubles: false }, rng);
 }

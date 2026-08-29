@@ -234,6 +234,17 @@ export interface GameState {
    * reasoning as rubberDuckEncounter above.
    */
   mtfEncounter: { mtfPlayerId: string; targetPlayerId: string; tileId: number } | null;
+  /** Hostile anomalies currently loose on the board - see data/anomalies.ts and game/engine.ts's breach/hunt/catch handling. Each anomalyId can only appear once in this list at a time; different anomalies can be loose simultaneously. */
+  looseAnomalies: LooseAnomaly[];
+  /**
+   * Set when a player is caught by a hostile anomaly and at least one
+   * Personnel nobody else is currently playing exists for them to
+   * become instead of a permanent Termination - cleared once they
+   * choose (see chooseNewPersonnel). Independent of pendingDecision,
+   * since the catch can happen on anyone's turn, not just the current
+   * player's.
+   */
+  pendingPieceChoice: { playerId: string; availablePieceIds: PieceId[] } | null;
   /** Pending player-to-player trade proposals - independent of pendingDecision, since trading isn't turn-gated and shouldn't block or be blocked by whatever else is pending. See proposeTrade/acceptTrade/declineTrade/withdrawTrade. */
   activeTrades: TradeOffer[];
 }
@@ -252,4 +263,13 @@ export interface TradeOffer {
   requestTileIds: number[];
   requestCredits: number;
   requestCardIds: string[];
+}
+
+/** One hostile anomaly currently loose on the board - see data/anomalies.ts for the roster and GameState.looseAnomalies for how this list is used. */
+export interface LooseAnomaly {
+  anomalyId: string;
+  tileId: number;
+  /** Dormant anomalies (Shy Guy's default state) do nothing until viewed - see viewAnomaly in game/engine.ts. Hunting ones move toward targetPlayerId every turn. */
+  status: 'dormant' | 'hunting';
+  targetPlayerId: string | null;
 }

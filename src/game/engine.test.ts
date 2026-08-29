@@ -8,6 +8,7 @@ import {
   buyTile,
   catRedirectCard,
   chooseCardFromChoices,
+  chooseNewPersonnel,
   confirmStillHere,
   createInitialGameState,
   declareBankruptcy,
@@ -25,6 +26,7 @@ import {
   mortgageProperty,
   payEscapeFee,
   proposeTrade,
+  purgeAnomalies,
   rejoinFromAfk,
   resolveMtfEncounter,
   resolveRubberDuckEncounter,
@@ -34,9 +36,10 @@ import {
   unmortgageProperty,
   useGetOutOfJailCard,
   useJanitorTunnelTravel,
+  viewAnomaly,
   withdrawTrade,
 } from './engine';
-import type { GamePlayerState, GameState, PieceId } from '../types/game';
+import type { GamePlayerState, GameState, LooseAnomaly, PieceId } from '../types/game';
 
 // Defaults to two Personnel with no passive Special Power side effects
 // (Site Director's/Field Researcher's card-choice power only triggers
@@ -52,6 +55,11 @@ function makeGame(pieceIds: PieceId[] = ['dog', 'car']): GameState {
 function withPlayer(state: GameState, playerId: string, patch: Partial<GamePlayerState>): GameState {
   return { ...state, players: { ...state.players, [playerId]: { ...state.players[playerId], ...patch } } };
 }
+
+// endTurn/devForceSkipTurn roll for a containment breach using whatever
+// rng they're given - tests that don't care about anomalies pass this
+// to keep results deterministic instead of relying on real Math.random.
+const NO_BREACH_RNG = () => 1;
 
 describe('createInitialGameState', () => {
   it('starts every player at the Site Entrance with 1500 Credits', () => {
@@ -766,7 +774,7 @@ describe("Janitor's Below the Floor Plan", () => {
   it('resets the once-per-turn limit once the turn actually ends', () => {
     let game = makeGame(['iron', 'boot']);
     game = withPlayer(game, 'p1', { position: 5, usedTunnelTravelThisTurn: true });
-    game = endTurn(game);
+    game = endTurn(game, NO_BREACH_RNG);
     expect(game.players.p1.usedTunnelTravelThisTurn).toBe(false);
   });
 
@@ -943,7 +951,7 @@ describe('dev panel helpers', () => {
   it('devForceSkipTurn ends the turn even mid-decision', () => {
     let game = makeGame();
     game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
-    game = devForceSkipTurn(game);
+    game = devForceSkipTurn(game, NO_BREACH_RNG);
     expect(game.pendingDecision).toBeNull();
     expect(game.currentTurnIndex).toBe(1);
   });
@@ -955,7 +963,7 @@ describe('ending a turn', () => {
     game = devSetForcedRoll(game, [4, 6]); // 0 -> 10, Containment Chamber (just visiting, no decision)
     game = rollDice(game);
     expect(game.currentTurnIndex).toBe(0);
-    game = endTurn(game);
+    game = endTurn(game, NO_BREACH_RNG);
     expect(game.currentTurnIndex).toBe(1);
   });
 
@@ -963,7 +971,158 @@ describe('ending a turn', () => {
     let game = makeGame();
     game = devSetForcedRoll(game, [5, 5]); // 0 -> 10, Containment Chamber (just visiting, no decision)
     game = rollDice(game);
-    game = endTurn(game);
+    game = endTurn(game, NO_BREACH_RNG);
     expect(game.currentTurnIndex).toBe(0); // still p1's turn
+  });
+});
+
+function withLooseAnomalies(state: GameState, anomalies: LooseAnomaly[]): GameState {
+  return { ...state, looseAnomalies: anomalies };
+}
+
+describe('hostile anomalies', () => {
+  it('a lucky roll breaches containment and spawns Shy Guy dormant at its spawn tile', () => {
+    let game = makeGame();
+    game = endTurn(game, () => 0); // 0 < BREACH_CHANCE every time it's called
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+  });
+
+  it('an unlucky roll breaches nothing', () => {
+    let game = makeGame();
+    game = endTurn(game, () => 0.99);
+    expect(game.looseAnomalies).toEqual([]);
+  });
+
+  it("doesn't spawn a second copy of an anomaly that's already loose", () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null }]);
+    game = endTurn(game, () => 0);
+    expect(game.looseAnomalies).toHaveLength(1);
+    expect(game.looseAnomalies[0].tileId).toBe(5); // unchanged, not respawned at 31
+  });
+
+  it('viewing a dormant anomaly makes the viewer its target', () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    game = viewAnomaly(game, 'p2', 'shyGuy');
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 31, status: 'hunting', targetPlayerId: 'p2' });
+  });
+
+  it('viewing an anomaly already hunting someone else does nothing', () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'hunting', targetPlayerId: 'p1' }]);
+    game = viewAnomaly(game, 'p2', 'shyGuy');
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p1');
+  });
+
+  it('a hunting anomaly steps toward its target, the shorter way around the board', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(6); // 0 -> 10 clockwise, capped at 6 spaces
+  });
+
+  it('pauses (does not give up) while its target is only AFK-benched', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10, isAfkSpectating: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2' });
+  });
+
+  it('catching a non-D-Class player seizes their assets and queues a new Personnel choice', () => {
+    let game = makeGame(); // p2 is 'car'
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = endTurn(game, NO_BREACH_RNG); // distance 2, well within the 6-space hunt speed - catches this tick
+    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.players.p2.isSpectating).toBe(false);
+    expect(game.pendingPieceChoice?.playerId).toBe('p2');
+    expect(game.pendingPieceChoice?.availablePieceIds.length).toBeGreaterThan(0);
+    expect(game.pendingPieceChoice?.availablePieceIds).not.toContain('car'); // can't "reassign" to the piece they already had
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null });
+  });
+
+  it('a D-Class survives being caught via its own Standard Expendability Clause instead', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { pieceId: 'boot', position: 10, credits: 1000, ownedTileIds: [6] });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.credits).toBe(750);
+    expect(game.players.p2.position).toBe(0);
+    expect(game.players.p2.usedExpendabilityClause).toBe(true);
+    expect(game.players.p2.isSpectating).toBe(false);
+    expect(game.pendingPieceChoice).toBeNull();
+  });
+
+  it('is a real Termination if every Personnel is already claimed', () => {
+    const allPieceIds: PieceId[] = [
+      'boot', 'battleship', 'car', 'iron', 'thimble', 'dog',
+      'wheelBarrel', 'hat', 'penguin', 'cat', 'rubberDuck', 'trex',
+    ];
+    let game = makeGame(allPieceIds);
+    const caughtId = 'p12'; // trex
+    game = withPlayer(game, caughtId, { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: caughtId }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players[caughtId].isSpectating).toBe(true);
+    expect(game.pendingPieceChoice).toBeNull();
+    expect(game.winnerId).toBeNull(); // 11 players still active
+  });
+
+  it('chooseNewPersonnel reassigns to any available Personnel and clears the choice', () => {
+    let game = makeGame();
+    game = { ...game, pendingPieceChoice: { playerId: 'p2', availablePieceIds: ['iron', 'thimble'] } };
+    game = chooseNewPersonnel(game, 'p2', 'iron');
+    expect(game.players.p2.pieceId).toBe('iron');
+    expect(game.pendingPieceChoice).toBeNull();
+  });
+
+  it('chooseNewPersonnel refuses a Personnel outside the offered list', () => {
+    let game = makeGame();
+    game = { ...game, pendingPieceChoice: { playerId: 'p2', availablePieceIds: ['iron'] } };
+    game = chooseNewPersonnel(game, 'p2', 'thimble');
+    expect(game.players.p2.pieceId).toBe('car'); // unchanged
+    expect(game.pendingPieceChoice).not.toBeNull();
+  });
+
+  it("the Site Warhead's owner can purge every loose anomaly for a cost", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [12] });
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null },
+      { anomalyId: 'testDummy', tileId: 5, status: 'hunting', targetPlayerId: 'p2' },
+    ]);
+    game = purgeAnomalies(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500 - 500);
+    expect(game.looseAnomalies).toEqual([]);
+  });
+
+  it("refuses to purge for anyone who doesn't own the Site Warhead", () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    game = purgeAnomalies(game, 'p1');
+    expect(game.looseAnomalies).toHaveLength(1);
+    expect(game.players.p1.credits).toBe(1500);
+  });
+
+  it("refuses to purge if the owner can't afford it", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [12], credits: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    game = purgeAnomalies(game, 'p1');
+    expect(game.looseAnomalies).toHaveLength(1);
+    expect(game.players.p1.credits).toBe(10);
+    expect(game.pendingDecision).toBeNull(); // voluntary - never opens a debtSettlement
+  });
+
+  it('does nothing when nothing is loose', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [12] });
+    const before = game;
+    game = purgeAnomalies(game, 'p1');
+    expect(game).toEqual(before);
   });
 });

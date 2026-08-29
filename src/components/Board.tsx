@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { BOARD, RAILROAD_RENT_BY_COUNT } from '../data/board';
-import { drawFromPileAndSync } from '../lib/gameSync';
+import { findAnomaly, type AnomalyId } from '../data/anomalies';
+import { drawFromPileAndSync, viewAnomalyAndSync } from '../lib/gameSync';
 import type { BoardTile, GameState } from '../types/game';
 import type { Room } from '../types/room';
 import {
@@ -303,6 +304,8 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
           (id) => !game.players[id].isSpectating && game.players[id].position === tile.id,
         );
         const flashKind = flashKindByTileId.get(tile.id);
+        const anomaliesHere = game.looseAnomalies.filter((a) => a.tileId === tile.id);
+        const dormantAnomalyHere = anomaliesHere.find((a) => a.status === 'dormant');
 
         return (
           <div
@@ -317,6 +320,12 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
               event.stopPropagation();
               setOpenTokenId(null);
               setOpenTileId((current) => (current === tile.id ? null : tile.id));
+            }}
+            onMouseEnter={() => {
+              // A dormant anomaly (Shy Guy) reacts to being viewed - the
+              // first player whose cursor lands here becomes its target.
+              // No-op for every other tile, and for one that's already hunting.
+              if (dormantAnomalyHere) void viewAnomalyAndSync(roomCode, game, playerId, dormantAnomalyHere.anomalyId);
             }}
           >
             {tile.kind === 'wing' && <div className="tile-colorbar" />}
@@ -378,6 +387,19 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
                 ))}
               </div>
             )}
+
+            {anomaliesHere.map((anomaly) => {
+              const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
+              return (
+                <span
+                  key={anomaly.anomalyId}
+                  className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
+                  title={`${definition.name}${anomaly.status === 'hunting' ? ' - hunting someone' : ' - hover to view'}`}
+                >
+                  ☣
+                </span>
+              );
+            })}
           </div>
         );
       })}

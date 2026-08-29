@@ -10,6 +10,7 @@ import {
   endTurnAndSync,
   mortgageTileAndSync,
   payEscapeFeeAndSync,
+  purgeAnomaliesAndSync,
   rejoinFromAfkAndSync,
   rollDiceAndSync,
   useJanitorTunnelTravelAndSync,
@@ -29,6 +30,7 @@ import FlyingCard from './FlyingCard';
 import GameOverScreen from './GameOverScreen';
 import Hand from './Hand';
 import NowPlayingBanner from './NowPlayingBanner';
+import PersonnelChoicePrompt from './PersonnelChoicePrompt';
 import PieceInfoPanel from './PieceInfoPanel';
 import MtfEncounterBanner from './MtfEncounterBanner';
 import RubberDuckEncounterBanner from './RubberDuckEncounterBanner';
@@ -451,6 +453,24 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
 
           <RubberDuckEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
           <MtfEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
+
+          {game.pendingPieceChoice?.playerId === playerId && (
+            <ActionModal>
+              <PersonnelChoicePrompt playerId={playerId} roomCode={roomCode} game={game} />
+            </ActionModal>
+          )}
+
+          {game.looseAnomalies.length > 0 && me?.ownedTileIds.includes(12) && (
+            <div className="purchase-prompt card-prompt">
+              <p>
+                {game.looseAnomalies.length} anomal{game.looseAnomalies.length === 1 ? 'y' : 'ies'} currently
+                loose. As the Site Warhead's owner, you can recontain everything for 500 Credits.
+              </p>
+              <button onClick={() => purgeAnomaliesAndSync(roomCode, game, playerId)} disabled={me.credits < 500}>
+                Activate Site Warhead
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="layout-log">
