@@ -1,14 +1,17 @@
 import { useState } from 'react';
+import { ANOMALIES } from '../data/anomalies';
 import { BOARD } from '../data/board';
 import { ALL_CARDS, findCard } from '../data/cards';
 import {
   devJumpToTileAndSync,
   devKickPlayerAndSync,
+  devRecontainAllAnomaliesAndSync,
   devRevivePlayerAndSync,
   devSetCreditsAndSync,
   devSetForcedCardAndSync,
   devSetForcedRollAndSync,
   devForceSkipTurnAndSync,
+  devSpawnAnomalyAndSync,
   endGameEntirely,
 } from '../lib/gameSync';
 import { isPlayerAway } from '../lib/presence';
@@ -238,6 +241,31 @@ function DevPanel({ room, roomCode, game }: DevPanelProps) {
         <p className="hint">
           Undoes a Termination/kick so this player can act again - doesn't restore any Credits or
           Wings they lost. Not a real game mechanic; recovery only.
+        </p>
+      </div>
+
+      <div className="dev-panel-section">
+        <p>Hostile anomalies</p>
+        <div className="dev-panel-row">
+          {ANOMALIES.map((anomaly) => (
+            <button
+              key={anomaly.id}
+              onClick={() => devSpawnAnomalyAndSync(roomCode, game, anomaly.id)}
+              disabled={game.looseAnomalies.some((a) => a.anomalyId === anomaly.id)}
+            >
+              Spawn {anomaly.name}
+            </button>
+          ))}
+        </div>
+        <div className="dev-panel-row">
+          <button onClick={() => devRecontainAllAnomaliesAndSync(roomCode, game)} disabled={game.looseAnomalies.length === 0}>
+            Recontain All (free)
+          </button>
+        </div>
+        <p className="hint">
+          {game.looseAnomalies.length === 0
+            ? 'Nothing loose right now.'
+            : `Loose: ${game.looseAnomalies.map((a) => `${a.anomalyId} (${a.status})`).join(', ')}.`}
         </p>
       </div>
 

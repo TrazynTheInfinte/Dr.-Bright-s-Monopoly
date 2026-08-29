@@ -1241,3 +1241,17 @@ export function devRevivePlayer(state: GameState, playerId: string): GameState {
 export function devForceSkipTurn(state: GameState, rng: () => number = Math.random): GameState {
   return endTurn({ ...state, pendingDecision: null, lastRollWasDoubles: false }, rng);
 }
+
+/** Forces a containment breach right now, bypassing the random per-turn chance - a no-op if that anomaly is already loose. */
+export function devSpawnAnomaly(state: GameState, anomalyId: string): GameState {
+  if (state.looseAnomalies.some((a) => a.anomalyId === anomalyId)) return state;
+  const anomaly = findAnomaly(anomalyId as AnomalyId);
+  const loose: LooseAnomaly = { anomalyId: anomaly.id, tileId: anomaly.spawnTileId, status: 'dormant', targetPlayerId: null };
+  return logEvent({ ...state, looseAnomalies: [...state.looseAnomalies, loose] }, `[DEV] Forced a containment breach: ${anomaly.name}.`);
+}
+
+/** Instantly recontains every loose anomaly, free of charge and regardless of who owns the Site Warhead - a rescue tool, not the real purgeAnomalies. */
+export function devRecontainAllAnomalies(state: GameState): GameState {
+  if (state.looseAnomalies.length === 0) return state;
+  return logEvent({ ...state, looseAnomalies: [] }, '[DEV] Recontained every loose anomaly.');
+}

@@ -17,10 +17,12 @@ import {
   devForceSkipTurn,
   devJumpToTile,
   devKickPlayer,
+  devRecontainAllAnomalies,
   devRevivePlayer,
   devSetCredits,
   devSetForcedCard,
   devSetForcedRoll,
+  devSpawnAnomaly,
   drawFromPile,
   endTurn,
   mortgageProperty,
@@ -946,6 +948,26 @@ describe('dev panel helpers', () => {
     game = withPlayer(game, 'p1', { isSpectating: true });
     game = devRevivePlayer(game, 'p1');
     expect(game.players.p1.isSpectating).toBe(false);
+  });
+
+  it('devSpawnAnomaly forces a breach, ignoring the random chance', () => {
+    let game = makeGame();
+    game = devSpawnAnomaly(game, 'shyGuy');
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+  });
+
+  it("devSpawnAnomaly won't spawn a second copy of one already loose", () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1' }]);
+    game = devSpawnAnomaly(game, 'shyGuy');
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1' }]);
+  });
+
+  it('devRecontainAllAnomalies clears every loose anomaly for free', () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1' }]);
+    game = devRecontainAllAnomalies(game);
+    expect(game.looseAnomalies).toEqual([]);
   });
 
   it('devForceSkipTurn ends the turn even mid-decision', () => {

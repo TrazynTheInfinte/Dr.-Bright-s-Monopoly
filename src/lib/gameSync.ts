@@ -20,10 +20,12 @@ import {
   devForceSkipTurn,
   devJumpToTile,
   devKickPlayer,
+  devRecontainAllAnomalies,
   devRevivePlayer,
   devSetCredits,
   devSetForcedCard,
   devSetForcedRoll,
+  devSpawnAnomaly,
   drawFromPile,
   endTurn,
   mortgageProperty,
@@ -246,4 +248,12 @@ export async function chooseNewPersonnelAndSync(roomCode: string, game: GameStat
 
 export async function purgeAnomaliesAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, purgeAnomalies(game, playerId));
+}
+
+export async function devSpawnAnomalyAndSync(roomCode: string, game: GameState, anomalyId: string) {
+  await writeGameState(roomCode, devSpawnAnomaly(game, anomalyId));
+}
+
+export async function devRecontainAllAnomaliesAndSync(roomCode: string, game: GameState) {
+  await writeGameState(roomCode, devRecontainAllAnomalies(game));
 }
