@@ -193,7 +193,7 @@ export interface GameState {
    * transferred (Wheel Barrel, T-Rex). Missing/absent entries mean 0.
    */
   houses: Record<number, number>;
-  /** Bank supply, standard Monopoly counts (32 houses, 12 hotels) - building is blocked once these run out, since there's no auction system to resolve a shortage. */
+  /** Bank supply - half real Monopoly's counts (16 houses, 6 hotels), to make the shared pool a real constraint - building is blocked once these run out, since there's no auction system to resolve a shortage. */
   housesRemaining: number;
   hotelsRemaining: number;
   /** Sectors Hat has already been granted a free house for (Hat's Special Power) - prevents re-granting every time ownership of an already-rewarded Sector churns. Cleared for a Sector if Hat later loses it, so completing it again re-triggers the reward. */

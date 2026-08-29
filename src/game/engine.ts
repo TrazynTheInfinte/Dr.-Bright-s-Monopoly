@@ -19,11 +19,13 @@ const PURPLE_SEIZE_GROUP: ColorGroup = 'purple';
 const GRANT_FUNDING_AMOUNT = 25;
 /** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds. */
 const BULK_REQUISITION_MULTIPLIER = 0.75;
-// Standard Monopoly bank supply. Real Monopoly resolves a shortage with
-// an auction between players - we don't have one, so running dry just
-// blocks further building until someone sells houses back.
-const STARTING_HOUSES = 32;
-const STARTING_HOTELS = 12;
+// Half real Monopoly's bank supply (32/12) - makes the shared pool a
+// real constraint worth fighting over, and makes Logistics Officer's
+// Overstock (bypasses the shared pool entirely) noticeably stronger by
+// comparison. Running dry just blocks further building until someone
+// sells houses back - there's no auction system to resolve a shortage.
+const STARTING_HOUSES = 16;
+const STARTING_HOTELS = 6;
 // Standard Monopoly mortgage rules: mortgaging pays out half the tile's
 // price; paying it back off costs that same amount plus 10% interest.
 const MORTGAGE_PAYOFF_MULTIPLIER = 1.1;

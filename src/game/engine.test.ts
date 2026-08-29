@@ -242,7 +242,7 @@ describe('houses and mortgages', () => {
     game = buildHouse(game, 'p1', 1);
     expect(game.houses[1]).toBe(1);
     expect(game.players.p1.credits).toBe(1500 - 50);
-    expect(game.housesRemaining).toBe(31);
+    expect(game.housesRemaining).toBe(15);
   });
 
   it('refuses to build without owning the full Sector', () => {
@@ -550,10 +550,10 @@ describe("Logistics Officer's Bulk Requisition and Overstock", () => {
     let game = makeGame(['wheelBarrel', 'boot']);
     game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
     game = buildHouse(game, 'p1', 1);
-    expect(game.housesRemaining).toBe(32); // untouched by the build
+    expect(game.housesRemaining).toBe(16); // untouched by the build
     game = sellHouse(game, 'p1', 1);
     expect(game.houses[1]).toBe(0);
-    expect(game.housesRemaining).toBe(32); // still untouched
+    expect(game.housesRemaining).toBe(16); // still untouched
   });
 
   it("a normal player's builds are unaffected by Overstock", () => {
@@ -561,7 +561,7 @@ describe("Logistics Officer's Bulk Requisition and Overstock", () => {
     game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
     game = buildHouse(game, 'p1', 1);
     expect(game.players.p1.credits).toBe(1500 - 50); // full price
-    expect(game.housesRemaining).toBe(31); // drawn from the shared pool as normal
+    expect(game.housesRemaining).toBe(15); // drawn from the shared pool as normal
   });
 });
 
@@ -755,13 +755,13 @@ describe('debt and bankruptcy', () => {
   it('declareBankruptcy to the bank returns Wings to the Foundation and Terminates the player', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 10 });
-    game = { ...game, houses: { 1: 2 }, housesRemaining: 30, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: null } };
+    game = { ...game, houses: { 1: 2 }, housesRemaining: 14, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: null } };
     game = declareBankruptcy(game, 'p1');
     expect(game.players.p1.isSpectating).toBe(true);
     expect(game.players.p1.credits).toBe(0);
     expect(game.players.p1.ownedTileIds).toEqual([]);
     expect(game.houses[1]).toBe(0);
-    expect(game.housesRemaining).toBe(32);
+    expect(game.housesRemaining).toBe(16);
     expect(game.winnerId).toBe('p2'); // only one player left standing
   });
 
