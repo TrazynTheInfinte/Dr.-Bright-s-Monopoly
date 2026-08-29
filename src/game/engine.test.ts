@@ -26,6 +26,7 @@ import {
   payEscapeFee,
   proposeTrade,
   rejoinFromAfk,
+  resolveMtfEncounter,
   resolveRubberDuckEncounter,
   rollDice,
   sellHouse,
@@ -344,7 +345,10 @@ describe('cards', () => {
     const choiceIds = game.pendingDecision?.type === 'cardChoice' ? game.pendingDecision.choiceCardIds : [];
     expect(choiceIds.length).toBeGreaterThan(0);
     game = chooseCardFromChoices(game, 'p1', choiceIds[0]);
-    expect(game.pendingDecision?.type).toBe('cardDrawn');
+    // Site Director's own "Redirect Without Exposure" also offers a
+    // redirect choice on the card they just picked - see the dedicated
+    // describe block below for that power specifically.
+    expect(game.pendingDecision?.type).toBe('catRedirect');
   });
 
   it('Chaos Insurgency Spy (Cat) can hand a drawn card off to another player', () => {
@@ -401,6 +405,108 @@ describe('special powers', () => {
     game = buyTile(game, 'p1');
     expect(game.houses[1] ?? game.houses[3]).toBe(1);
     expect(game.hatFreeHouseSectors).toContain('purple');
+  });
+});
+
+describe("MTF Operative's Rapid Deployment and Show of Force", () => {
+  it('doubles rent collected on an owned Maintenance Tunnel', () => {
+    let game = makeGame(['battleship', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [5] });
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [5, 0]);
+    game = rollDice(game);
+    expect(game.players.p2.credits).toBe(1500 - 50); // 25 base for 1 owned, doubled
+  });
+
+  it('opens a Show of Force choice instead of charging rent on an owned Wing', () => {
+    let game = makeGame(['battleship', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.mtfEncounter).toEqual({ mtfPlayerId: 'p1', targetPlayerId: 'p2', tileId: 1 });
+    expect(game.players.p2.credits).toBe(1500); // not charged yet
+  });
+
+  it('collecting rent resolves the encounter normally', () => {
+    let game = makeGame(['battleship', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, mtfEncounter: { mtfPlayerId: 'p1', targetPlayerId: 'p2', tileId: 1 } };
+    game = resolveMtfEncounter(game, false);
+    expect(game.mtfEncounter).toBeNull();
+    expect(game.players.p2.credits).toBe(1500 - 2);
+    expect(game.players.p1.usedShowOfForce).toBe(false);
+  });
+
+  it('seizing takes one of the other player\'s Wings/Tunnels instead of rent, once per game', () => {
+    let game = makeGame(['battleship', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = withPlayer(game, 'p2', { position: 0, ownedTileIds: [6] });
+    game = { ...game, mtfEncounter: { mtfPlayerId: 'p1', targetPlayerId: 'p2', tileId: 1 } };
+    game = resolveMtfEncounter(game, true);
+    expect(game.players.p1.ownedTileIds).toEqual([1, 6]);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.players.p2.credits).toBe(1500); // no rent paid either
+    expect(game.players.p1.usedShowOfForce).toBe(true);
+
+    // A second landing no longer offers the choice at all.
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, currentTurnIndex: 1 };
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.mtfEncounter).toBeNull();
+    expect(game.players.p2.credits).toBe(1500 - 2);
+  });
+
+  it('seizing with nothing else to take still burns the one-time use', () => {
+    let game = makeGame(['battleship', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = { ...game, mtfEncounter: { mtfPlayerId: 'p1', targetPlayerId: 'p2', tileId: 1 } };
+    game = resolveMtfEncounter(game, true);
+    expect(game.players.p1.usedShowOfForce).toBe(true);
+    expect(game.players.p2.credits).toBe(1500);
+  });
+});
+
+describe("Site Director's Executive Authority and Redirect Without Exposure", () => {
+  it('can choose a card from either deck', () => {
+    let game = makeGame(['car', 'boot']);
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
+    game = drawFromPile(game, 'p1');
+    expect(game.pendingDecision?.type).toBe('cardChoice');
+  });
+
+  it('can redirect a drawn card once per game', () => {
+    let game = makeGame(['car', 'boot']);
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    expect(game.pendingDecision?.type).toBe('catRedirect');
+    game = catRedirectCard(game, 'p1', 'p2');
+    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p2' });
+    expect(game.players.p1.usedRedirect).toBe(true);
+  });
+
+  it('keeping the card themselves does not use up the once-per-game redirect', () => {
+    let game = makeGame(['car', 'boot']);
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    game = catRedirectCard(game, 'p1', null);
+    expect(game.players.p1.usedRedirect).toBe(false);
+  });
+
+  it('draws normally, with no redirect choice, once the one-time use is spent', () => {
+    let game = makeGame(['car', 'boot']);
+    game = withPlayer(game, 'p1', { usedRedirect: true });
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p1' });
   });
 });
 

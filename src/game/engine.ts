@@ -63,6 +63,8 @@ export function createInitialGameState(
       usedExpendabilityClause: false,
       usedMasterKey: false,
       usedTunnelTravelThisTurn: false,
+      usedShowOfForce: false,
+      usedRedirect: false,
     };
   }
 
@@ -90,6 +92,7 @@ export function createInitialGameState(
     winnerId: null,
     activeTrades: [],
     rubberDuckEncounter: null,
+    mtfEncounter: null,
   };
 }
 
@@ -412,6 +415,13 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
     return logEvent(state, 'Janitor walks right through - no toll on the tunnels.');
   }
 
+  // MTF Operative's "Show of Force" - the first time (per game) anyone
+  // lands on one of their Wings, offer a choice instead of charging
+  // rent automatically. See resolveMtfEncounter.
+  if (getTile(tileId).kind === 'wing' && pieceOf(state, owner) === 'battleship' && !state.players[owner].usedShowOfForce) {
+    return { ...state, mtfEncounter: { mtfPlayerId: owner, targetPlayerId: playerId, tileId } };
+  }
+
   const rent = calculateRent(state, tileId, owner);
   return logEvent(chargePlayer(state, playerId, rent, owner), `Paid ${rent} Credits rent.`);
 }
@@ -425,7 +435,9 @@ function calculateRent(state: GameState, tileId: number, owner: string): number 
     return baseRent;
   }
   if (tile.kind === 'tunnel') {
-    return RAILROAD_RENT_BY_COUNT[Math.min(tunnelsOwnedBy(state, owner), 4) - 1] ?? RAILROAD_RENT_BY_COUNT[0];
+    const baseRent = RAILROAD_RENT_BY_COUNT[Math.min(tunnelsOwnedBy(state, owner), 4) - 1] ?? RAILROAD_RENT_BY_COUNT[0];
+    // MTF Operative's "Rapid Deployment": rent collected on an owned Tunnel is doubled.
+    return pieceOf(state, owner) === 'battleship' ? baseRent * 2 : baseRent;
   }
   // utility: 4x the roll if the owner has one, 10x if both
   const roll = state.lastRoll ? state.lastRoll[0] + state.lastRoll[1] : 0;
@@ -488,7 +500,9 @@ export function drawFromPile(state: GameState, playerId: string, rng: () => numb
   if (state.pendingDecision?.type !== 'awaitingCardDraw') return state;
   const { deck } = state.pendingDecision;
   const piece = pieceOf(state, playerId);
-  const canChoose = (piece === 'car' && deck === 'anomalousEvent') || (piece === 'dog' && deck === 'foundationDirective');
+  // Site Director's "Executive Authority" covers both decks; Field
+  // Researcher's own power is limited to Foundation Directive only.
+  const canChoose = piece === 'car' || (piece === 'dog' && deck === 'foundationDirective');
 
   if (state.forcedCardId) {
     return drawSpecificCard(state, playerId, state.forcedCardId);
@@ -525,7 +539,11 @@ function applyDrawnCard(state: GameState, playerId: string, cardId: string): Gam
   const discardKey = card.deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
   let next: GameState = { ...state, [discardKey]: [...state[discardKey], cardId] } as GameState;
 
-  if (pieceOf(next, playerId) === 'cat') {
+  // Chaos Insurgency Spy's power works every time; Site Director's
+  // "Redirect Without Exposure" is the same choice screen but only
+  // available once per game (see catRedirectCard).
+  const piece = pieceOf(next, playerId);
+  if (piece === 'cat' || (piece === 'car' && !next.players[playerId].usedRedirect)) {
     return { ...next, pendingDecision: { type: 'catRedirect', cardId } };
   }
 
@@ -533,12 +551,16 @@ function applyDrawnCard(state: GameState, playerId: string, cardId: string): Gam
   return next;
 }
 
-/** Chaos Insurgency Spy's (Cat's) Special Power: keep the drawn card themselves, or hand its whole effect to another player instead. */
+/** Chaos Insurgency Spy's (Cat's) Special Power, also Site Director's one-time "Redirect Without Exposure": keep the drawn card themselves, or hand its whole effect to another player instead. Nothing in the resulting log names who made the call, matching Site Director's flavor - it's simply how the two Personnel are described to begin with, no extra code needed for that part. */
 export function catRedirectCard(state: GameState, playerId: string, targetPlayerId: string | null): GameState {
   if (state.pendingDecision?.type !== 'catRedirect') return state;
   const { cardId } = state.pendingDecision;
   const forPlayerId = targetPlayerId && state.players[targetPlayerId] && targetPlayerId !== playerId ? targetPlayerId : playerId;
-  return { ...state, pendingDecision: { type: 'cardDrawn', cardId, forPlayerId } };
+  let next = state;
+  if (pieceOf(state, playerId) === 'car' && forPlayerId !== playerId) {
+    next = updatePlayer(next, playerId, { usedRedirect: true });
+  }
+  return { ...next, pendingDecision: { type: 'cardDrawn', cardId, forPlayerId } };
 }
 
 /** Applies a drawn card's effect to whoever it's actually for, then clears the decision. */
@@ -656,6 +678,37 @@ export function resolveRubberDuckEncounter(state: GameState, sendToJailChoice: b
   let next: GameState = { ...state, rubberDuckEncounter: null };
   if (sendToJailChoice) next = logEvent(sendToJail(next, targetPlayerId), 'Security Officer sent a player to the Containment Chamber.');
   return next;
+}
+
+// --- MTF Operative's Special Power ---------------------------------------
+
+/**
+ * "Show of Force": MTF Operative either collects the normal rent, or -
+ * once per game - seizes one of the landing player's other Wings/
+ * Tunnels instead (a deterministic pick, the first eligible one in
+ * their owned-tile list, rather than random - if they have no other
+ * eligible tile, MTF Operative still burns their one-time use and gets
+ * nothing, same as a real high-variance gamble not paying off).
+ */
+export function resolveMtfEncounter(state: GameState, seize: boolean): GameState {
+  if (!state.mtfEncounter) return state;
+  const { mtfPlayerId, targetPlayerId, tileId } = state.mtfEncounter;
+  let next: GameState = { ...state, mtfEncounter: null };
+
+  if (!seize) {
+    const rent = calculateRent(next, tileId, mtfPlayerId);
+    return logEvent(chargePlayer(next, targetPlayerId, rent, mtfPlayerId), `Paid ${rent} Credits rent.`);
+  }
+
+  next = updatePlayer(next, mtfPlayerId, { usedShowOfForce: true });
+  const seizableTileId = next.players[targetPlayerId].ownedTileIds.find(
+    (id) => id !== tileId && (next.houses[id] ?? 0) === 0,
+  );
+  if (seizableTileId === undefined) {
+    return logEvent(next, 'Show of Force: nothing left to seize - no rent collected either.');
+  }
+  next = transferTile(next, seizableTileId, mtfPlayerId);
+  return logEvent(next, `Show of Force: seized ${getTile(seizableTileId).name} instead of collecting rent.`);
 }
 
 // --- Janitor's Special Power ---------------------------------------------
@@ -878,7 +931,7 @@ export function acceptTrade(state: GameState, tradeId: string): GameState {
 
 /** Ends the current turn, unless the current player still owes another doubles-earned roll. Advances to the next non-spectating player. */
 export function endTurn(state: GameState): GameState {
-  if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter) return state;
+  if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter) return state;
   const playerId = currentPlayerId(state);
   if (state.lastRollWasDoubles && !state.players[playerId].inJail) return state; // they go again
 

@@ -29,6 +29,7 @@ import {
   payEscapeFee,
   proposeTrade,
   rejoinFromAfk,
+  resolveMtfEncounter,
   resolveRubberDuckEncounter,
   rollDice,
   sellHouse,
@@ -126,6 +127,10 @@ export async function catRedirectCardAndSync(roomCode: string, game: GameState, 
 
 export async function resolveRubberDuckEncounterAndSync(roomCode: string, game: GameState, sendToJailChoice: boolean) {
   await writeGameState(roomCode, resolveRubberDuckEncounter(game, sendToJailChoice));
+}
+
+export async function resolveMtfEncounterAndSync(roomCode: string, game: GameState, seize: boolean) {
+  await writeGameState(roomCode, resolveMtfEncounter(game, seize));
 }
 
 export async function buildHouseAndSync(roomCode: string, game: GameState, playerId: string, tileId: number) {

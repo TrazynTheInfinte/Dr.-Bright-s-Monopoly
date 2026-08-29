@@ -30,6 +30,7 @@ import GameOverScreen from './GameOverScreen';
 import Hand from './Hand';
 import NowPlayingBanner from './NowPlayingBanner';
 import PieceInfoPanel from './PieceInfoPanel';
+import MtfEncounterBanner from './MtfEncounterBanner';
 import RubberDuckEncounterBanner from './RubberDuckEncounterBanner';
 import TradePanel from './TradePanel';
 import YourTurnBanner from './YourTurnBanner';
@@ -449,6 +450,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             )}
 
           <RubberDuckEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
+          <MtfEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
         </section>
 
         <section className="layout-log">

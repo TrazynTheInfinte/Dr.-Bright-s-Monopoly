@@ -127,6 +127,10 @@ export interface GamePlayerState {
   usedMasterKey: boolean;
   /** Janitor's Special Power: the tunnel-to-tunnel shortcut only works once per turn - cleared by endTurn the moment this player's turn actually ends. */
   usedTunnelTravelThisTurn: boolean;
+  /** MTF Operative's Special Power ("Show of Force"): the seize-instead-of-rent option only works once per game - this flags that it's already happened. */
+  usedShowOfForce: boolean;
+  /** Site Director's Special Power ("Redirect Without Exposure"): handing a drawn card's effect to another player only works once per game - this flags that it's already happened. Only set when they actually redirect, not when they keep the card themselves. */
+  usedRedirect: boolean;
 }
 
 /**
@@ -219,6 +223,15 @@ export interface GameState {
    * their turn without acting on it.
    */
   rubberDuckEncounter: { rubberDuckPlayerId: string; targetPlayerId: string } | null;
+  /**
+   * MTF Operative's Special Power ("Show of Force"): set the instant
+   * another player lands on a Wing MTF Operative owns, before rent is
+   * charged - MTF Operative then chooses whether to collect the normal
+   * rent or (once per game) seize one of the landing player's other
+   * Wings/Tunnels instead. Runs independently of pendingDecision, same
+   * reasoning as rubberDuckEncounter above.
+   */
+  mtfEncounter: { mtfPlayerId: string; targetPlayerId: string; tileId: number } | null;
   /** Pending player-to-player trade proposals - independent of pendingDecision, since trading isn't turn-gated and shouldn't block or be blocked by whatever else is pending. See proposeTrade/acceptTrade/declineTrade/withdrawTrade. */
   activeTrades: TradeOffer[];
 }

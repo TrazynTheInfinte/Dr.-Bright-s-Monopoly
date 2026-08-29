@@ -1,13 +1,15 @@
 import type { PieceDefinition } from '../types/game';
 
 // All 12 tokens, reskinned from Comunopoly's communist-themed roster to
-// SCP Foundation personnel types. Most Special Powers are kept
-// unchanged from the original Piece they're reskinned from, just
-// reworded - see CONTEXT.md's Personnel section. D-Class and Janitor
-// are the exceptions: their original powers depended on mechanics this
-// build dropped, so they got new, purpose-built powers instead (see
-// game/engine.ts's usedExpendabilityClause/usedMasterKey handling and
-// useJanitorTunnelTravel). Specialist (Penguin) is still powerless.
+// SCP Foundation personnel types. Originally most Special Powers were
+// kept unchanged from the original Piece, just reworded - being
+// replaced piece by piece with purpose-built SCP-flavored powers as
+// design work continues (see CONTEXT.md's Personnel section for what's
+// changed so far: D-Class, Janitor, MTF Operative, Site Director).
+// Note: Site Director's "Executive Authority" (choose a card from
+// either deck) makes Field Researcher's own power a strict subset of
+// it - not fixed, just worth knowing. Specialist (Penguin) is still
+// powerless.
 export const STARTING_PIECES: PieceDefinition[] = [
   {
     id: 'boot',
@@ -20,13 +22,15 @@ export const STARTING_PIECES: PieceDefinition[] = [
     id: 'battleship',
     name: 'MTF Operative',
     title: 'Mobile Task Force Operative',
-    powerDescription: 'Maintenance Tunnels are half price.',
+    powerDescription:
+      "Rapid Deployment: Maintenance Tunnels cost half price to requisition, and rent collected on an owned Tunnel is doubled. Show of Force: the first time (per game) another player lands on an owned Wing, may seize one of their other Wings or Tunnels instead of collecting rent.",
   },
   {
     id: 'car',
     name: 'Site Director',
     title: 'Site Director',
-    powerDescription: 'Can choose a card when landing on an Anomalous Event tile.',
+    powerDescription:
+      'Executive Authority: can choose a card when landing on either deck. Redirect Without Exposure: once per game, after drawing a card, may hand its effect to another player instead - nothing on record shows it was ordered from the top.',
   },
   {
     id: 'iron',
