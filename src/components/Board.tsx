@@ -254,6 +254,10 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
 
   const currentTurnPlayerId = game.turnOrder[game.currentTurnIndex];
   const isMyTurn = currentTurnPlayerId === playerId;
+  // Rogue Anomaly ("Uncontained") recognizes its own kind on sight - every
+  // concealed (dormant, off-turn) anomaly stays visible to it, never just
+  // flashing on the breach turn like it does for everyone else.
+  const viewerSeesConcealedAnomalies = game.players[playerId]?.pieceId === 'trex';
   // Visible to everyone watching (the glow is shared game state), but
   // only clickable for whoever's turn it actually is.
   const awaitingDeck = game.pendingDecision?.type === 'awaitingCardDraw' ? game.pendingDecision.deck : null;
@@ -394,7 +398,11 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
               // react to being hovered), just with no visible warning,
               // so a table that isn't tracking it can genuinely forget.
               // A hunting one is always shown - by then it's in plain sight.
-              .filter((anomaly) => anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount)
+              // Rogue Anomaly sees every concealed one regardless of turn.
+              .filter(
+                (anomaly) =>
+                  anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount || viewerSeesConcealedAnomalies,
+              )
               .map((anomaly) => {
                 const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
                 return (
