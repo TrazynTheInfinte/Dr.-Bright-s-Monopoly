@@ -1270,29 +1270,31 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   };
   // A real turn just ended (not a doubles-continuation) - the one place
   // hostile-anomaly "world events" tick: a new one might breach
-  // containment, and any already loose ones take a step. scp173Watched
-  // only ever matters for that one tick, so it's cleared unconditionally
-  // right after - whether or not it was actually set this time.
-  const wasSculptureLooseAlready = state.looseAnomalies.some((a) => a.anomalyId === 'theSculpture');
+  // containment, and any already loose ones take a step.
+  const sculptureBefore = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
   let afterAnomalies = maybeBreachContainment(next, rng, playerId);
-  // Skip the very tick it breaches on - a full round (back around to this
-  // same player) has to actually pass before its first move check, rather
-  // than potentially catching someone the instant it's revealed.
-  if (wasSculptureLooseAlready) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId);
+  // Skip the very tick it breaches on - a full round (back around to
+  // whoever's turn it spawned on) has to actually pass before its first
+  // move check, rather than potentially catching someone the instant
+  // it's revealed.
+  if (sculptureBefore) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId);
   afterAnomalies = advanceHuntingAnomalies(afterAnomalies);
-  return { ...afterAnomalies, scp173Watched: false };
+  // scp173Watched can be set by anyone's Keep Watch during the round (see
+  // keepWatchOnSculpture) - everyone's a potential target, so everyone
+  // shares the job of watching it. It only actually gets read/consumed on
+  // the one turn each round where SCP-173's move resolves (whoever's turn
+  // it was when it breached), so it's only cleared then - any other
+  // turn's end must leave it exactly as it was, or an early Keep Watch
+  // earlier in the round would get wiped before it ever mattered.
+  return sculptureBefore?.spawnedOnPlayerId === playerId ? { ...afterAnomalies, scp173Watched: false } : afterAnomalies;
 }
 
-/** Rogue Anomaly aside, spending this turn keeping watch on SCP-173 instead of rolling: no movement happens, but it freezes SCP-173 for the tick that resolves when this turn ends. Only available to the current player, before they've rolled at all this turn, and only while SCP-173 is actually loose. */
+/** Everyone's a potential target once SCP-173 is loose, so anyone can spend their turn keeping watch on it instead of rolling: no movement happens, but it freezes SCP-173 for the round's move check (whoever's turn it breached on - see endTurn). Only available to the current player, before they've rolled at all this turn, and only while SCP-173 is actually loose. */
 export function keepWatchOnSculpture(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
   if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter) return state;
   if (currentPlayerId(state) !== playerId || state.lastRoll) return state;
   if (state.players[playerId].inJail) return state; // resolve the Containment Chamber the normal way first
-  const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
-  // Only matters on the one turn per round where its move would actually
-  // resolve - see advanceUnwatchedSculpture. Any other turn, there's
-  // nothing to freeze yet.
-  if (!sculpture || sculpture.spawnedOnPlayerId !== playerId) return state;
+  if (!state.looseAnomalies.some((a) => a.anomalyId === 'theSculpture')) return state;
 
   const watching = logEvent({ ...state, scp173Watched: true }, 'Kept watch on SCP-173 instead of taking a turn.');
   return endTurn(watching, rng);

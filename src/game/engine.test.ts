@@ -1361,9 +1361,15 @@ describe('hostile anomalies', () => {
     expect(keepWatchOnSculpture(nothingLoose, 'p1')).toEqual(nothingLoose);
   });
 
-  it("refuses Keep Watch on a turn that isn't the round-check turn (a different player's turn breached it)", () => {
+  it("lets a non-anchor player keep watch too - everyone's a potential target, so it holds until the round's actual check turn", () => {
     let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 5 }); // would otherwise be caught outright on the anchor's turn
     game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p2' }]);
-    expect(keepWatchOnSculpture(game, 'p1')).toEqual(game); // it's p1's turn, but the round anchor is p2
+    game = keepWatchOnSculpture(game, 'p1', NO_BREACH_RNG); // p1's turn, not the round anchor (p2) - still allowed
+    expect(game.currentTurnIndex).toBe(1); // p1's turn still ended normally
+    expect(game.scp173Watched).toBe(true); // held over, not consumed yet
+    game = endTurn(game, NO_BREACH_RNG); // p2's turn ends - the round anchor, resolves now
+    expect(game.looseAnomalies[0].tileId).toBe(0); // frozen by p1's earlier Keep Watch
+    expect(game.scp173Watched).toBe(false); // consumed now that the round's check actually happened
   });
 });
