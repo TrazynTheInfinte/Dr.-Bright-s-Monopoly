@@ -272,7 +272,7 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
       }}
     >
       <div className="board-center">
-        <div className="board-center-banner">SCP-OPOLY</div>
+        <div className="board-center-banner">DR. BRIGHT'S MONOPOLY</div>
         <button
           type="button"
           className={`board-center-deck board-center-deck-communist ${awaitingDeck === 'anomalousEvent' ? 'is-hot' : ''} ${awaitingDeck === 'anomalousEvent' && isMyTurn ? 'is-clickable' : ''}`}

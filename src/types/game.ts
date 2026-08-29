@@ -131,6 +131,8 @@ export interface GamePlayerState {
   usedShowOfForce: boolean;
   /** Site Director's Special Power ("Redirect Without Exposure"): handing a drawn card's effect to another player only works once per game - this flags that it's already happened. Only set when they actually redirect, not when they keep the card themselves. */
   usedRedirect: boolean;
+  /** Specialist's Special Power ("Redundant Safeguards"): the emergency Credit grant only fires once per game - this flags that it's already happened, whether or not it was actually enough to cover the debt that triggered it. */
+  usedSafeguard: boolean;
 }
 
 /**

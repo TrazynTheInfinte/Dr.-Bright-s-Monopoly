@@ -6,8 +6,9 @@ import type { PieceDefinition } from '../types/game';
 // Piece it replaces) - see CONTEXT.md's Personnel section for the
 // vocabulary. Note: Site Director's "Executive Authority" (choose a
 // card from either deck) makes Field Researcher's own power a strict
-// subset of it - not fixed, just worth knowing. Specialist (Penguin)
-// is still powerless, pending a power of its own.
+// subset of it - not fixed, just worth knowing. Rogue Anomaly (T-Rex)
+// is deliberately left at its original single power for now, pending
+// future mechanics it's meant to interact with.
 export const STARTING_PIECES: PieceDefinition[] = [
   {
     id: 'boot',
@@ -68,10 +69,8 @@ export const STARTING_PIECES: PieceDefinition[] = [
     id: 'penguin',
     name: 'Specialist',
     title: 'Containment Specialist',
-    // Comunopoly's Penguin was built entirely around Smuggling money to
-    // the West - a house rule this build drops. Personnel file still
-    // pending a Special Power of its own.
-    powerDescription: null,
+    powerDescription:
+      "Standard Containment Procedure: trained to minimize collateral damage - pays 25% less rent on any Wing or Tunnel. Redundant Safeguards: once per game, if a forced payment would otherwise be unaffordable, an emergency grant arrives from Foundation contingency funds first - not a guaranteed save, just a cushion.",
   },
   {
     id: 'cat',

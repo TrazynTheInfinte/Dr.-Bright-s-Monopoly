@@ -19,6 +19,10 @@ const PURPLE_SEIZE_GROUP: ColorGroup = 'purple';
 const GRANT_FUNDING_AMOUNT = 100;
 /** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds. */
 const BULK_REQUISITION_MULTIPLIER = 0.75;
+/** Specialist's "Standard Containment Procedure": the rent discount multiplier on Wings/Tunnels they pay. */
+const CONTAINMENT_PROCEDURE_MULTIPLIER = 0.75;
+/** Specialist's "Redundant Safeguards": the one-time emergency grant when a forced payment would otherwise be unaffordable. */
+const REDUNDANT_SAFEGUARDS_AMOUNT = 300;
 // Half real Monopoly's bank supply (32/12) - makes the shared pool a
 // real constraint worth fighting over, and makes Logistics Officer's
 // Overstock (bypasses the shared pool entirely) noticeably stronger by
@@ -71,6 +75,7 @@ export function createInitialGameState(
       usedTunnelTravelThisTurn: false,
       usedShowOfForce: false,
       usedRedirect: false,
+      usedSafeguard: false,
     };
   }
 
@@ -160,13 +165,31 @@ function canAfford(state: GameState, playerId: string, amount: number): boolean 
  * outright. If they can't, opens a debtSettlement decision instead of
  * deducting anything - the player must sell houses/mortgage properties
  * to raise the difference (see settleDebt) or give up (declareBankruptcy).
+ *
+ * Specialist's "Redundant Safeguards" steps in right here, once per
+ * game: if they can't afford a forced payment, an emergency grant
+ * arrives first - not a guaranteed save (a big enough debt can still
+ * exceed it and open debtSettlement anyway), just a cushion. Doesn't
+ * apply to voluntary spending (buying, building, mortgage payoff),
+ * since those callers already check canAfford themselves before ever
+ * reaching chargePlayer.
  */
 function chargePlayer(state: GameState, playerId: string, amount: number, creditorId: string | null): GameState {
   if (amount <= 0) return state;
-  if (!canAfford(state, playerId, amount)) {
-    return { ...state, pendingDecision: { type: 'debtSettlement', forPlayerId: playerId, amountOwed: amount, creditorId } };
+  let working = state;
+  if (!canAfford(working, playerId, amount) && pieceOf(working, playerId) === 'penguin' && !working.players[playerId].usedSafeguard) {
+    working = logEvent(
+      updatePlayer(working, playerId, {
+        credits: working.players[playerId].credits + REDUNDANT_SAFEGUARDS_AMOUNT,
+        usedSafeguard: true,
+      }),
+      'Redundant Safeguards: an emergency grant arrives just in time.',
+    );
   }
-  let next = updatePlayer(state, playerId, { credits: state.players[playerId].credits - amount });
+  if (!canAfford(working, playerId, amount)) {
+    return { ...working, pendingDecision: { type: 'debtSettlement', forPlayerId: playerId, amountOwed: amount, creditorId } };
+  }
+  let next = updatePlayer(working, playerId, { credits: working.players[playerId].credits - amount });
   if (creditorId) {
     next = updatePlayer(next, creditorId, { credits: next.players[creditorId].credits + amount });
   }
@@ -435,26 +458,31 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
     return { ...state, mtfEncounter: { mtfPlayerId: owner, targetPlayerId: playerId, tileId } };
   }
 
-  const rent = calculateRent(state, tileId, owner);
+  const rent = calculateRent(state, tileId, owner, playerId);
   return logEvent(chargePlayer(state, playerId, rent, owner), `Paid ${rent} Credits rent.`);
 }
 
-function calculateRent(state: GameState, tileId: number, owner: string): number {
+function calculateRent(state: GameState, tileId: number, owner: string, payerId: string): number {
   const tile = getTile(tileId);
+  let rent: number;
   if (tile.kind === 'wing') {
     const houses = state.houses[tileId] ?? 0;
     const baseRent = tile.rentTable[houses];
-    if (houses === 0 && ownsFullSector(state, owner, tile.colorGroup)) return baseRent * 2;
-    return baseRent;
-  }
-  if (tile.kind === 'tunnel') {
+    rent = houses === 0 && ownsFullSector(state, owner, tile.colorGroup) ? baseRent * 2 : baseRent;
+  } else if (tile.kind === 'tunnel') {
     const baseRent = RAILROAD_RENT_BY_COUNT[Math.min(tunnelsOwnedBy(state, owner), 4) - 1] ?? RAILROAD_RENT_BY_COUNT[0];
     // MTF Operative's "Rapid Deployment": rent collected on an owned Tunnel is doubled.
-    return pieceOf(state, owner) === 'battleship' ? baseRent * 2 : baseRent;
+    rent = pieceOf(state, owner) === 'battleship' ? baseRent * 2 : baseRent;
+  } else {
+    // utility: 4x the roll if the owner has one, 10x if both - no
+    // Standard Containment Procedure discount here, it only covers
+    // Wings and Tunnels.
+    const roll = state.lastRoll ? state.lastRoll[0] + state.lastRoll[1] : 0;
+    return utilitiesOwnedBy(state, owner) >= 2 ? roll * 10 : roll * 4;
   }
-  // utility: 4x the roll if the owner has one, 10x if both
-  const roll = state.lastRoll ? state.lastRoll[0] + state.lastRoll[1] : 0;
-  return utilitiesOwnedBy(state, owner) >= 2 ? roll * 10 : roll * 4;
+
+  // Specialist's "Standard Containment Procedure" - 25% less rent on any Wing or Tunnel.
+  return pieceOf(state, payerId) === 'penguin' ? Math.floor(rent * CONTAINMENT_PROCEDURE_MULTIPLIER) : rent;
 }
 
 // --- Buying ----------------------------------------------------------------
@@ -709,7 +737,7 @@ export function resolveMtfEncounter(state: GameState, seize: boolean): GameState
   let next: GameState = { ...state, mtfEncounter: null };
 
   if (!seize) {
-    const rent = calculateRent(next, tileId, mtfPlayerId);
+    const rent = calculateRent(next, tileId, mtfPlayerId, targetPlayerId);
     return logEvent(chargePlayer(next, targetPlayerId, rent, mtfPlayerId), `Paid ${rent} Credits rent.`);
   }
 

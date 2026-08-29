@@ -6,64 +6,58 @@ interface RuleBookSection {
   body: string[];
 }
 
-// Deliberately a condensed quick-reference, not the full rules PDF - the
-// core loop plus this project's own house rules, but no per-Piece
-// Special Power/Win Condition list (those stay a surprise until you've
-// actually picked one - see LobbyScreen/PieceInfoPanel) and no full
-// card list (drawing one is the whole point).
+// Deliberately a condensed quick-reference, not a full rules document -
+// the core loop plus this project's own tweaks, but no per-Personnel
+// Special Power list (that stays a surprise until you've actually
+// picked one - see LobbyScreen/PieceInfoPanel) and no full card list
+// (drawing one is the whole point).
 const SECTIONS: RuleBookSection[] = [
   {
     title: 'I. The Goal',
     body: [
-      "Every comrade begins equal: 1000 Roubles and a secret Piece, its Special Power and Win Condition sealed until you've actually claimed it. Acquire property in the name of the People, collect what's owed to you, and complete your Collections. The instant the Piece Pool runs dry - every Piece either claimed or struck from the record for good - the Endgame begins.",
+      "Every player begins equal: 1500 Foundation Credits and a Personnel token with a Special Power that stays hidden until you've actually claimed it. Acquire Wings, collect the rent you're owed, and complete your Sectors. Last one not Terminated wins.",
     ],
   },
   {
     title: 'II. Taking Your Turn',
     body: [
-      "Roll two dice and advance that many spaces clockwise. Doubles earn you the State's favor - roll again immediately - but favor has its limits: three doubles total, in a row or spread across the whole match, and the State decides you've been moving too freely. Straight to jail, no further movement.",
+      'Roll two dice and advance that many spaces clockwise. Doubles earn you another roll immediately - but three doubles in a row, and you go straight to the Containment Chamber instead of moving a third time.',
     ],
   },
   {
-    title: 'III. Properties & Rent',
+    title: 'III. Wings & Rent',
     body: [
-      "Land on unclaimed property or a railroad and it's yours for the taking, provided you can afford it. Land on ground someone else has already claimed and you owe them Rent for the privilege - more if they hold the entire Collection, more still if they've built housing or a hotel on it.",
+      "Land on an unclaimed Wing or Maintenance Tunnel and it's yours for the taking, provided you can afford it. Land on one someone else already holds and you owe them rent - more if they hold the whole Sector, more still if they've built houses or a hotel on it.",
     ],
   },
   {
-    title: 'IV. Jail',
+    title: 'IV. Building & Mortgages',
     body: [
-      "The Go To Jail tile, three doubles, an unpaid debt (Destitute), or any number of cards can land you behind bars. Rolling doubles on your own turn is the only way to actually walk free. Until then, the guards don't work for nothing - a 100-Rouble Bribe every turn just to stay put and stay alive. Run out of Roubles to pay it and you Disappear instead.",
+      "Own every Wing in a Sector and you can build houses (then a hotel) on them to raise the rent. Short on cash? Mortgage a Wing for half its price - you can't collect rent on it again until you pay the mortgage off, plus a little interest.",
     ],
   },
   {
-    title: 'V. House Rules',
+    title: 'V. The Containment Chamber',
     body: [
-      "This edition adds a Hoarding Limit: no honest worker comes by over 1000 Roubles honestly. Cross that line and the State suspects you've been hoarding illegally - you're hauled in for questioning, jailed on suspicion, and you won't be released by any means while you're still over the limit. The mirror image is Destitute: turn up with exactly 0 Roubles and you look just as suspicious - questioned and jailed all the same.",
+      "The Reassigned tile, three doubles, or certain cards can land you here. Roll doubles on your own turn to walk free. Otherwise, a Holding Fee (50 Credits) is charged every turn you stay - or pay the steeper Escape Fee (200 Credits) to leave immediately, no waiting. After 3 turns paying the Holding Fee, you're released for free either way.",
     ],
   },
   {
     title: 'VI. Cards',
     body: [
-      "Land on a Communist Test or No Chance space and click the pile - the State has prepared something for you. Could be a windfall, could be a summons. Draw it and find out.",
+      'Land on an Anomalous Event or Foundation Directive tile and draw from that pile. Could be a windfall, could cost you.',
     ],
   },
   {
-    title: 'VII. The West',
+    title: 'VII. Trading',
     body: [
-      "Land on Free Parking, or on a property you already hold, and you may Smuggle Roubles out to the West - beyond the State's reach, for now. It isn't safe until you've made a full lap of the board since; and it's never safe if your Piece Disappears, or if another comrade reaches Free Parking before you complete that lap.",
+      'Anytime, not just on your turn, you can propose a trade with another player - Wings, Credits, and held cards, in any combination, in either direction. Nothing happens until they accept.',
     ],
   },
   {
-    title: 'VIII. Disappearing',
+    title: 'VIII. Termination',
     body: [
-      "Fail to pay what you owe, draw the wrong card, run afoul of the wrong tile - and your Piece Disappears. Everything you held is Seized by the State. If the Piece Pool still has something to offer, you're issued a replacement Piece and 1000 fresh Roubles to start again. If the Pool is empty, there's nothing left to issue - you're out for good, watching the rest of the match unfold.",
-    ],
-  },
-  {
-    title: 'IX. The Endgame',
-    body: [
-      "Once the Piece Pool has nothing left to give out, every comrade still standing gets one final turn. Then the books are settled: each Piece's own Win Condition is calculated - some reward Roubles, some steal from a neighbor, some flip everything on its head, rules only revealed now. Whoever the State judges to have served best - the highest Score - wins.",
+      "Owe more than you can pay, and can't raise the difference by selling houses or mortgaging Wings? You're Terminated - everything you held returns to the Foundation (or whoever you owed), and you're out for the rest of the match. The game ends the instant only one player is left.",
     ],
   },
 ];
@@ -89,8 +83,8 @@ function RuleBookButton() {
               ✕
             </button>
 
-            <p className="rule-book-eyebrow">A Spectre Is Haunting the Board...</p>
-            <h1 className="rule-book-title">Rules of Comunopoly</h1>
+            <p className="rule-book-eyebrow">Cleared for Level 2 Personnel and Above</p>
+            <h1 className="rule-book-title">Rules of Dr. Bright's Monopoly</h1>
 
             <div className="rule-book-sections">
               {SECTIONS.map((section) => (
@@ -103,7 +97,7 @@ function RuleBookButton() {
               ))}
             </div>
 
-            <p className="rule-book-closing">Comrades of All Boards, Unite!</p>
+            <p className="rule-book-closing">Secure. Contain. Bankrupt.</p>
           </div>
         </div>
       )}

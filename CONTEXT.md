@@ -1,6 +1,6 @@
-# SCP-opoly
+# Dr. Bright's Monopoly
 
-A browser-based, rules-enforcing Monopoly variant themed around the SCP Foundation. This file is the glossary for the game's domain vocabulary — the fictional/rules concepts, not the software architecture. (Working title — rename freely once you land on one you like.)
+A browser-based, rules-enforcing Monopoly variant themed around the SCP Foundation. This file is the glossary for the game's domain vocabulary — the fictional/rules concepts, not the software architecture.
 
 ## Language
 

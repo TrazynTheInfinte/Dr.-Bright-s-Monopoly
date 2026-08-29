@@ -147,7 +147,7 @@ function App() {
       <BrutalistBackground />
       <AppHeader />
       <p className="build-badge">build {__BUILD_SHA__}</p>
-      <h1 className="title">SCP-OPOLY</h1>
+      <h1 className="title">DR. BRIGHT'S MONOPOLY</h1>
       <p className="subtitle">Secure. Contain. Bankrupt.</p>
 
       {view === 'landing' && (

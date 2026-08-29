@@ -605,6 +605,70 @@ describe("Logistics Officer's Bulk Requisition and Overstock", () => {
   });
 });
 
+describe("Specialist's Standard Containment Procedure and Redundant Safeguards", () => {
+  it('pays 25% less rent on an owned Wing', () => {
+    let game = makeGame(['penguin', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [6] });
+    game = withPlayer(game, 'p1', { position: 0 });
+    game = devSetForcedRoll(game, [6, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500 - Math.floor(6 * 0.75));
+  });
+
+  it('pays 25% less rent on a Maintenance Tunnel', () => {
+    let game = makeGame(['penguin', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [5] });
+    game = withPlayer(game, 'p1', { position: 0 });
+    game = devSetForcedRoll(game, [5, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500 - Math.floor(25 * 0.75));
+  });
+
+  it('does not discount utility rent', () => {
+    let game = makeGame(['penguin', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [12] });
+    game = withPlayer(game, 'p1', { position: 8 });
+    game = devSetForcedRoll(game, [2, 2]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500 - 16); // full 4x the roll, no discount
+  });
+
+  it('an emergency grant covers a forced payment that would otherwise be unaffordable', () => {
+    let game = makeGame(['penguin', 'boot']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10, credits: 10 });
+    game = payEscapeFee(game, 'p1');
+    expect(game.players.p1.usedSafeguard).toBe(true);
+    expect(game.players.p1.credits).toBe(10 + 300 - 200);
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it('only grants the emergency safeguard once per game', () => {
+    let game = makeGame(['penguin', 'boot']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10, credits: 10, usedSafeguard: true });
+    game = payEscapeFee(game, 'p1');
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 200, creditorId: null });
+    expect(game.players.p1.credits).toBe(10);
+  });
+
+  it("still opens a debtSettlement if the emergency grant isn't enough", () => {
+    let game = makeGame(['penguin', 'boot']);
+    game = withPlayer(game, 'p1', {
+      credits: 0,
+      ownedTileIds: [1, 3, 6, 8, 9],
+      position: 0,
+    });
+    game = { ...game, houses: { 1: 5, 3: 5, 6: 5, 8: 5, 9: 5 } }; // 5 hotels, 500 owed
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'structuralDamageAssessment');
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.usedSafeguard).toBe(true);
+    expect(game.players.p1.credits).toBe(300); // the grant landed, just wasn't enough
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 500, creditorId: null });
+  });
+});
+
 describe("D-Class's Standard Expendability Clause", () => {
   it('is never billed the Escape Fee', () => {
     let game = makeGame(['boot', 'battleship']);
