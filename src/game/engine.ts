@@ -1005,7 +1005,7 @@ function updateAnomaly(state: GameState, anomalyId: string, patch: Partial<Loose
   return { ...state, looseAnomalies: state.looseAnomalies.map((a) => (a.anomalyId === anomalyId ? { ...a, ...patch } : a)) };
 }
 
-function maybeBreachContainment(state: GameState, rng: () => number): GameState {
+function maybeBreachContainment(state: GameState, rng: () => number, anchorPlayerId: string): GameState {
   if (rng() >= BREACH_CHANCE) return state;
   const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
@@ -1017,6 +1017,7 @@ function maybeBreachContainment(state: GameState, rng: () => number): GameState 
     status: 'dormant',
     targetPlayerId: null,
     breachedOnTurnCount: state.turnCount,
+    spawnedOnPlayerId: anchorPlayerId,
   };
   return logEvent(
     { ...state, looseAnomalies: [...state.looseAnomalies, loose] },
@@ -1104,18 +1105,20 @@ function advanceHuntingAnomalies(state: GameState): GameState {
 
 /**
  * SCP-173's own tick, entirely separate from the dormant/hunting flow
- * above - it never locks onto one target, it's simply dangerous any
- * turn nobody used Keep Watch (see keepWatchOnSculpture). No-op if
- * it's not loose, or someone did keep watch this tick (frozen). Moves
- * clockwise toward whoever's nearest by SCULPTURE_UNWATCHED_SPEED
- * spaces - catches them outright if that's far enough, but a target
- * far enough ahead genuinely outruns it this tick. Rogue Anomaly is
- * never a valid target (immune, like with Shy Guy); an AFK player is
- * skipped too, same as a benched Shy Guy target.
+ * above - it never locks onto one target, and it doesn't check every
+ * turn either: it only ever acts once per round, specifically when
+ * it becomes the turn of whoever's turn it was when it breached (see
+ * spawnedOnPlayerId) - endTurn only calls this when endingPlayerId
+ * matches. No-op if it's not loose, or someone did keep watch this
+ * tick (frozen). Moves clockwise toward whoever's nearest by
+ * SCULPTURE_UNWATCHED_SPEED spaces - catches them outright if that's
+ * far enough, but a target far enough ahead genuinely outruns it this
+ * round. Rogue Anomaly is never a valid target (immune, like with Shy
+ * Guy); an AFK player is skipped too, same as a benched Shy Guy target.
  */
-function advanceUnwatchedSculpture(state: GameState): GameState {
+function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string): GameState {
   const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
-  if (!sculpture || state.scp173Watched) return state;
+  if (!sculpture || sculpture.spawnedOnPlayerId !== endingPlayerId || state.scp173Watched) return state;
 
   const candidates = activePlayerIds(state).filter(
     (id) => !state.players[id].isAfkSpectating && pieceOf(state, id) !== 'trex',
@@ -1176,6 +1179,7 @@ export function induceBreach(state: GameState, playerId: string, rng: () => numb
     status: 'dormant',
     targetPlayerId: null,
     breachedOnTurnCount: state.turnCount,
+    spawnedOnPlayerId: currentPlayerId(state),
   };
   const next = updatePlayer(state, playerId, { usedInduceBreach: true });
   return logEvent(
@@ -1269,7 +1273,13 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // containment, and any already loose ones take a step. scp173Watched
   // only ever matters for that one tick, so it's cleared unconditionally
   // right after - whether or not it was actually set this time.
-  const afterAnomalies = advanceHuntingAnomalies(advanceUnwatchedSculpture(maybeBreachContainment(next, rng)));
+  const wasSculptureLooseAlready = state.looseAnomalies.some((a) => a.anomalyId === 'theSculpture');
+  let afterAnomalies = maybeBreachContainment(next, rng, playerId);
+  // Skip the very tick it breaches on - a full round (back around to this
+  // same player) has to actually pass before its first move check, rather
+  // than potentially catching someone the instant it's revealed.
+  if (wasSculptureLooseAlready) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId);
+  afterAnomalies = advanceHuntingAnomalies(afterAnomalies);
   return { ...afterAnomalies, scp173Watched: false };
 }
 
@@ -1278,7 +1288,11 @@ export function keepWatchOnSculpture(state: GameState, playerId: string, rng: ()
   if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter) return state;
   if (currentPlayerId(state) !== playerId || state.lastRoll) return state;
   if (state.players[playerId].inJail) return state; // resolve the Containment Chamber the normal way first
-  if (!state.looseAnomalies.some((a) => a.anomalyId === 'theSculpture')) return state;
+  const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
+  // Only matters on the one turn per round where its move would actually
+  // resolve - see advanceUnwatchedSculpture. Any other turn, there's
+  // nothing to freeze yet.
+  if (!sculpture || sculpture.spawnedOnPlayerId !== playerId) return state;
 
   const watching = logEvent({ ...state, scp173Watched: true }, 'Kept watch on SCP-173 instead of taking a turn.');
   return endTurn(watching, rng);
@@ -1358,6 +1372,7 @@ export function devSpawnAnomaly(state: GameState, anomalyId: string): GameState 
     status: 'dormant',
     targetPlayerId: null,
     breachedOnTurnCount: state.turnCount,
+    spawnedOnPlayerId: currentPlayerId(state),
   };
   return logEvent({ ...state, looseAnomalies: [...state.looseAnomalies, loose] }, `[DEV] Forced a containment breach: ${anomaly.name}.`);
 }

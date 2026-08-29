@@ -108,7 +108,7 @@ A player a Hostile Anomaly has reached. Every asset returns to the Foundation ex
 _Avoid_: killed, eaten
 
 **Keep Watch**:
-SCP-173's own defense against being caught: a player may spend their entire turn watching it instead of acting normally, freezing it in place for that turn. If nobody keeps watch, it closes in hard on whoever's nearest — fast enough to often catch them outright, though someone far enough away can outrun it.
+SCP-173's own defense against being caught: it only ever moves once per round, on whichever player's turn it happened to breach on. That player may spend their turn watching it instead of acting normally, freezing it in place for the round. If nobody keeps watch, it closes in hard on whoever's nearest — fast enough to often catch them outright, though someone far enough away can outrun it.
 _Avoid_: guard, observe
 
 **Purge**:

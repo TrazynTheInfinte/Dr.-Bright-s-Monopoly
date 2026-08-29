@@ -301,11 +301,15 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
                 </button>
               )}
               {/* Keep Watch is only available in that same pre-roll window,
-                  and only while SCP-173 is actually loose and this player
+                  only while SCP-173 is actually loose, only on the one turn
+                  per round where its move would actually resolve (whoever's
+                  turn it was when it breached), and only if this player
                   isn't in the Containment Chamber (resolve that normally
                   first). Choosing it skips rolling entirely and ends the
                   turn on the spot. */}
-              {!game.lastRoll && !me?.inJail && game.looseAnomalies.some((a) => a.anomalyId === 'theSculpture') && (
+              {!game.lastRoll &&
+                !me?.inJail &&
+                game.looseAnomalies.some((a) => a.anomalyId === 'theSculpture' && a.spawnedOnPlayerId === playerId) && (
                 <button onClick={() => keepWatchOnSculptureAndSync(roomCode, game, playerId)}>
                   Keep Watch on SCP-173
                 </button>

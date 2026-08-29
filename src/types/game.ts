@@ -278,6 +278,8 @@ export interface LooseAnomaly {
   /** Dormant anomalies (Shy Guy's default state) do nothing until viewed - see viewAnomaly in game/engine.ts. Hunting ones move toward targetPlayerId every turn. */
   status: 'dormant' | 'hunting';
   targetPlayerId: string | null;
-  /** GameState.turnCount at the moment this breach happened. While dormant, the UI only shows its marker during this exact turn - after that it's still there (and still reacts to being viewed), just with no visible warning, so a table that doesn't track it can genuinely forget. Hunting anomalies are always shown regardless, since by then it's chasing someone in plain sight. */
+  /** GameState.turnCount at the moment this breach happened. While dormant, the UI only shows its marker during this exact turn - after that it's still there (and still reacts to being viewed), just with no visible warning, so a table that doesn't track it can genuinely forget. Hunting anomalies are always shown regardless, since by then it's chasing someone in plain sight. Not used at all for SCP-173, which is never concealed - see spawnedOnPlayerId. */
   breachedOnTurnCount: number;
+  /** Whoever's turn it was when this anomaly breached. Only meaningful for SCP-173: its unwatched move only resolves once per round, specifically when it becomes this same player's turn again - see advanceUnwatchedSculpture in game/engine.ts. Optional since no other anomaly reads it. */
+  spawnedOnPlayerId?: string;
 }
