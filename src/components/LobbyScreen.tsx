@@ -118,11 +118,14 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
       )}
 
       {isHost && (
-        <button onClick={handleStartGame} disabled={players.length === 0 || !everyoneHasAPiece}>
+        <button onClick={handleStartGame} disabled={players.length < 2 || !everyoneHasAPiece}>
           Start Game
         </button>
       )}
-      {isHost && players.length > 0 && !everyoneHasAPiece && (
+      {isHost && players.length > 0 && players.length < 2 && (
+        <p className="lobby-hint">Need at least 2 players to start.</p>
+      )}
+      {isHost && players.length >= 2 && !everyoneHasAPiece && (
         <p className="lobby-hint">Waiting for everyone to have a Piece.</p>
       )}
 

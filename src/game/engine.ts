@@ -986,7 +986,13 @@ function maybeBreachContainment(state: GameState, rng: () => number): GameState 
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
   if (candidates.length === 0) return state; // every anomaly type is already loose
   const anomaly = candidates[Math.floor(rng() * candidates.length)];
-  const loose: LooseAnomaly = { anomalyId: anomaly.id, tileId: anomaly.spawnTileId, status: 'dormant', targetPlayerId: null };
+  const loose: LooseAnomaly = {
+    anomalyId: anomaly.id,
+    tileId: anomaly.spawnTileId,
+    status: 'dormant',
+    targetPlayerId: null,
+    breachedOnTurnCount: state.turnCount,
+  };
   return logEvent(
     { ...state, looseAnomalies: [...state.looseAnomalies, loose] },
     `Containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`,
@@ -1158,10 +1164,18 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
 
   let nextIndex = state.currentTurnIndex;
   let turnCount = state.turnCount;
-  do {
+  // Bounded to turnOrder.length attempts - if literally everyone is
+  // spectating/AFK (a 1-player test game gone bankrupt, or some other
+  // degenerate all-out-at-once case checkWinCondition didn't catch),
+  // this must not spin forever: an unbounded loop here freezes the
+  // entire tab, since JS never yields back to handle a click.
+  for (let attempts = 0; attempts < state.turnOrder.length; attempts++) {
     nextIndex = (nextIndex + 1) % state.turnOrder.length;
     turnCount += 1;
-  } while (state.players[state.turnOrder[nextIndex]].isSpectating || state.players[state.turnOrder[nextIndex]].isAfkSpectating);
+    if (!state.players[state.turnOrder[nextIndex]].isSpectating && !state.players[state.turnOrder[nextIndex]].isAfkSpectating) {
+      break;
+    }
+  }
 
   const cleared = updatePlayer(state, playerId, { usedTunnelTravelThisTurn: false });
   const next: GameState = {
@@ -1246,7 +1260,13 @@ export function devForceSkipTurn(state: GameState, rng: () => number = Math.rand
 export function devSpawnAnomaly(state: GameState, anomalyId: string): GameState {
   if (state.looseAnomalies.some((a) => a.anomalyId === anomalyId)) return state;
   const anomaly = findAnomaly(anomalyId as AnomalyId);
-  const loose: LooseAnomaly = { anomalyId: anomaly.id, tileId: anomaly.spawnTileId, status: 'dormant', targetPlayerId: null };
+  const loose: LooseAnomaly = {
+    anomalyId: anomaly.id,
+    tileId: anomaly.spawnTileId,
+    status: 'dormant',
+    targetPlayerId: null,
+    breachedOnTurnCount: state.turnCount,
+  };
   return logEvent({ ...state, looseAnomalies: [...state.looseAnomalies, loose] }, `[DEV] Forced a containment breach: ${anomaly.name}.`);
 }
 

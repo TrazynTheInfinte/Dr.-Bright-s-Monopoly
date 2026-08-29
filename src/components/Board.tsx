@@ -388,18 +388,25 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
               </div>
             )}
 
-            {anomaliesHere.map((anomaly) => {
-              const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
-              return (
-                <span
-                  key={anomaly.anomalyId}
-                  className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
-                  title={`${definition.name}${anomaly.status === 'hunting' ? ' - hunting someone' : ' - hover to view'}`}
-                >
-                  ☣
-                </span>
-              );
-            })}
+            {anomaliesHere
+              // Dormant anomalies only show a marker on the exact turn
+              // they breach - after that they're still there (and still
+              // react to being hovered), just with no visible warning,
+              // so a table that isn't tracking it can genuinely forget.
+              // A hunting one is always shown - by then it's in plain sight.
+              .filter((anomaly) => anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount)
+              .map((anomaly) => {
+                const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
+                return (
+                  <span
+                    key={anomaly.anomalyId}
+                    className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
+                    title={`${definition.name}${anomaly.status === 'hunting' ? ' - hunting someone' : ' - hover to view'}`}
+                  >
+                    ☣
+                  </span>
+                );
+              })}
           </div>
         );
       })}

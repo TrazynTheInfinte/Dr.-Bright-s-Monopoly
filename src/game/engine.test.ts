@@ -953,19 +953,19 @@ describe('dev panel helpers', () => {
   it('devSpawnAnomaly forces a breach, ignoring the random chance', () => {
     let game = makeGame();
     game = devSpawnAnomaly(game, 'shyGuy');
-    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
   });
 
   it("devSpawnAnomaly won't spawn a second copy of one already loose", () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
     game = devSpawnAnomaly(game, 'shyGuy');
-    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1' }]);
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
   });
 
   it('devRecontainAllAnomalies clears every loose anomaly for free', () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
     game = devRecontainAllAnomalies(game);
     expect(game.looseAnomalies).toEqual([]);
   });
@@ -996,6 +996,19 @@ describe('ending a turn', () => {
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.currentTurnIndex).toBe(0); // still p1's turn
   });
+
+  it('returns instead of hanging forever if every player ends up spectating', () => {
+    // Regression test: a real 1-player (or otherwise fully-out) game
+    // used to freeze the whole tab here - an unbounded do-while loop
+    // searching for "the next non-spectating player" that doesn't
+    // exist never terminates, and JS never yields back to handle a
+    // click once it starts. If this test doesn't hang, the fix holds.
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { isSpectating: true });
+    game = withPlayer(game, 'p2', { isSpectating: true });
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game).toBeDefined();
+  });
 });
 
 function withLooseAnomalies(state: GameState, anomalies: LooseAnomaly[]): GameState {
@@ -1006,7 +1019,7 @@ describe('hostile anomalies', () => {
   it('a lucky roll breaches containment and spawns Shy Guy dormant at its spawn tile', () => {
     let game = makeGame();
     game = endTurn(game, () => 0); // 0 < BREACH_CHANCE every time it's called
-    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 1 }]);
   });
 
   it('an unlucky roll breaches nothing', () => {
@@ -1017,7 +1030,7 @@ describe('hostile anomalies', () => {
 
   it("doesn't spawn a second copy of an anomaly that's already loose", () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = endTurn(game, () => 0);
     expect(game.looseAnomalies).toHaveLength(1);
     expect(game.looseAnomalies[0].tileId).toBe(5); // unchanged, not respawned at 31
@@ -1025,14 +1038,14 @@ describe('hostile anomalies', () => {
 
   it('viewing a dormant anomaly makes the viewer its target', () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = viewAnomaly(game, 'p2', 'shyGuy');
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 31, status: 'hunting', targetPlayerId: 'p2' });
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 31, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 });
   });
 
   it('viewing an anomaly already hunting someone else does nothing', () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'hunting', targetPlayerId: 'p1' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
     game = viewAnomaly(game, 'p2', 'shyGuy');
     expect(game.looseAnomalies[0].targetPlayerId).toBe('p1');
   });
@@ -1040,7 +1053,7 @@ describe('hostile anomalies', () => {
   it('a hunting anomaly steps toward its target, the shorter way around the board', () => {
     let game = makeGame();
     game = withPlayer(game, 'p2', { position: 10 });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.looseAnomalies[0].tileId).toBe(6); // 0 -> 10 clockwise, capped at 6 spaces
   });
@@ -1048,15 +1061,15 @@ describe('hostile anomalies', () => {
   it('pauses (does not give up) while its target is only AFK-benched', () => {
     let game = makeGame();
     game = withPlayer(game, 'p2', { position: 10, isAfkSpectating: true });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2' });
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 });
   });
 
   it('catching a non-D-Class player seizes their assets and queues a new Personnel choice', () => {
     let game = makeGame(); // p2 is 'car'
     game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within the 6-space hunt speed - catches this tick
     expect(game.players.p2.credits).toBe(0);
     expect(game.players.p2.ownedTileIds).toEqual([]);
@@ -1064,13 +1077,13 @@ describe('hostile anomalies', () => {
     expect(game.pendingPieceChoice?.playerId).toBe('p2');
     expect(game.pendingPieceChoice?.availablePieceIds.length).toBeGreaterThan(0);
     expect(game.pendingPieceChoice?.availablePieceIds).not.toContain('car'); // can't "reassign" to the piece they already had
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null });
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
   });
 
   it('a D-Class survives being caught via its own Standard Expendability Clause instead', () => {
     let game = makeGame();
     game = withPlayer(game, 'p2', { pieceId: 'boot', position: 10, credits: 1000, ownedTileIds: [6] });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2' }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.players.p2.credits).toBe(750);
     expect(game.players.p2.position).toBe(0);
@@ -1087,7 +1100,7 @@ describe('hostile anomalies', () => {
     let game = makeGame(allPieceIds);
     const caughtId = 'p12'; // trex
     game = withPlayer(game, caughtId, { position: 10 });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: caughtId }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: caughtId, breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.players[caughtId].isSpectating).toBe(true);
     expect(game.pendingPieceChoice).toBeNull();
@@ -1114,8 +1127,8 @@ describe('hostile anomalies', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { ownedTileIds: [12] });
     game = withLooseAnomalies(game, [
-      { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null },
-      { anomalyId: 'testDummy', tileId: 5, status: 'hunting', targetPlayerId: 'p2' },
+      { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+      { anomalyId: 'testDummy', tileId: 5, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 },
     ]);
     game = purgeAnomalies(game, 'p1');
     expect(game.players.p1.credits).toBe(1500 - 500);
@@ -1124,7 +1137,7 @@ describe('hostile anomalies', () => {
 
   it("refuses to purge for anyone who doesn't own the Site Warhead", () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = purgeAnomalies(game, 'p1');
     expect(game.looseAnomalies).toHaveLength(1);
     expect(game.players.p1.credits).toBe(1500);
@@ -1133,7 +1146,7 @@ describe('hostile anomalies', () => {
   it("refuses to purge if the owner can't afford it", () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { ownedTileIds: [12], credits: 10 });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = purgeAnomalies(game, 'p1');
     expect(game.looseAnomalies).toHaveLength(1);
     expect(game.players.p1.credits).toBe(10);
