@@ -32,6 +32,10 @@ const ANOMALY_HUNT_SPEED = 6;
 /** The Site Warhead is tile 12 - see data/board.ts. Only its current owner can trigger a purge. */
 const SITE_WARHEAD_TILE_ID = 12;
 const SITE_WARHEAD_PURGE_COST = 500;
+/** Intern's "On a Learning Curve": laps of the board needed before they're cleared to roll both dice unsupervised. */
+const INTERN_GRADUATION_LAPS = 3;
+/** Intern's "Unpaid Overtime": extra Credits collected on top of the standard Go bonus every time they pass the Site Entrance. */
+const INTERN_OVERTIME_BONUS = 50;
 // Half real Monopoly's bank supply (32/12) - makes the shared pool a
 // real constraint worth fighting over, and makes Logistics Officer's
 // Overstock (bypasses the shared pool entirely) noticeably stronger by
@@ -86,6 +90,7 @@ export function createInitialGameState(
       usedRedirect: false,
       usedSafeguard: false,
       usedInduceBreach: false,
+      lapsCompleted: 0,
     };
   }
 
@@ -273,7 +278,7 @@ export function rollDice(state: GameState, rng: () => number = Math.random): Gam
   const player = state.players[playerId];
   if (player.isSpectating || player.isAfkSpectating) return state;
 
-  const rollingOneDie = pieceOf(state, playerId) === 'thimble';
+  const rollingOneDie = pieceOf(state, playerId) === 'thimble' && player.lapsCompleted < INTERN_GRADUATION_LAPS;
   const roll: [number, number] = state.forcedRoll
     ? state.forcedRoll
     : rollingOneDie
@@ -389,12 +394,28 @@ export function useGetOutOfJailCard(state: GameState, playerId: string, cardId: 
   );
 }
 
+/** Awards the Go bonus for passing the Site Entrance, plus Intern's "Unpaid Overtime" top-up if applicable, and tracks laps completed for Intern's "On a Learning Curve" graduation. */
+function passGo(state: GameState, playerId: string): GameState {
+  const piece = pieceOf(state, playerId);
+  const lapsCompleted = state.players[playerId].lapsCompleted + 1;
+  const bonus = GO_BONUS + (piece === 'thimble' ? INTERN_OVERTIME_BONUS : 0);
+  let next = giveCredits(
+    logEvent(updatePlayer(state, playerId, { lapsCompleted }), `Passed the Site Entrance - collected ${bonus} Credits.`),
+    playerId,
+    bonus,
+  );
+  if (piece === 'thimble' && lapsCompleted === INTERN_GRADUATION_LAPS) {
+    next = logEvent(next, 'Cleared for full field duty - no longer restricted to rolling one die.');
+  }
+  return next;
+}
+
 function moveAndResolve(state: GameState, playerId: string, spaces: number): GameState {
   const player = state.players[playerId];
   const newPosition = ((player.position + spaces) % BOARD_SIZE + BOARD_SIZE) % BOARD_SIZE;
   const passedGo = newPosition < player.position || spaces >= BOARD_SIZE;
   let next = updatePlayer(state, playerId, { position: newPosition });
-  if (passedGo) next = giveCredits(logEvent(next, 'Passed the Site Entrance - collected 200 Credits.'), playerId, GO_BONUS);
+  if (passedGo) next = passGo(next, playerId);
 
   return resolveLanding(next, playerId, newPosition);
 }
@@ -635,7 +656,7 @@ function applyCardEffect(state: GameState, playerId: string, effect: CardEffect)
       const player = state.players[playerId];
       const passedGo = effect.tileId < player.position;
       let next = updatePlayer(state, playerId, { position: effect.tileId });
-      if (passedGo) next = giveCredits(next, playerId, GO_BONUS);
+      if (passedGo) next = passGo(next, playerId);
       return resolveLanding(next, playerId, effect.tileId);
     }
     case 'moveToNearestTunnel': {

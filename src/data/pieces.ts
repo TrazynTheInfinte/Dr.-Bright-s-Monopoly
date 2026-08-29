@@ -40,7 +40,8 @@ export const STARTING_PIECES: PieceDefinition[] = [
     id: 'thimble',
     name: 'Intern',
     title: 'Foundation Intern',
-    powerDescription: "Still Learning the Ropes: hasn't been cleared to handle both dice unsupervised yet - rolls only 1.",
+    powerDescription:
+      "On a Learning Curve: hasn't been cleared to handle both dice unsupervised yet - rolls only 1, until three full laps past the Site Entrance earn them clearance to roll normally for the rest of the game. Unpaid Overtime: the Foundation works interns hardest and reimburses them least - collects an extra 50 Credits every time they pass the Site Entrance, graduated or not.",
   },
   {
     id: 'dog',

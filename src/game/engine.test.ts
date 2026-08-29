@@ -96,6 +96,43 @@ describe('rolling and movement', () => {
     expect(game.players.p1.position).toBe(4);
   });
 
+  it('Intern actually only consumes one rng draw while not yet graduated', () => {
+    let game = makeGame(['thimble', 'boot']);
+    let calls = 0;
+    const rng = () => (calls++ === 0 ? 0 : 5 / 6); // 1st draw -> die value 1; a 2nd draw would give 6
+    game = rollDice(game, rng);
+    expect(game.lastRoll).toEqual([1, 0]);
+    expect(calls).toBe(1);
+  });
+
+  it('Intern graduates to rolling both dice after 3 laps past the Site Entrance', () => {
+    let game = makeGame(['thimble', 'boot']);
+    game = withPlayer(game, 'p1', { lapsCompleted: 3 });
+    let calls = 0;
+    const rng = () => (calls++ === 0 ? 0 : 5 / 6); // 1st draw -> 1, 2nd draw -> 6
+    game = rollDice(game, rng);
+    expect(game.lastRoll).toEqual([1, 6]);
+    expect(calls).toBe(2);
+  });
+
+  it("Intern's Unpaid Overtime tops up the Go bonus by an extra 50 Credits", () => {
+    let game = makeGame(['thimble', 'boot']);
+    game = withPlayer(game, 'p1', { position: 38 });
+    game = devSetForcedRoll(game, [3, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.position).toBe(1);
+    expect(game.players.p1.credits).toBe(1500 + 250); // 200 base + 50 Unpaid Overtime
+  });
+
+  it('Intern tracks laps completed and logs graduation the moment the 3rd lap finishes', () => {
+    let game = makeGame(['thimble', 'boot']);
+    game = withPlayer(game, 'p1', { position: 38, lapsCompleted: 2 });
+    game = devSetForcedRoll(game, [3, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.lapsCompleted).toBe(3);
+    expect(game.log[game.log.length - 1]).toContain('Cleared for full field duty');
+  });
+
   it('rolling doubles three times in a row sends the player to the Containment Chamber', () => {
     // Each landing must stay on a tile with no pendingDecision (jail as
     // "just visiting", then Break Room) so the next forced roll isn't

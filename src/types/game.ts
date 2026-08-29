@@ -135,6 +135,8 @@ export interface GamePlayerState {
   usedSafeguard: boolean;
   /** Rogue Anomaly's Special Power ("Induce a Breach"): the on-demand containment breach only fires once per game - this flags that it's already happened. */
   usedInduceBreach: boolean;
+  /** Times this player has passed the Site Entrance. Tracked for everyone, but only meaningful for Intern's "On a Learning Curve": once it reaches the graduation threshold, they roll both dice like everyone else for the rest of the game. */
+  lapsCompleted: number;
 }
 
 /**
