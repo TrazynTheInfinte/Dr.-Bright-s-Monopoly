@@ -2,7 +2,16 @@ import { ANOMALIES, findAnomaly, type AnomalyId } from '../data/anomalies';
 import { BOARD, BOARD_SIZE, getTile, RAILROAD_RENT_BY_COUNT } from '../data/board';
 import { ANOMALOUS_EVENT_CARDS, FOUNDATION_DIRECTIVE_CARDS, findCard, type CardEffect } from '../data/cards';
 import { STARTING_PIECES } from '../data/pieces';
-import type { CardDeck, ColorGroup, GameState, GamePlayerState, LooseAnomaly, PieceId, TradeOffer } from '../types/game';
+import type {
+  CardDeck,
+  ColorGroup,
+  GameState,
+  GamePlayerState,
+  LooseAnomaly,
+  PieceId,
+  PocketDimensionTile,
+  TradeOffer,
+} from '../types/game';
 
 const STARTING_CREDITS = 1500;
 /** D-Class's "Standard Expendability Clause": reduced funding for the one-time requisitioned replacement. */
@@ -31,6 +40,14 @@ const BREACH_CHANCE = 0.08;
 const ANOMALY_HUNT_SPEED = 6;
 /** SCP-173's unwatched move: closes the gap on whoever's nearest by a quarter of the board - fast enough to plausibly catch someone, but capped so outrunning it is genuinely possible if they're far enough ahead. */
 const SCULPTURE_UNWATCHED_SPEED = Math.floor(BOARD_SIZE / 4);
+/** SCP-106's own main-board hunt speed - half of ANOMALY_HUNT_SPEED, since catching someone isn't itself a loss for it (see dragIntoPocketDimension), it's just the start of a much more dangerous ordeal. */
+const OLD_MAN_MAIN_BOARD_SPEED = 3;
+/** The Pocket Dimension track's length, tile 0 (the drag-in point) included. */
+const POCKET_DIMENSION_LENGTH = 9;
+/** SCP-106's own crawl inside the Pocket Dimension: 1 tile closer every time the trapped player takes their turn - see movePocketDimension. */
+const OLD_MAN_POCKET_DIMENSION_SPEED = 1;
+/** Cost of landing on a Decaying Passage inside the Pocket Dimension. Can't afford it and it's a Termination instead - see movePocketDimension. */
+const DECAYING_PASSAGE_COST = 150;
 /** The Site Warhead is tile 12 - see data/board.ts. Only its current owner can trigger a purge. */
 const SITE_WARHEAD_TILE_ID = 12;
 const SITE_WARHEAD_PURGE_COST = 500;
@@ -124,6 +141,7 @@ export function createInitialGameState(
     looseAnomalies: [],
     pendingPieceChoice: null,
     scp173Watched: false,
+    pocketDimensionOrdeal: null,
   };
 }
 
@@ -140,7 +158,11 @@ function rollTwoDice(rng: () => number): [number, number] {
 function shuffle<T>(items: T[], rng: () => number): T[] {
   const shuffled = [...items];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
+    // Clamped defensively: rng() is only ever documented as [0, 1), but a
+    // test double returning exactly 1 (NO_BREACH_RNG, used pervasively to
+    // guarantee no containment breach) would otherwise compute j = i + 1 -
+    // out of bounds, silently growing the array by assigning past its end.
+    const j = Math.min(i, Math.floor(rng() * (i + 1)));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
@@ -1038,17 +1060,19 @@ function availablePersonnelIds(state: GameState): PieceId[] {
 }
 
 /**
- * Shy Guy's catch effect (the only one that exists so far, but written
- * as "an anomaly's catch effect" since future ones may differ): every
- * asset returns to the Foundation, exactly like a real Termination.
- * D-Class's "Standard Expendability Clause" still applies first if
- * they haven't used it. Otherwise, if any Personnel nobody else is
- * playing exists, they're queued to pick one (see chooseNewPersonnel)
- * instead of going out for good - only a real Termination if nothing's
- * left to reassign. The anomaly itself goes back to dormant right
- * where it caught them - still loose until someone purges it.
+ * The actual consequence of being caught by a Hostile Anomaly, split
+ * out from resolveAnomalyCatch below so SCP-106's Pocket Dimension can
+ * reuse it too (a Termination inside the Pocket Dimension is the same
+ * consequence, just reached a different way - see
+ * terminateInsidePocketDimension). Every asset returns to the
+ * Foundation, exactly like a real Termination. D-Class's "Standard
+ * Expendability Clause" still applies first if they haven't used it.
+ * Otherwise, if any Personnel nobody else is playing exists, they're
+ * queued to pick one (see chooseNewPersonnel) instead of going out for
+ * good - only a real Termination if nothing's left to reassign. Does
+ * not touch the anomaly's own state at all - callers handle that.
  */
-function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number): GameState {
+function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targetPlayerId: string): GameState {
   const anomaly = findAnomaly(anomalyId as AnomalyId);
   let next = logEvent(state, `${anomaly.name} caught up with someone.`);
   next = seizeAssets(next, targetPlayerId, null);
@@ -1076,10 +1100,16 @@ function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId
     }
   }
 
+  return next;
+}
+
+/** Shy Guy's and SCP-173's shared catch effect on the main board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly itself goes back to dormant right where it caught them - still loose until someone purges it. SCP-106 never calls this - see dragIntoPocketDimension instead, since a main-board catch isn't a loss for it. */
+function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number): GameState {
+  const next = resolvePlayerCaughtByAnomaly(state, anomalyId, targetPlayerId);
   return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
 }
 
-function advanceHuntingAnomalies(state: GameState): GameState {
+function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState {
   let next = state;
   for (const anomaly of state.looseAnomalies) {
     const current = next.looseAnomalies.find((a) => a.anomalyId === anomaly.anomalyId);
@@ -1094,11 +1124,19 @@ function advanceHuntingAnomalies(state: GameState): GameState {
     }
     if (target.isAfkSpectating) continue; // just paused, not lost - waits for them rather than giving up
 
-    const newTileId = stepToward(current.tileId, target.position, ANOMALY_HUNT_SPEED);
+    const speed = current.anomalyId === 'theOldMan' ? OLD_MAN_MAIN_BOARD_SPEED : ANOMALY_HUNT_SPEED;
+    const newTileId = stepToward(current.tileId, target.position, speed);
+    if (newTileId !== target.position) {
+      next = updateAnomaly(next, current.anomalyId, { tileId: newTileId });
+      continue;
+    }
+    // Caught. SCP-106 doesn't resolve like every other anomaly - catching
+    // someone on the main board isn't itself a loss, it drags them into
+    // the Pocket Dimension instead (see dragIntoPocketDimension).
     next =
-      newTileId === target.position
-        ? resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId)
-        : updateAnomaly(next, current.anomalyId, { tileId: newTileId });
+      current.anomalyId === 'theOldMan'
+        ? dragIntoPocketDimension(next, current.targetPlayerId, rng)
+        : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId);
   }
   return next;
 }
@@ -1136,9 +1174,102 @@ function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string): Ga
     : updateAnomaly(state, 'theSculpture', { tileId: newTileId });
 }
 
-/** A player "viewing" a dormant anomaly - hovering its tile. Shy Guy's own interaction (the first to do so becomes its target and it starts hunting them); no-op for any other anomaly, including SCP-173 (see keepWatchOnSculpture for its actual interaction). Also a no-op if it's already hunting someone, isn't loose at all, or the viewer is Rogue Anomaly ("Uncontained": fellow anomalies don't see it as prey). */
+// --- SCP-106's Pocket Dimension --------------------------------------------
+//
+// Entirely its own thing, distinct from every other anomaly's catch
+// effect: catching someone on the main board isn't a loss for them at
+// all, just the start of a much more dangerous ordeal on a separate
+// 9-tile track (see PocketDimensionOrdeal in types/game.ts). Only
+// failing inside it - an unaffordable Decaying Passage, or SCP-106
+// physically reaching their tile in there - actually costs them
+// anything, via the exact same resolvePlayerCaughtByAnomaly pipeline
+// every other catch uses.
+
+/** Tile 0 is always neutral (the drag-in point); the rest are freshly reshuffled every time - 2 Fracture Points, 3 Decaying Passages, 3 neutral, in random order. */
+function generatePocketDimensionTrack(rng: () => number): PocketDimensionTile[] {
+  const rest: PocketDimensionTile[] = ['fracturePoint', 'fracturePoint', 'decayingPassage', 'decayingPassage', 'decayingPassage', 'neutral', 'neutral', 'neutral'];
+  return ['neutral', ...shuffle(rest, rng)];
+}
+
+/** SCP-106 catching someone on the main board: both of them move into a freshly generated Pocket Dimension. The anomaly itself is marked 'inPocketDimension' - off the main board entirely (no marker, unreachable by Purge) until the ordeal resolves one way or another. */
+function dragIntoPocketDimension(state: GameState, playerId: string, rng: () => number): GameState {
+  const track = generatePocketDimensionTrack(rng);
+  const next: GameState = {
+    ...updateAnomaly(state, 'theOldMan', { status: 'inPocketDimension', targetPlayerId: null }),
+    pocketDimensionOrdeal: { trappedPlayerId: playerId, track, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+  };
+  return logEvent(next, 'SCP-106 caught up with someone and dragged them into its Pocket Dimension.');
+}
+
+/** Landing on a Fracture Point: back to the main board, unharmed, right where they were caught (their position was never touched while trapped). SCP-106 is recontained the instant the ordeal ends, regardless of how. */
+function escapePocketDimension(state: GameState): GameState {
+  const next: GameState = {
+    ...state,
+    looseAnomalies: state.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan'),
+    pocketDimensionOrdeal: null,
+  };
+  return logEvent(next, 'Escaped the Pocket Dimension through a Fracture Point - SCP-106 recontained.');
+}
+
+/** Failing inside the Pocket Dimension - an unaffordable Decaying Passage, or SCP-106 reaching their tile. Same consequence as any other anomaly's catch (resolvePlayerCaughtByAnomaly), and SCP-106 is recontained either way, same as an escape. */
+function terminateInsidePocketDimension(state: GameState, trappedPlayerId: string): GameState {
+  const next = resolvePlayerCaughtByAnomaly(state, 'theOldMan', trappedPlayerId);
+  return {
+    ...next,
+    looseAnomalies: next.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan'),
+    pocketDimensionOrdeal: null,
+  };
+}
+
+/**
+ * The trapped player's own turn, replacing their usual roll-and-move
+ * on the main board entirely: rolls one die to advance along the
+ * Pocket Dimension track (capped at its far end, no wraparound - it's
+ * a dead end, not a loop), resolves whatever tile they land on, then -
+ * if the ordeal is still going - SCP-106 creeps one tile closer. If
+ * that closes the gap all the way, that's a catch, same as reaching an
+ * unaffordable Decaying Passage. Ends the turn itself, same as
+ * keepWatchOnSculpture, since there's nothing else to resolve this
+ * turn either way.
+ */
+export function movePocketDimension(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
+  if (state.pendingDecision || state.winnerId) return state;
+  if (currentPlayerId(state) !== playerId) return state;
+  const ordeal = state.pocketDimensionOrdeal;
+  if (!ordeal || ordeal.trappedPlayerId !== playerId) return state;
+
+  const roll = Math.floor(rng() * 6) + 1;
+  const newPlayerPos = Math.min(ordeal.playerTrackPosition + roll, POCKET_DIMENSION_LENGTH - 1);
+  let next = logEvent(
+    { ...state, pocketDimensionOrdeal: { ...ordeal, playerTrackPosition: newPlayerPos } },
+    `Rolled a ${roll} in the Pocket Dimension.`,
+  );
+
+  const landedTile = ordeal.track[newPlayerPos];
+  if (landedTile === 'fracturePoint') {
+    next = escapePocketDimension(next);
+  } else if (landedTile === 'decayingPassage') {
+    next =
+      next.players[playerId].credits < DECAYING_PASSAGE_COST
+        ? terminateInsidePocketDimension(next, playerId)
+        : chargePlayer(next, playerId, DECAYING_PASSAGE_COST, null);
+  }
+
+  const stillTrapped = next.pocketDimensionOrdeal;
+  if (stillTrapped) {
+    const newAnomalyPos = stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED;
+    next =
+      newAnomalyPos >= stillTrapped.playerTrackPosition
+        ? terminateInsidePocketDimension(next, playerId)
+        : { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
+  }
+
+  return endTurn(next, rng);
+}
+
+/** A player "viewing" a dormant anomaly - hovering its tile. Shy Guy's and SCP-106's shared interaction (the first to do so becomes its target and it starts hunting them); no-op for SCP-173, which has its own interaction instead (see keepWatchOnSculpture). Also a no-op if it's already hunting someone, isn't loose at all, or the viewer is Rogue Anomaly ("Uncontained": fellow anomalies don't see it as prey). */
 export function viewAnomaly(state: GameState, playerId: string, anomalyId: string): GameState {
-  if (anomalyId !== 'shyGuy') return state; // SCP-173's own interaction is keepWatchOnSculpture, not hovering
+  if (anomalyId === 'theSculpture') return state; // SCP-173's own interaction is keepWatchOnSculpture, not hovering
   const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId);
   if (!anomaly || anomaly.status !== 'dormant') return state;
   if (pieceOf(state, playerId) === 'trex') return state;
@@ -1156,13 +1287,17 @@ export function chooseNewPersonnel(state: GameState, playerId: string, pieceId: 
   return logEvent(next, `Reassigned as ${STARTING_PIECES.find((p) => p.id === pieceId)?.name ?? pieceId}.`);
 }
 
-/** The Site Warhead's owner spending Credits to instantly recontain every currently loose anomaly. No-op (not even a charge) if nothing's loose, they don't own it, or they can't afford it - this is a voluntary action, not a forced payment, so it never opens a debtSettlement. */
+/** The Site Warhead's owner spending Credits to instantly recontain every currently reachable loose anomaly. SCP-106 is the one exception - while it's off in its own Pocket Dimension mid-chase (see pocketDimensionOrdeal), the Warhead can't reach it at all. No-op (not even a charge) if nothing reachable is loose, they don't own it, or they can't afford it - this is a voluntary action, not a forced payment, so it never opens a debtSettlement. */
 export function purgeAnomalies(state: GameState, playerId: string): GameState {
-  if (state.looseAnomalies.length === 0) return state;
+  const reachable = state.pocketDimensionOrdeal
+    ? state.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan')
+    : state.looseAnomalies;
+  if (reachable.length === 0) return state;
   if (findOwner(state, SITE_WARHEAD_TILE_ID) !== playerId) return state;
   if (!canAfford(state, playerId, SITE_WARHEAD_PURGE_COST)) return state;
   const next = chargePlayer(state, playerId, SITE_WARHEAD_PURGE_COST, null);
-  return logEvent({ ...next, looseAnomalies: [] }, 'Site Warhead activated - every loose anomaly has been recontained.');
+  const remaining = state.pocketDimensionOrdeal ? next.looseAnomalies.filter((a) => a.anomalyId === 'theOldMan') : [];
+  return logEvent({ ...next, looseAnomalies: remaining }, 'Site Warhead activated - every reachable loose anomaly has been recontained.');
 }
 
 /** Rogue Anomaly's Special Power ("Induce a Breach"): forces a containment breach on demand instead of waiting on the random per-turn chance, picking a random not-yet-loose anomaly type exactly like a natural breach would. Once per game. No-op if it's not this player's power, they've already used it, or every anomaly type is already loose (nothing left to induce). */
@@ -1278,7 +1413,7 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // move check, rather than potentially catching someone the instant
   // it's revealed.
   if (sculptureBefore) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId);
-  afterAnomalies = advanceHuntingAnomalies(afterAnomalies);
+  afterAnomalies = advanceHuntingAnomalies(afterAnomalies, rng);
   // scp173Watched can be set by anyone's Keep Watch during the round (see
   // keepWatchOnSculpture) - everyone's a potential target, so everyone
   // shares the job of watching it. It only actually gets read/consumed on
@@ -1352,6 +1487,11 @@ export function devJumpToTile(state: GameState, playerId: string, tileId: number
 export function devKickPlayer(state: GameState, playerId: string): GameState {
   let next: GameState = seizeAssets(state, playerId, null);
   next = updatePlayer(next, playerId, { credits: 0, isSpectating: true, ownedTileIds: [], heldCardIds: [] });
+  if (next.pocketDimensionOrdeal?.trappedPlayerId === playerId) {
+    // Otherwise SCP-106 stays 'inPocketDimension' forever with nobody able
+    // to ever take the trapped player's turn again - a permanent softlock.
+    next = { ...next, looseAnomalies: next.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan'), pocketDimensionOrdeal: null };
+  }
   return checkWinCondition(logEvent(next, 'Kicked by the host.'));
 }
 
@@ -1382,5 +1522,9 @@ export function devSpawnAnomaly(state: GameState, anomalyId: string): GameState 
 /** Instantly recontains every loose anomaly, free of charge and regardless of who owns the Site Warhead - a rescue tool, not the real purgeAnomalies. */
 export function devRecontainAllAnomalies(state: GameState): GameState {
   if (state.looseAnomalies.length === 0) return state;
-  return logEvent({ ...state, looseAnomalies: [] }, '[DEV] Recontained every loose anomaly.');
+  // Also frees anyone currently trapped in SCP-106's Pocket Dimension -
+  // otherwise looseAnomalies no longer has theOldMan in it at all, but
+  // pocketDimensionOrdeal would still be set, soft-locking their turn
+  // into a Pocket Dimension UI for an anomaly that's no longer loose.
+  return logEvent({ ...state, looseAnomalies: [], pocketDimensionOrdeal: null }, '[DEV] Recontained every loose anomaly.');
 }

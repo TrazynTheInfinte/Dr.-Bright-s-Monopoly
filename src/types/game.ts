@@ -253,6 +253,8 @@ export interface GameState {
   activeTrades: TradeOffer[];
   /** True if a player used the Keep Watch action on SCP-173 this turn - freezes it for the next end-of-turn tick, then always clears back to false regardless of whether it was set. Only meaningful while SCP-173 is loose. */
   scp173Watched: boolean;
+  /** Set while SCP-106 is off chasing someone it already caught on the main board - see movePocketDimension in game/engine.ts. Null whenever nobody's trapped, whether SCP-106 has never breached, is still loose-but-dormant/hunting on the main board, or the ordeal already ended (escape or Termination both recontain it). */
+  pocketDimensionOrdeal: PocketDimensionOrdeal | null;
 }
 
 /** A proposed trade between two players - Wings/Tunnels/utilities and/or Credits, either direction. Neither side's tileIds may have houses on them (must be sold first). Not resolved until the recipient (toPlayerId) accepts or declines, or the proposer (fromPlayerId) withdraws it. */
@@ -275,11 +277,22 @@ export interface TradeOffer {
 export interface LooseAnomaly {
   anomalyId: string;
   tileId: number;
-  /** Dormant anomalies (Shy Guy's default state) do nothing until viewed - see viewAnomaly in game/engine.ts. Hunting ones move toward targetPlayerId every turn. */
-  status: 'dormant' | 'hunting';
+  /** Dormant anomalies (Shy Guy's and SCP-106's default state) do nothing until viewed - see viewAnomaly in game/engine.ts. Hunting ones move toward targetPlayerId every turn. 'inPocketDimension' is SCP-106 only, set while it's off chasing someone it already caught - see GameState.pocketDimensionOrdeal. */
+  status: 'dormant' | 'hunting' | 'inPocketDimension';
   targetPlayerId: string | null;
   /** GameState.turnCount at the moment this breach happened. While dormant, the UI only shows its marker during this exact turn - after that it's still there (and still reacts to being viewed), just with no visible warning, so a table that doesn't track it can genuinely forget. Hunting anomalies are always shown regardless, since by then it's chasing someone in plain sight. Not used at all for SCP-173, which is never concealed - see spawnedOnPlayerId. */
   breachedOnTurnCount: number;
   /** Whoever's turn it was when this anomaly breached. Only meaningful for SCP-173: its unwatched move only resolves once per round, specifically when it becomes this same player's turn again - see advanceUnwatchedSculpture in game/engine.ts. Optional since no other anomaly reads it. */
   spawnedOnPlayerId?: string;
+}
+
+/** One tile of SCP-106's Pocket Dimension track - see game/engine.ts for what each does (a Fracture Point escapes, a Decaying Passage costs Credits). Tile 0 is always 'neutral' (the drag-in point); the rest are reshuffled fresh every time someone's dragged in. */
+export type PocketDimensionTile = 'neutral' | 'fracturePoint' | 'decayingPassage';
+
+/** SCP-106's Pocket Dimension: the trapped player and SCP-106 both have a position on this same track. The player advances it on their own turns (see movePocketDimension); SCP-106 creeps 1 tile closer right after, every time. Ends via escape (a Fracture Point) or Termination (an unaffordable Decaying Passage, or SCP-106 reaching the player's tile) - either way, see GameState.pocketDimensionOrdeal for what "ended" means. */
+export interface PocketDimensionOrdeal {
+  trappedPlayerId: string;
+  track: PocketDimensionTile[];
+  playerTrackPosition: number;
+  anomalyTrackPosition: number;
 }

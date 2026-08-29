@@ -12,6 +12,7 @@ import {
   induceBreachAndSync,
   keepWatchOnSculptureAndSync,
   mortgageTileAndSync,
+  movePocketDimensionAndSync,
   payEscapeFeeAndSync,
   purgeAnomaliesAndSync,
   rejoinFromAfkAndSync,
@@ -288,7 +289,17 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             </div>
           )}
 
-          {isMyTurn && !game.pendingDecision && (
+          {isMyTurn && !game.pendingDecision && game.pocketDimensionOrdeal?.trappedPlayerId === playerId && (
+            <div className="actions">
+              <p className="hint">
+                Trapped in SCP-106's Pocket Dimension - currently at tile {game.pocketDimensionOrdeal.playerTrackPosition} of{' '}
+                {game.pocketDimensionOrdeal.track.length - 1}, with SCP-106 at tile {game.pocketDimensionOrdeal.anomalyTrackPosition}.
+              </p>
+              <button onClick={() => movePocketDimensionAndSync(roomCode, game, playerId)}>Move</button>
+            </div>
+          )}
+
+          {isMyTurn && !game.pendingDecision && game.pocketDimensionOrdeal?.trappedPlayerId !== playerId && (
             <div className="actions">
               {/* Roll is only available before this turn's first roll, or
                   again after doubles ("if you get a double, you get to roll
@@ -471,23 +482,44 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
           <RubberDuckEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
           <MtfEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
 
+          {game.pocketDimensionOrdeal && (
+            <div className="purchase-prompt card-prompt">
+              <p>
+                {room.players[game.pocketDimensionOrdeal.trappedPlayerId]?.name ?? 'Someone'} is trapped in SCP-106's Pocket
+                Dimension (tile {game.pocketDimensionOrdeal.playerTrackPosition} of {game.pocketDimensionOrdeal.track.length - 1},
+                SCP-106 at tile {game.pocketDimensionOrdeal.anomalyTrackPosition}) - out of the Site Warhead's reach until the
+                ordeal ends.
+              </p>
+            </div>
+          )}
+
           {game.pendingPieceChoice?.playerId === playerId && (
             <ActionModal>
               <PersonnelChoicePrompt playerId={playerId} roomCode={roomCode} game={game} />
             </ActionModal>
           )}
 
-          {game.looseAnomalies.length > 0 && me?.ownedTileIds.includes(12) && (
-            <div className="purchase-prompt card-prompt">
-              <p>
-                {game.looseAnomalies.length} anomal{game.looseAnomalies.length === 1 ? 'y' : 'ies'} currently
-                loose. As the Site Warhead's owner, you can recontain everything for 500 Credits.
-              </p>
-              <button onClick={() => purgeAnomaliesAndSync(roomCode, game, playerId)} disabled={me.credits < 500}>
-                Activate Site Warhead
-              </button>
-            </div>
-          )}
+          {(() => {
+            // SCP-106 can't be reached by the Warhead while it's off in its
+            // own Pocket Dimension mid-chase - matches purgeAnomalies.
+            const reachableCount = game.pocketDimensionOrdeal
+              ? game.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan').length
+              : game.looseAnomalies.length;
+            return (
+              reachableCount > 0 &&
+              me?.ownedTileIds.includes(12) && (
+                <div className="purchase-prompt card-prompt">
+                  <p>
+                    {reachableCount} anomal{reachableCount === 1 ? 'y' : 'ies'} currently loose and reachable. As the Site
+                    Warhead's owner, you can recontain {reachableCount === 1 ? 'it' : 'them'} for 500 Credits.
+                  </p>
+                  <button onClick={() => purgeAnomaliesAndSync(roomCode, game, playerId)} disabled={me.credits < 500}>
+                    Activate Site Warhead
+                  </button>
+                </div>
+              )
+            );
+          })()}
 
           {me?.pieceId === 'trex' && !me.usedInduceBreach && game.looseAnomalies.length < ANOMALIES.length && (
             <div className="purchase-prompt card-prompt">

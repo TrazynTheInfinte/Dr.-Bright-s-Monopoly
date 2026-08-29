@@ -31,6 +31,7 @@ import {
   induceBreach,
   keepWatchOnSculpture,
   mortgageProperty,
+  movePocketDimension,
   payEscapeFee,
   proposeTrade,
   purgeAnomalies,
@@ -258,6 +259,10 @@ export async function induceBreachAndSync(roomCode: string, game: GameState, pla
 
 export async function keepWatchOnSculptureAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, keepWatchOnSculpture(game, playerId));
+}
+
+export async function movePocketDimensionAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, movePocketDimension(game, playerId));
 }
 
 export async function devSpawnAnomalyAndSync(roomCode: string, game: GameState, anomalyId: string) {

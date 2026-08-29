@@ -305,10 +305,16 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
         const houses = game.houses[tile.id] ?? 0;
         const mortgaged = game.mortgagedTileIds.includes(tile.id);
         const occupants = game.turnOrder.filter(
-          (id) => !game.players[id].isSpectating && game.players[id].position === tile.id,
+          (id) =>
+            !game.players[id].isSpectating &&
+            game.players[id].position === tile.id &&
+            game.pocketDimensionOrdeal?.trappedPlayerId !== id,
         );
         const flashKind = flashKindByTileId.get(tile.id);
-        const anomaliesHere = game.looseAnomalies.filter((a) => a.tileId === tile.id);
+        // Excludes 'inPocketDimension' outright - SCP-106 off in its own
+        // Pocket Dimension has no meaningful position on this board at all,
+        // regardless of whatever stale tileId it was last at.
+        const anomaliesHere = game.looseAnomalies.filter((a) => a.tileId === tile.id && a.status !== 'inPocketDimension');
         const dormantAnomalyHere = anomaliesHere.find((a) => a.status === 'dormant');
 
         return (

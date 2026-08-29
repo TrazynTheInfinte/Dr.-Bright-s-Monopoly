@@ -1,4 +1,4 @@
-export type AnomalyId = 'shyGuy' | 'theSculpture';
+export type AnomalyId = 'shyGuy' | 'theSculpture' | 'theOldMan';
 
 export interface AnomalyDefinition {
   id: AnomalyId;
@@ -27,6 +27,13 @@ export const ANOMALIES: AnomalyDefinition[] = [
     spawnTileId: 18, // Testing Chamber 12
     flavorText:
       "Motionless under observation - the instant every eye and camera looks away, it moves faster than anything should be able to. Whoever's nearest when the room goes unwatched won't see it coming - unless they're far enough away to actually outrun it.",
+  },
+  {
+    id: 'theOldMan',
+    name: 'SCP-106 "The Old Man"',
+    spawnTileId: 34, // Containment Wing A
+    flavorText:
+      "Corrodes anything it touches and phases through solid matter at will. Slow and patient on its own, but the instant it catches up to someone, it drags them both through into its own Pocket Dimension - and it's an entirely different fight to survive in there.",
   },
 ];
 

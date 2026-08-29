@@ -104,15 +104,27 @@ SCP-096's state once someone views it: it locks onto that one player and steadil
 _Avoid_: chasing, aggro
 
 **Caught**:
-A player a Hostile Anomaly has reached. Every asset returns to the Foundation exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply.
+A player a Hostile Anomaly has reached. Every asset returns to the Foundation exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply. The one exception is SCP-106: being caught by it on the main board isn't itself a loss - it drags the player into the Pocket Dimension instead. Only failing inside the Pocket Dimension actually triggers this.
 _Avoid_: killed, eaten
+
+**Pocket Dimension**:
+SCP-106's own Hostile Anomaly mechanic: a separate 9-tile track that the player it caught, and SCP-106 itself, both enter together. The player advances along it each of their own turns instead of acting on the main board; SCP-106 creeps after them a little each time. Landing on a Fracture Point escapes back to the main board; running out of Credits on a Decaying Passage, or SCP-106 actually reaching the player's tile, both Get the player Caught for real. Either way the ordeal ending recontains SCP-106. Its tile order (past the fixed neutral entry tile) is reshuffled fresh every time someone's dragged in.
+_Avoid_: sub-board, mini-game, side-board
+
+**Fracture Point**:
+A Pocket Dimension tile - landing on one instantly and freely returns the trapped player to the main board.
+_Avoid_: exit tile, escape hatch
+
+**Decaying Passage**:
+A Pocket Dimension tile - landing on one costs the trapped player Credits, paid to the Foundation like any other fee. Enough of them (or one landed on that they can't afford) is what actually gets a player Caught inside the Pocket Dimension.
+_Avoid_: damage tile, trap tile
 
 **Keep Watch**:
 SCP-173's own defense against being caught: it only ever moves once per round, on whichever player's turn it happened to breach on. Since everyone's a potential target, any player may spend their own turn during the round watching it instead of acting normally, freezing it for that round. If nobody keeps watch, it closes in hard on whoever's nearest — fast enough to often catch them outright, though someone far enough away can outrun it.
 _Avoid_: guard, observe
 
 **Purge**:
-The Site Warhead's owner spending a large sum to instantly recontain every currently loose Hostile Anomaly at once.
+The Site Warhead's owner spending a large sum to instantly recontain every currently loose Hostile Anomaly at once. Can't reach SCP-106 while it's inside its own Pocket Dimension mid-chase - only anomalies actually out on the main board.
 _Avoid_: nuke (as a verb), detonate
 
 ### Multiplayer
