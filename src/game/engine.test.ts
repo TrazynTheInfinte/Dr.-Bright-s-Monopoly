@@ -1050,12 +1050,22 @@ describe('hostile anomalies', () => {
     expect(game.looseAnomalies[0].targetPlayerId).toBe('p1');
   });
 
-  it('a hunting anomaly steps toward its target, the shorter way around the board', () => {
+  it('a hunting anomaly steps toward its target, clockwise, capped at its hunt speed', () => {
     let game = makeGame();
     game = withPlayer(game, 'p2', { position: 10 });
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.looseAnomalies[0].tileId).toBe(6); // 0 -> 10 clockwise, capped at 6 spaces
+  });
+
+  it('a hunting anomaly always moves clockwise, even when that is the longer way around', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    // Counter-clockwise (10 -> 0) is only 10 spaces away, but anomalies never move backward - they
+    // step clockwise like every player token, so it heads the long way around instead.
+    expect(game.looseAnomalies[0].tileId).toBe(16); // 10 -> 0 clockwise (30 spaces), capped at 6
   });
 
   it('pauses (does not give up) while its target is only AFK-benched', () => {

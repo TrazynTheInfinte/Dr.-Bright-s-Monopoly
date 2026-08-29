@@ -999,14 +999,11 @@ function maybeBreachContainment(state: GameState, rng: () => number): GameState 
   );
 }
 
-/** Moves `from` toward `to` by at most `maxSteps`, going whichever way around the board (clockwise or counter-clockwise) is actually shorter. */
+/** Moves `from` toward `to` by at most `maxSteps`, always clockwise - the same direction every player token moves in. */
 function stepToward(from: number, to: number, maxSteps: number): number {
   const clockwiseDistance = (to - from + BOARD_SIZE) % BOARD_SIZE;
   if (clockwiseDistance === 0) return from;
-  const counterDistance = BOARD_SIZE - clockwiseDistance;
-  return clockwiseDistance <= counterDistance
-    ? (from + Math.min(clockwiseDistance, maxSteps)) % BOARD_SIZE
-    : (from - Math.min(counterDistance, maxSteps) + BOARD_SIZE) % BOARD_SIZE;
+  return (from + Math.min(clockwiseDistance, maxSteps)) % BOARD_SIZE;
 }
 
 function availablePersonnelIds(state: GameState): PieceId[] {
