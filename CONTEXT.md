@@ -83,7 +83,37 @@ One of the selectable tokens a player plays as (the old "Piece"). Each has a Tit
 _Avoid_: Piece, token, character, avatar, mascot
 
 **Title**:
-The in-fiction role name for a Personnel (e.g. "D-Class Personnel", "Field Researcher", "MTF Operative", "Site Director"). The full 12-Personnel roster is named in `data/pieces.ts`; two (Janitor, Containment Specialist) have no Special Power yet — see that file's comments.
+The in-fiction role name for a Personnel (e.g. "D-Class Personnel", "Field Researcher", "MTF Operative", "Site Director"). The full 12-Personnel roster, each with two Special Powers, is named in `data/pieces.ts`.
+
+### Hostile Anomalies
+
+**Hostile Anomaly**:
+An SCP that can breach containment and menace players directly once loose on the board, distinct from ordinary Wings and cards. Currently SCP-096 ("The Shy Guy") and SCP-173 ("The Sculpture") — each with its own bespoke behavior, not a shared "monster AI."
+_Avoid_: monster, enemy, creature
+
+**Containment Breach**:
+The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously.
+_Avoid_: spawn, escape
+
+**Dormant**:
+A loose Hostile Anomaly's default, non-threatening state. SCP-096 stays dormant until someone views it; SCP-173 stays dormant — and safe — for as long as someone keeps watch on it, and never leaves this state the way SCP-096 does.
+_Avoid_: idle, sleeping
+
+**Hunting**:
+SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-173 has no equivalent locked-on state — see Keep Watch.
+_Avoid_: chasing, aggro
+
+**Caught**:
+A player a Hostile Anomaly has reached. Every asset returns to the Foundation exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply.
+_Avoid_: killed, eaten
+
+**Keep Watch**:
+SCP-173's own defense against being caught: a player may spend their entire turn watching it instead of acting normally, freezing it in place for that turn. If nobody keeps watch, it closes in hard on whoever's nearest — fast enough to often catch them outright, though someone far enough away can outrun it.
+_Avoid_: guard, observe
+
+**Purge**:
+The Site Warhead's owner spending a large sum to instantly recontain every currently loose Hostile Anomaly at once.
+_Avoid_: nuke (as a verb), detonate
 
 ### Multiplayer
 

@@ -251,6 +251,8 @@ export interface GameState {
   pendingPieceChoice: { playerId: string; availablePieceIds: PieceId[] } | null;
   /** Pending player-to-player trade proposals - independent of pendingDecision, since trading isn't turn-gated and shouldn't block or be blocked by whatever else is pending. See proposeTrade/acceptTrade/declineTrade/withdrawTrade. */
   activeTrades: TradeOffer[];
+  /** True if a player used the Keep Watch action on SCP-173 this turn - freezes it for the next end-of-turn tick, then always clears back to false regardless of whether it was set. Only meaningful while SCP-173 is loose. */
+  scp173Watched: boolean;
 }
 
 /** A proposed trade between two players - Wings/Tunnels/utilities and/or Credits, either direction. Neither side's tileIds may have houses on them (must be sold first). Not resolved until the recipient (toPlayerId) accepts or declines, or the proposer (fromPlayerId) withdraws it. */

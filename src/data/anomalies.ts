@@ -1,4 +1,4 @@
-export type AnomalyId = 'shyGuy';
+export type AnomalyId = 'shyGuy' | 'theSculpture';
 
 export interface AnomalyDefinition {
   id: AnomalyId;
@@ -20,6 +20,13 @@ export const ANOMALIES: AnomalyDefinition[] = [
     spawnTileId: 31, // Heavy Containment Zone
     flavorText:
       'Docile and immobile as long as no one looks at it. The instant someone views its face, it starts hunting them down - nothing on the board is fast enough to outrun it for long.',
+  },
+  {
+    id: 'theSculpture',
+    name: 'SCP-173 "The Sculpture"',
+    spawnTileId: 18, // Testing Chamber 12
+    flavorText:
+      "Motionless under observation - the instant every eye and camera looks away, it moves faster than anything should be able to. Whoever's nearest when the room goes unwatched won't see it coming - unless they're far enough away to actually outrun it.",
   },
 ];
 

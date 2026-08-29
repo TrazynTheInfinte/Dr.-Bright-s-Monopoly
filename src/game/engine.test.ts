@@ -26,6 +26,7 @@ import {
   drawFromPile,
   endTurn,
   induceBreach,
+  keepWatchOnSculpture,
   mortgageProperty,
   payEscapeFee,
   proposeTrade,
@@ -1068,9 +1069,12 @@ describe('hostile anomalies', () => {
 
   it("doesn't spawn a second copy of an anomaly that's already loose", () => {
     let game = makeGame();
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
-    game = endTurn(game, () => 0);
-    expect(game.looseAnomalies).toHaveLength(1);
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+      { anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+    ]);
+    game = endTurn(game, () => 0); // every anomaly type is already loose - nothing left to spawn
+    expect(game.looseAnomalies).toHaveLength(2);
     expect(game.looseAnomalies[0].tileId).toBe(5); // unchanged, not respawned at 31
   });
 
@@ -1250,10 +1254,87 @@ describe('hostile anomalies', () => {
 
   it('does nothing if every anomaly type is already loose', () => {
     let game = makeGame(['trex', 'car']);
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+      { anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+    ]);
     const before = game;
     game = induceBreach(game, 'p1', () => 0);
     expect(game).toEqual(before);
     expect(game.players.p1.usedInduceBreach).toBe(false);
+  });
+
+  it('Induce a Breach can spawn SCP-173 specifically', () => {
+    let game = makeGame(['trex', 'car']);
+    game = induceBreach(game, 'p1', () => 0.99); // 2nd candidate in ANOMALIES
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+  });
+
+  it('hovering (viewAnomaly) does nothing for SCP-173 - its own interaction is Keep Watch', () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = viewAnomaly(game, 'p1', 'theSculpture');
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+  });
+
+  it('SCP-173 catches whoever is nearest if nobody kept watch and they were close enough', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 20 }); // out of the running - p2 is the nearest one
+    game = withPlayer(game, 'p2', { position: 10 }); // exactly SCULPTURE_UNWATCHED_SPEED away
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(10);
+    expect(game.pendingPieceChoice?.playerId).toBe('p2'); // caught -> asset seizure, same as Shy Guy's catch
+  });
+
+  it('SCP-173 can be outrun if the nearest player is far enough away', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 39 }); // out of the running - p2 is the nearest one
+    game = withPlayer(game, 'p2', { position: 15 }); // further than SCULPTURE_UNWATCHED_SPEED (10)
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(10); // closed the gap, but didn't reach them
+    expect(game.players.p2.isSpectating).toBe(false);
+  });
+
+  it('SCP-173 never targets Rogue Anomaly, even if closer than every other player', () => {
+    let game = makeGame(['trex', 'dog']);
+    game = withPlayer(game, 'p1', { position: 1 }); // Rogue Anomaly, right next to it
+    game = withPlayer(game, 'p2', { position: 10 }); // dog, further away but the only valid candidate
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(10); // went for p2, not the much-closer p1
+  });
+
+  it('SCP-173 skips an AFK-benched player as a candidate', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { isAfkSpectating: true, position: 1 });
+    game = withPlayer(game, 'p2', { position: 20 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(10); // capped step toward p2 (distance 20), not p1
+  });
+
+  it('Keep Watch freezes SCP-173 for that tick instead of letting it move', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 5 }); // would otherwise be caught outright
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = keepWatchOnSculpture(game, 'p1', NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(0); // didn't move at all
+    expect(game.currentTurnIndex).toBe(1); // the turn still ended
+    expect(game.scp173Watched).toBe(false); // cleared again after being used for the tick
+  });
+
+  it('refuses Keep Watch outside the pre-roll window, off-turn, in jail, or with nothing loose to watch', () => {
+    let game = makeGame();
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+
+    expect(keepWatchOnSculpture(game, 'p2')).toEqual(game); // not their turn
+    expect(keepWatchOnSculpture({ ...game, lastRoll: [3, 4] }, 'p1')).toEqual({ ...game, lastRoll: [3, 4] }); // already rolled
+    const jailed = withPlayer(game, 'p1', { inJail: true });
+    expect(keepWatchOnSculpture(jailed, 'p1')).toEqual(jailed); // resolve jail normally first
+
+    const nothingLoose = withLooseAnomalies(game, []);
+    expect(keepWatchOnSculpture(nothingLoose, 'p1')).toEqual(nothingLoose);
   });
 });

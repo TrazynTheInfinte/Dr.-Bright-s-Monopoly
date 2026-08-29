@@ -29,6 +29,7 @@ import {
   drawFromPile,
   endTurn,
   induceBreach,
+  keepWatchOnSculpture,
   mortgageProperty,
   payEscapeFee,
   proposeTrade,
@@ -253,6 +254,10 @@ export async function purgeAnomaliesAndSync(roomCode: string, game: GameState, p
 
 export async function induceBreachAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, induceBreach(game, playerId));
+}
+
+export async function keepWatchOnSculptureAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, keepWatchOnSculpture(game, playerId));
 }
 
 export async function devSpawnAnomalyAndSync(roomCode: string, game: GameState, anomalyId: string) {

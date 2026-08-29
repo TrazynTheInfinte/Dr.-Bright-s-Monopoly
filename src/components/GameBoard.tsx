@@ -10,6 +10,7 @@ import {
   declinePurchaseAndSync,
   endTurnAndSync,
   induceBreachAndSync,
+  keepWatchOnSculptureAndSync,
   mortgageTileAndSync,
   payEscapeFeeAndSync,
   purgeAnomaliesAndSync,
@@ -297,6 +298,16 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
               {(!game.lastRoll || game.lastRollWasDoubles) && (
                 <button onClick={handleRoll} disabled={isRolling}>
                   {isRolling ? 'Rolling...' : 'Roll Dice'}
+                </button>
+              )}
+              {/* Keep Watch is only available in that same pre-roll window,
+                  and only while SCP-173 is actually loose and this player
+                  isn't in the Containment Chamber (resolve that normally
+                  first). Choosing it skips rolling entirely and ends the
+                  turn on the spot. */}
+              {!game.lastRoll && !me?.inJail && game.looseAnomalies.some((a) => a.anomalyId === 'theSculpture') && (
+                <button onClick={() => keepWatchOnSculptureAndSync(roomCode, game, playerId)}>
+                  Keep Watch on SCP-173
                 </button>
               )}
               {/* Only before rolling - once they've rolled, resolveJailRoll
