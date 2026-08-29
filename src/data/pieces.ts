@@ -1,15 +1,13 @@
 import type { PieceDefinition } from '../types/game';
 
 // All 12 tokens, reskinned from Comunopoly's communist-themed roster to
-// SCP Foundation personnel types. Originally most Special Powers were
-// kept unchanged from the original Piece, just reworded - being
-// replaced piece by piece with purpose-built SCP-flavored powers as
-// design work continues (see CONTEXT.md's Personnel section for what's
-// changed so far: D-Class, Janitor, MTF Operative, Site Director).
-// Note: Site Director's "Executive Authority" (choose a card from
-// either deck) makes Field Researcher's own power a strict subset of
-// it - not fixed, just worth knowing. Specialist (Penguin) is still
-// powerless.
+// SCP Foundation personnel types. Every power below is purpose-built
+// for this game (not a straight port of the old communist-themed
+// Piece it replaces) - see CONTEXT.md's Personnel section for the
+// vocabulary. Note: Site Director's "Executive Authority" (choose a
+// card from either deck) makes Field Researcher's own power a strict
+// subset of it - not fixed, just worth knowing. Specialist (Penguin)
+// is still powerless, pending a power of its own.
 export const STARTING_PIECES: PieceDefinition[] = [
   {
     id: 'boot',
@@ -23,14 +21,14 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'MTF Operative',
     title: 'Mobile Task Force Operative',
     powerDescription:
-      "Rapid Deployment: Maintenance Tunnels cost half price to requisition, and rent collected on an owned Tunnel is doubled. Show of Force: the first time (per game) another player lands on an owned Wing, may seize one of their other Wings or Tunnels instead of collecting rent.",
+      "Rapid Deployment: trained to move through the tunnel network faster than anyone should legally be allowed to - requisitions Maintenance Tunnels at half price, and collects double toll from anyone who uses one they hold. Show of Force: the first time another player wanders onto a Wing they've secured, can make an example of them instead of billing rent - seizing one of that player's other holdings on the spot.",
   },
   {
     id: 'car',
     name: 'Site Director',
     title: 'Site Director',
     powerDescription:
-      'Executive Authority: can choose a card when landing on either deck. Redirect Without Exposure: once per game, after drawing a card, may hand its effect to another player instead - nothing on record shows it was ordered from the top.',
+      "Executive Authority: sees every incoming report before anyone else does, and pulls whichever card they like off either deck. Redirect Without Exposure: once per game, quietly reroutes a drawn card's consequences onto someone else's desk - the paperwork never shows whose call it really was.",
   },
   {
     id: 'iron',
@@ -43,34 +41,36 @@ export const STARTING_PIECES: PieceDefinition[] = [
     id: 'thimble',
     name: 'Intern',
     title: 'Foundation Intern',
-    powerDescription: 'Only rolls 1 die.',
+    powerDescription: "Still Learning the Ropes: hasn't been cleared to handle both dice unsupervised yet - rolls only 1.",
   },
   {
     id: 'dog',
     name: 'Field Researcher',
     title: 'Field Researcher',
-    powerDescription: 'Can choose a card when landing on a Foundation Directive tile.',
+    powerDescription:
+      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile.",
   },
   {
     id: 'wheelBarrel',
     name: 'Logistics Officer',
     title: 'Logistics & Requisitions Officer',
     powerDescription:
-      'Automatically takes any purple-Sector Wing you land on - free if unowned, seized (no rent) if someone else owns it.',
+      "Requisition Priority: the cheapest Wings on Site fall under Logistics' jurisdiction by default - automatically claims any purple-Sector Wing landed on, free if it's unclaimed, repossessed without payment if someone else already holds it.",
   },
   {
     id: 'hat',
     name: 'Administrator',
     title: 'Site Administrator',
-    powerDescription: 'When you complete a Sector, get a free house.',
+    powerDescription:
+      'Fast-Tracked Permits: completing a Sector under their signature means the paperwork for its first house clears same-day, free of charge.',
   },
   {
     id: 'penguin',
     name: 'Specialist',
     title: 'Containment Specialist',
     // Comunopoly's Penguin was built entirely around Smuggling money to
-    // the West - a house rule this build drops. Powerless until it
-    // gets a real one.
+    // the West - a house rule this build drops. Personnel file still
+    // pending a Special Power of its own.
     powerDescription: null,
   },
   {
@@ -78,20 +78,20 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Spy',
     title: 'Chaos Insurgency Spy',
     powerDescription:
-      'After reading a drawn Anomalous Event/Foundation Directive card, choose to keep it or hand its entire effect to another player instead.',
+      "Plausible Deniability: after reading a drawn card, decides whether to act on it personally or make sure it lands on someone else's file instead.",
   },
   {
     id: 'rubberDuck',
     name: 'Security Officer',
     title: 'Internal Security Officer',
     powerDescription:
-      'Any time your own move lands you on the same square as another player, you can choose to send them to the Containment Chamber.',
+      "Standard Patrol: if their rounds happen to put them on the same square as someone else, can have that person hauled off to the Containment Chamber on the spot.",
   },
   {
     id: 'trex',
     name: 'Rogue Anomaly',
     title: 'Uncontained Anomaly',
     powerDescription:
-      "Can't buy Wings. Landing on one owned by someone else seizes it automatically (no rent paid).",
+      "Uncontained: can't be trusted to file a purchase request through normal channels - anything it steps on that's already claimed gets consumed outright, no rent, no receipt.",
   },
 ];
