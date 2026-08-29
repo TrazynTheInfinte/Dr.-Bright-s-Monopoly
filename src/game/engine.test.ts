@@ -475,6 +475,25 @@ describe("Janitor's Below the Floor Plan", () => {
     expect(game.pendingDecision).toBeNull();
   });
 
+  it('can only be used once per turn', () => {
+    let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p1', { position: 5 });
+    game = useJanitorTunnelTravel(game, 'p1', 15);
+    expect(game.players.p1.position).toBe(15);
+    expect(game.players.p1.usedTunnelTravelThisTurn).toBe(true);
+    game = declinePurchase(game);
+    const before = game;
+    game = useJanitorTunnelTravel(game, 'p1', 25);
+    expect(game).toEqual(before);
+  });
+
+  it('resets the once-per-turn limit once the turn actually ends', () => {
+    let game = makeGame(['iron', 'boot']);
+    game = withPlayer(game, 'p1', { position: 5, usedTunnelTravelThisTurn: true });
+    game = endTurn(game);
+    expect(game.players.p1.usedTunnelTravelThisTurn).toBe(false);
+  });
+
   it("refuses to travel once the player has already rolled this turn", () => {
     let game = makeGame(['iron', 'boot']);
     game = withPlayer(game, 'p1', { position: 5 });

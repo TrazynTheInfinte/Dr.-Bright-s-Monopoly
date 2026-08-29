@@ -60,6 +60,7 @@ export function createInitialGameState(
       isAfkSpectating: false,
       usedExpendabilityClause: false,
       usedMasterKey: false,
+      usedTunnelTravelThisTurn: false,
     };
   }
 
@@ -650,21 +651,24 @@ export function resolveRubberDuckEncounter(state: GameState, sendToJailChoice: b
  * "Below the Floor Plan": from one Maintenance Tunnel, Janitor moves
  * directly to any other one, replacing their roll for the turn - only
  * usable on their own turn, before they've rolled, not while in the
- * Containment Chamber (the tunnels don't help you there), and only
- * when they're currently standing on a Tunnel themselves - the service
+ * Containment Chamber (the tunnels don't help you there), only when
+ * they're currently standing on a Tunnel themselves (the service
  * corridors connect the tunnels to each other, not to the rest of the
- * board. Landing this way still resolves normally (an unowned Tunnel
- * can be bought), it just never charges Janitor rent - see
+ * board), and only once per turn - otherwise nothing stops them
+ * chaining every Tunnel on the board in a single turn for free.
+ * Landing this way still resolves normally (an unowned Tunnel can be
+ * bought), it just never charges Janitor rent - see
  * resolveOwnableLanding.
  */
 export function useJanitorTunnelTravel(state: GameState, playerId: string, targetTileId: number): GameState {
   if (state.pendingDecision || state.winnerId) return state;
   if (currentPlayerId(state) !== playerId || pieceOf(state, playerId) !== 'iron') return state;
-  if (state.players[playerId].inJail || state.lastRoll) return state;
-  if (getTile(state.players[playerId].position).kind !== 'tunnel') return state;
+  const player = state.players[playerId];
+  if (player.inJail || state.lastRoll || player.usedTunnelTravelThisTurn) return state;
+  if (getTile(player.position).kind !== 'tunnel') return state;
   if (getTile(targetTileId).kind !== 'tunnel') return state;
 
-  const next = updatePlayer(state, playerId, { position: targetTileId });
+  const next = updatePlayer(state, playerId, { position: targetTileId, usedTunnelTravelThisTurn: true });
   return resolveLanding(logEvent(next, 'Used the service corridors to reach another Maintenance Tunnel.'), playerId, targetTileId);
 }
 
@@ -872,8 +876,9 @@ export function endTurn(state: GameState): GameState {
     turnCount += 1;
   } while (state.players[state.turnOrder[nextIndex]].isSpectating || state.players[state.turnOrder[nextIndex]].isAfkSpectating);
 
+  const cleared = updatePlayer(state, playerId, { usedTunnelTravelThisTurn: false });
   return {
-    ...state,
+    ...cleared,
     currentTurnIndex: nextIndex,
     lastRoll: null,
     lastRollWasDoubles: false,

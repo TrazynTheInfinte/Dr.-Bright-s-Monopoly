@@ -125,6 +125,8 @@ export interface GamePlayerState {
   usedExpendabilityClause: boolean;
   /** Janitor's Special Power ("Below the Floor Plan"): the master keyring only works once - this flags that it's already been used to skip a Clearance Fee for free. */
   usedMasterKey: boolean;
+  /** Janitor's Special Power: the tunnel-to-tunnel shortcut only works once per turn - cleared by endTurn the moment this player's turn actually ends. */
+  usedTunnelTravelThisTurn: boolean;
 }
 
 /**

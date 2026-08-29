@@ -33,7 +33,7 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Janitor',
     title: 'Janitorial Staff',
     powerDescription:
-      'Below the Floor Plan: knows every service corridor the Foundation never bothered to blueprint. From one Maintenance Tunnel, can move directly to any other one for free, and never pays toll on a Tunnel. Keeps a master keyring from decades of unsupervised access - once per game, walks straight out of the Containment Chamber without paying the Clearance Fee.',
+      'Below the Floor Plan: knows every service corridor the Foundation never bothered to blueprint. Once per turn, from one Maintenance Tunnel, can move directly to any other one for free, and never pays toll on a Tunnel. Keeps a master keyring from decades of unsupervised access - once per game, walks straight out of the Containment Chamber without paying the Clearance Fee.',
   },
   {
     id: 'thimble',
