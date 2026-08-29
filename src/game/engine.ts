@@ -758,7 +758,21 @@ export function buildHouse(state: GameState, playerId: string, tileId: number): 
   if (tile.kind !== 'wing') return state;
   if (findOwner(state, tileId) !== playerId) return state;
   if (state.mortgagedTileIds.some((id) => tileIdsInSector(tile.colorGroup).includes(id))) return state;
-  if (!ownsFullSector(state, playerId, tile.colorGroup)) return state;
+  const ownsFull = ownsFullSector(state, playerId, tile.colorGroup);
+  if (!ownsFull) {
+    // Administrator's "Zoning Authority" - can build without the full
+    // Sector, but the whole Sector's house count is capped at how many
+    // Wings in it they actually own (so a single owned Wing tops out at
+    // 1 house, two Wings at 2, and so on) - never enough to reach a
+    // hotel until the Sector really is complete, at which point normal
+    // rules (and the housesRemaining/hotelsRemaining checks below) apply
+    // in full, same as anyone else.
+    if (pieceOf(state, playerId) !== 'hat') return state;
+    const sectorTileIds = tileIdsInSector(tile.colorGroup);
+    const ownedInSector = sectorTileIds.filter((id) => state.players[playerId].ownedTileIds.includes(id)).length;
+    const totalHousesInSector = sectorTileIds.reduce((sum, id) => sum + (state.houses[id] ?? 0), 0);
+    if (totalHousesInSector >= ownedInSector) return state;
+  }
   const houses = state.houses[tileId] ?? 0;
   if (houses >= 5) return state;
   const isHotel = houses === 4;

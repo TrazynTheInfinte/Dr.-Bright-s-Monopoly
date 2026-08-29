@@ -126,12 +126,20 @@ function HouseControls({ roomCode, playerId, game, tileId }: HouseControlsProps)
   if (tile.kind !== 'wing') return null;
 
   const me = game.players[playerId];
-  const ownsFullSector = BOARD.filter(
-    (t) => t.kind === 'wing' && t.colorGroup === tile.colorGroup,
-  ).every((t) => me.ownedTileIds.includes(t.id));
+  const sectorTileIds = BOARD.filter((t) => t.kind === 'wing' && t.colorGroup === tile.colorGroup).map((t) => t.id);
+  const ownsFullSector = sectorTileIds.every((id) => me.ownedTileIds.includes(id));
+  const isAdministrator = me.pieceId === 'hat';
 
-  if (!ownsFullSector) {
+  if (!ownsFullSector && !isAdministrator) {
     return <p className="hint">Own the whole Sector to build.</p>;
+  }
+
+  // Administrator's "Zoning Authority": on a partial Sector, capped at
+  // one house total per Wing owned there - mirrors buildHouse exactly.
+  const ownedInSector = sectorTileIds.filter((id) => me.ownedTileIds.includes(id)).length;
+  const totalHousesInSector = sectorTileIds.reduce((sum, id) => sum + (game.houses[id] ?? 0), 0);
+  if (!ownsFullSector && isAdministrator && totalHousesInSector >= ownedInSector) {
+    return <p className="hint">Zoning cap reached - own the whole Sector to build further.</p>;
   }
 
   const houses = game.houses[tileId] ?? 0;

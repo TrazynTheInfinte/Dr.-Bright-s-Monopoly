@@ -62,7 +62,7 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Administrator',
     title: 'Site Administrator',
     powerDescription:
-      'Fast-Tracked Permits: completing a Sector under their signature means the paperwork for its first house clears same-day, free of charge.',
+      "Fast-Tracked Permits: completing a Sector under their signature means the paperwork for its first house clears same-day, free of charge. Zoning Authority: doesn't need to own a whole Sector to start building there - a variance is granted for one house per Wing already held (two Wings owned means two houses total across the Sector, and so on), until the Sector's fully theirs, at which point construction proceeds without limit, hotels included.",
   },
   {
     id: 'penguin',

@@ -408,6 +408,46 @@ describe('special powers', () => {
   });
 });
 
+describe("Administrator's Zoning Authority", () => {
+  it('can build on a partial Sector, capped at one house per Wing owned', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [6] }); // lightBlue Sector has 3 Wings: 6, 8, 9
+    game = buildHouse(game, 'p1', 6);
+    expect(game.houses[6]).toBe(1);
+    const before = game;
+    game = buildHouse(game, 'p1', 6); // a 2nd house would exceed the 1-Wing cap
+    expect(game).toEqual(before);
+  });
+
+  it('the cap rises as Administrator owns more Wings in the Sector', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [6, 8] });
+    game = buildHouse(game, 'p1', 6);
+    game = buildHouse(game, 'p1', 8);
+    expect(game.houses[6]).toBe(1);
+    expect(game.houses[8]).toBe(1);
+    const before = game;
+    game = buildHouse(game, 'p1', 6); // a 3rd house total would exceed the 2-Wing cap
+    expect(game).toEqual(before);
+  });
+
+  it('normal building rules (no cap) apply once the Sector is fully owned', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] }); // purple Sector, fully owned
+    game = buildHouse(game, 'p1', 1);
+    game = buildHouse(game, 'p1', 1);
+    expect(game.houses[1]).toBe(2);
+  });
+
+  it("a non-Administrator still can't build without the full Sector", () => {
+    let game = makeGame(['boot', 'hat']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [6] });
+    const before = game;
+    game = buildHouse(game, 'p1', 6);
+    expect(game).toEqual(before);
+  });
+});
+
 describe("MTF Operative's Rapid Deployment and Show of Force", () => {
   it('doubles rent collected on an owned Maintenance Tunnel', () => {
     let game = makeGame(['battleship', 'boot']);
