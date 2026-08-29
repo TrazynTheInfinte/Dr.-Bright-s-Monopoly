@@ -6,9 +6,7 @@ import type { PieceDefinition } from '../types/game';
 // Piece it replaces) - see CONTEXT.md's Personnel section for the
 // vocabulary. Note: Site Director's "Executive Authority" (choose a
 // card from either deck) makes Field Researcher's own power a strict
-// subset of it - not fixed, just worth knowing. Rogue Anomaly (T-Rex)
-// is deliberately left at its original single power for now, pending
-// future mechanics it's meant to interact with.
+// subset of it - not fixed, just worth knowing.
 export const STARTING_PIECES: PieceDefinition[] = [
   {
     id: 'boot',
@@ -91,6 +89,6 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Rogue Anomaly',
     title: 'Uncontained Anomaly',
     powerDescription:
-      "Uncontained: can't be trusted to file a purchase request through normal channels - anything it steps on that's already claimed gets consumed outright, no rent, no receipt.",
+      "Uncontained: can't be trusted to file a purchase request through normal channels - anything it steps on that's already claimed gets consumed outright, no rent, no receipt. Fellow anomalies don't see it as prey: hostile breaches never target it, and any that were already hunting it lose interest the moment it's reassigned here. Induce a Breach: once per game, doesn't wait around for containment to fail on its own - forces a breach right now, unleashing a random anomaly nobody's currently dealing with.",
   },
 ];

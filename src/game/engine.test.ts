@@ -25,6 +25,7 @@ import {
   devSpawnAnomaly,
   drawFromPile,
   endTurn,
+  induceBreach,
   mortgageProperty,
   payEscapeFee,
   proposeTrade,
@@ -1108,7 +1109,7 @@ describe('hostile anomalies', () => {
       'wheelBarrel', 'hat', 'penguin', 'cat', 'rubberDuck', 'trex',
     ];
     let game = makeGame(allPieceIds);
-    const caughtId = 'p12'; // trex
+    const caughtId = 'p2'; // battleship - not D-Class (no respawn) and not Rogue Anomaly (not immune)
     game = withPlayer(game, caughtId, { position: 10 });
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: caughtId, breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
@@ -1169,5 +1170,53 @@ describe('hostile anomalies', () => {
     const before = game;
     game = purgeAnomalies(game, 'p1');
     expect(game).toEqual(before);
+  });
+
+  it("Rogue Anomaly can't be targeted - viewing it never turns it hunting", () => {
+    let game = makeGame(['trex', 'car']);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = viewAnomaly(game, 'p1', 'shyGuy');
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+  });
+
+  it('a hunting anomaly loses interest the moment its target is reassigned into Rogue Anomaly', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = withPlayer(game, 'p2', { pieceId: 'trex' });
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].status).toBe('dormant');
+    expect(game.looseAnomalies[0].targetPlayerId).toBeNull();
+  });
+
+  it('Rogue Anomaly can induce a breach on demand', () => {
+    let game = makeGame(['trex', 'car']);
+    game = induceBreach(game, 'p1', () => 0);
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    expect(game.players.p1.usedInduceBreach).toBe(true);
+  });
+
+  it("refuses to induce a breach for anyone who isn't Rogue Anomaly", () => {
+    let game = makeGame();
+    const before = game;
+    game = induceBreach(game, 'p1', () => 0);
+    expect(game).toEqual(before);
+  });
+
+  it('only lets Rogue Anomaly induce a breach once per game', () => {
+    let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { usedInduceBreach: true });
+    const before = game;
+    game = induceBreach(game, 'p1', () => 0);
+    expect(game).toEqual(before);
+  });
+
+  it('does nothing if every anomaly type is already loose', () => {
+    let game = makeGame(['trex', 'car']);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    const before = game;
+    game = induceBreach(game, 'p1', () => 0);
+    expect(game).toEqual(before);
+    expect(game.players.p1.usedInduceBreach).toBe(false);
   });
 });

@@ -133,6 +133,8 @@ export interface GamePlayerState {
   usedRedirect: boolean;
   /** Specialist's Special Power ("Redundant Safeguards"): the emergency Credit grant only fires once per game - this flags that it's already happened, whether or not it was actually enough to cover the debt that triggered it. */
   usedSafeguard: boolean;
+  /** Rogue Anomaly's Special Power ("Induce a Breach"): the on-demand containment breach only fires once per game - this flags that it's already happened. */
+  usedInduceBreach: boolean;
 }
 
 /**

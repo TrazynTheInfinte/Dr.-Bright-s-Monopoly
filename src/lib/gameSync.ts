@@ -28,6 +28,7 @@ import {
   devSpawnAnomaly,
   drawFromPile,
   endTurn,
+  induceBreach,
   mortgageProperty,
   payEscapeFee,
   proposeTrade,
@@ -248,6 +249,10 @@ export async function chooseNewPersonnelAndSync(roomCode: string, game: GameStat
 
 export async function purgeAnomaliesAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, purgeAnomalies(game, playerId));
+}
+
+export async function induceBreachAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, induceBreach(game, playerId));
 }
 
 export async function devSpawnAnomalyAndSync(roomCode: string, game: GameState, anomalyId: string) {

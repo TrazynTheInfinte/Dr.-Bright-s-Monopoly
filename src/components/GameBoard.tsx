@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ANOMALIES } from '../data/anomalies';
 import { BOARD, getTile } from '../data/board';
 import { STARTING_PIECES } from '../data/pieces';
 import { findCard } from '../data/cards';
@@ -8,6 +9,7 @@ import {
   buyTileAndSync,
   declinePurchaseAndSync,
   endTurnAndSync,
+  induceBreachAndSync,
   mortgageTileAndSync,
   payEscapeFeeAndSync,
   purgeAnomaliesAndSync,
@@ -469,6 +471,13 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
               <button onClick={() => purgeAnomaliesAndSync(roomCode, game, playerId)} disabled={me.credits < 500}>
                 Activate Site Warhead
               </button>
+            </div>
+          )}
+
+          {me?.pieceId === 'trex' && !me.usedInduceBreach && game.looseAnomalies.length < ANOMALIES.length && (
+            <div className="purchase-prompt card-prompt">
+              <p>Uncontained: force a containment breach right now instead of waiting for one to happen naturally.</p>
+              <button onClick={() => induceBreachAndSync(roomCode, game, playerId)}>Induce a Breach</button>
             </div>
           )}
         </section>

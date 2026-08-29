@@ -85,6 +85,7 @@ export function createInitialGameState(
       usedShowOfForce: false,
       usedRedirect: false,
       usedSafeguard: false,
+      usedInduceBreach: false,
     };
   }
 
@@ -1060,8 +1061,9 @@ function advanceHuntingAnomalies(state: GameState): GameState {
     if (!current || current.status !== 'hunting' || !current.targetPlayerId) continue;
 
     const target = next.players[current.targetPlayerId];
-    if (!target || target.isSpectating) {
-      // Target's really gone (Terminated some other way) - loses interest, stays put dormant.
+    if (!target || target.isSpectating || pieceOf(next, current.targetPlayerId) === 'trex') {
+      // Target's really gone (Terminated some other way), or was just reassigned into Rogue
+      // Anomaly ("Uncontained") mid-hunt - either way, loses interest and stays put dormant.
       next = updateAnomaly(next, current.anomalyId, { status: 'dormant', targetPlayerId: null });
       continue;
     }
@@ -1076,10 +1078,11 @@ function advanceHuntingAnomalies(state: GameState): GameState {
   return next;
 }
 
-/** A player "viewing" a dormant anomaly (Shy Guy: hovering its tile) - the first to do so becomes its target and it starts hunting them. No-op if it's already hunting someone, or isn't loose at all. */
+/** A player "viewing" a dormant anomaly (Shy Guy: hovering its tile) - the first to do so becomes its target and it starts hunting them. No-op if it's already hunting someone, isn't loose at all, or the viewer is Rogue Anomaly ("Uncontained": fellow anomalies don't see it as prey). */
 export function viewAnomaly(state: GameState, playerId: string, anomalyId: string): GameState {
   const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId);
   if (!anomaly || anomaly.status !== 'dormant') return state;
+  if (pieceOf(state, playerId) === 'trex') return state;
   return logEvent(
     updateAnomaly(state, anomalyId, { status: 'hunting', targetPlayerId: playerId }),
     `${findAnomaly(anomalyId as AnomalyId).name} noticed it was being watched.`,
@@ -1101,6 +1104,28 @@ export function purgeAnomalies(state: GameState, playerId: string): GameState {
   if (!canAfford(state, playerId, SITE_WARHEAD_PURGE_COST)) return state;
   const next = chargePlayer(state, playerId, SITE_WARHEAD_PURGE_COST, null);
   return logEvent({ ...next, looseAnomalies: [] }, 'Site Warhead activated - every loose anomaly has been recontained.');
+}
+
+/** Rogue Anomaly's Special Power ("Induce a Breach"): forces a containment breach on demand instead of waiting on the random per-turn chance, picking a random not-yet-loose anomaly type exactly like a natural breach would. Once per game. No-op if it's not this player's power, they've already used it, or every anomaly type is already loose (nothing left to induce). */
+export function induceBreach(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
+  if (pieceOf(state, playerId) !== 'trex' || state.players[playerId].usedInduceBreach) return state;
+  const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
+  const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
+  if (candidates.length === 0) return state;
+
+  const anomaly = candidates[Math.floor(rng() * candidates.length)];
+  const loose: LooseAnomaly = {
+    anomalyId: anomaly.id,
+    tileId: anomaly.spawnTileId,
+    status: 'dormant',
+    targetPlayerId: null,
+    breachedOnTurnCount: state.turnCount,
+  };
+  const next = updatePlayer(state, playerId, { usedInduceBreach: true });
+  return logEvent(
+    { ...next, looseAnomalies: [...next.looseAnomalies, loose] },
+    `Induced a containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`,
+  );
 }
 
 // --- Trading -------------------------------------------------------------
