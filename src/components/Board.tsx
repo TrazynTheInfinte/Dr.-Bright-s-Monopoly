@@ -393,15 +393,21 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
             )}
 
             {anomaliesHere
-              // Dormant anomalies only show a marker on the exact turn
-              // they breach - after that they're still there (and still
-              // react to being hovered), just with no visible warning,
-              // so a table that isn't tracking it can genuinely forget.
-              // A hunting one is always shown - by then it's in plain sight.
-              // Rogue Anomaly sees every concealed one regardless of turn.
+              // Shy Guy's marker only shows on the exact turn it breaches -
+              // after that it's still there (and still reacts to being
+              // hovered), just with no visible warning, so a table that
+              // isn't tracking it can genuinely forget. A hunting one is
+              // always shown - by then it's in plain sight. SCP-173 is
+              // never concealed like this: its whole mechanic depends on
+              // everyone knowing it's loose every turn so Keep Watch is an
+              // actual choice, not a trap for forgetting it exists. Rogue
+              // Anomaly sees every concealed one regardless of turn.
               .filter(
                 (anomaly) =>
-                  anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount || viewerSeesConcealedAnomalies,
+                  anomaly.status === 'hunting' ||
+                  anomaly.anomalyId === 'theSculpture' ||
+                  anomaly.breachedOnTurnCount === game.turnCount ||
+                  viewerSeesConcealedAnomalies,
               )
               .map((anomaly) => {
                 const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
@@ -409,7 +415,13 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
                   <span
                     key={anomaly.anomalyId}
                     className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
-                    title={`${definition.name}${anomaly.status === 'hunting' ? ' - hunting someone' : ' - hover to view'}`}
+                    title={`${definition.name}${
+                      anomaly.status === 'hunting'
+                        ? ' - hunting someone'
+                        : anomaly.anomalyId === 'theSculpture'
+                          ? ' - Keep Watch on your turn or it moves'
+                          : ' - hover to view'
+                    }`}
                   >
                     ☣
                   </span>
