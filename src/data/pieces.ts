@@ -48,14 +48,14 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Field Researcher',
     title: 'Field Researcher',
     powerDescription:
-      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile.",
+      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile. Grant Funding: cleared for a modest research stipend (25 Credits) any time fieldwork puts them on a card tile, Directive or Event alike, whatever the card turns out to say.",
   },
   {
     id: 'wheelBarrel',
     name: 'Logistics Officer',
     title: 'Logistics & Requisitions Officer',
     powerDescription:
-      "Requisition Priority: the cheapest Wings on Site fall under Logistics' jurisdiction by default - automatically claims any purple-Sector Wing landed on, free if it's unclaimed, repossessed without payment if someone else already holds it.",
+      "Requisition Priority: the cheapest Wings on Site fall under Logistics' jurisdiction by default - automatically claims any purple-Sector Wing landed on, free if it's unclaimed, repossessed without payment if someone else already holds it. Bulk Requisition: orders houses and hotels in bulk, at a standing 25% discount. Overstock: keeps a private stockpile off the books - builds are never blocked by, or counted against, the Foundation's shared house/hotel supply.",
   },
   {
     id: 'hat',

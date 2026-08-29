@@ -510,6 +510,61 @@ describe("Site Director's Executive Authority and Redirect Without Exposure", ()
   });
 });
 
+describe("Field Researcher's Grant Funding", () => {
+  it('collects a stipend landing on either card tile, on top of the card itself', () => {
+    let game = makeGame(['dog', 'boot']);
+    game = withPlayer(game, 'p1', { position: 1 }); // 1 -> 4 lands on a Foundation Directive tile
+    game = devSetForcedRoll(game, [3, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500 + 25);
+    expect(game.pendingDecision?.type).toBe('awaitingCardDraw');
+  });
+
+  it('is not collected by anyone else landing on a card tile', () => {
+    let game = makeGame(['boot', 'battleship']);
+    game = withPlayer(game, 'p1', { position: 1 });
+    game = devSetForcedRoll(game, [3, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500);
+  });
+});
+
+describe("Logistics Officer's Bulk Requisition and Overstock", () => {
+  it('builds houses at a 25% discount', () => {
+    let game = makeGame(['wheelBarrel', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.players.p1.credits).toBe(1500 - Math.floor(50 * 0.75));
+  });
+
+  it('can still build once the shared supply is exhausted, without drawing from it', () => {
+    let game = makeGame(['wheelBarrel', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = { ...game, housesRemaining: 0 };
+    game = buildHouse(game, 'p1', 1);
+    expect(game.houses[1]).toBe(1);
+    expect(game.housesRemaining).toBe(0); // unchanged - never drew from the shared pool
+  });
+
+  it('selling an Overstock build does not inflate the shared supply', () => {
+    let game = makeGame(['wheelBarrel', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.housesRemaining).toBe(32); // untouched by the build
+    game = sellHouse(game, 'p1', 1);
+    expect(game.houses[1]).toBe(0);
+    expect(game.housesRemaining).toBe(32); // still untouched
+  });
+
+  it("a normal player's builds are unaffected by Overstock", () => {
+    let game = makeGame(['boot', 'wheelBarrel']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.players.p1.credits).toBe(1500 - 50); // full price
+    expect(game.housesRemaining).toBe(31); // drawn from the shared pool as normal
+  });
+});
+
 describe("D-Class's Standard Expendability Clause", () => {
   it('is never billed the Escape Fee', () => {
     let game = makeGame(['boot', 'battleship']);

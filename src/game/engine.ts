@@ -15,6 +15,10 @@ const MAX_DOUBLES_BEFORE_JAIL = 3;
 /** After 3 turns stuck without rolling doubles, a player is released for free - they've already paid the Holding Fee each of those turns. */
 const MAX_TURNS_IN_JAIL = 3;
 const PURPLE_SEIZE_GROUP: ColorGroup = 'purple';
+/** Field Researcher's "Grant Funding": a flat stipend for landing on either card tile. */
+const GRANT_FUNDING_AMOUNT = 25;
+/** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds. */
+const BULK_REQUISITION_MULTIPLIER = 0.75;
 // Standard Monopoly bank supply. Real Monopoly resolves a shortage with
 // an auction between players - we don't have one, so running dry just
 // blocks further building until someone sells houses back.
@@ -383,8 +387,15 @@ function resolveLanding(state: GameState, playerId: string, position: number): G
       return next;
     case 'goToJail':
       return logEvent(sendToJail(next, playerId), 'Reassigned to the Containment Chamber.');
-    case 'card':
-      return { ...next, pendingDecision: { type: 'awaitingCardDraw', deck: tile.deck } };
+    case 'card': {
+      // Field Researcher's "Grant Funding" - a flat stipend for landing
+      // on either card tile, regardless of what the card turns out to say.
+      const funded =
+        pieceOf(next, playerId) === 'dog'
+          ? logEvent(giveCredits(next, playerId, GRANT_FUNDING_AMOUNT), 'Grant Funding: collected a research stipend.')
+          : next;
+      return { ...funded, pendingDecision: { type: 'awaitingCardDraw', deck: tile.deck } };
+    }
     case 'wing':
     case 'tunnel':
     case 'utility':
@@ -749,16 +760,23 @@ export function buildHouse(state: GameState, playerId: string, tileId: number): 
   const houses = state.houses[tileId] ?? 0;
   if (houses >= 5) return state;
   const isHotel = houses === 4;
-  if (isHotel && state.hotelsRemaining <= 0) return state;
-  if (!isHotel && state.housesRemaining <= 0) return state;
-  if (!canAfford(state, playerId, tile.houseCost)) return state;
+  // Logistics Officer's "Overstock" - their own builds are never
+  // blocked by (or counted against) the Foundation's shared supply.
+  const isLogisticsOfficer = pieceOf(state, playerId) === 'wheelBarrel';
+  if (!isLogisticsOfficer) {
+    if (isHotel && state.hotelsRemaining <= 0) return state;
+    if (!isHotel && state.housesRemaining <= 0) return state;
+  }
+  // Logistics Officer's "Bulk Requisition" - a standing discount on their own builds.
+  const cost = isLogisticsOfficer ? Math.floor(tile.houseCost * BULK_REQUISITION_MULTIPLIER) : tile.houseCost;
+  if (!canAfford(state, playerId, cost)) return state;
 
-  let next = chargePlayer(state, playerId, tile.houseCost, null);
+  let next = chargePlayer(state, playerId, cost, null);
   next = {
     ...next,
     houses: { ...next.houses, [tileId]: houses + 1 },
-    housesRemaining: isHotel ? next.housesRemaining : next.housesRemaining - 1,
-    hotelsRemaining: isHotel ? next.hotelsRemaining - 1 : next.hotelsRemaining,
+    housesRemaining: isHotel || isLogisticsOfficer ? next.housesRemaining : next.housesRemaining - 1,
+    hotelsRemaining: !isHotel || isLogisticsOfficer ? next.hotelsRemaining : next.hotelsRemaining - 1,
   };
   return logEvent(next, `Built ${isHotel ? 'a hotel' : 'a house'} on ${tile.name}.`);
 }
@@ -771,12 +789,16 @@ export function sellHouse(state: GameState, playerId: string, tileId: number): G
   if (houses <= 0) return state;
   const wasHotel = houses === 5;
   const refund = Math.floor(tile.houseCost / 2);
+  // Logistics Officer's "Overstock" builds never came out of the shared
+  // supply in the first place (see buildHouse) - selling one back
+  // mustn't add to it either, or the whole table's supply cap leaks.
+  const returnsToSupply = pieceOf(state, playerId) !== 'wheelBarrel';
 
   const next: GameState = {
     ...giveCredits(state, playerId, refund),
     houses: { ...state.houses, [tileId]: houses - 1 },
-    housesRemaining: wasHotel ? state.housesRemaining + 4 : state.housesRemaining + 1,
-    hotelsRemaining: wasHotel ? state.hotelsRemaining - 1 : state.hotelsRemaining,
+    housesRemaining: !returnsToSupply ? state.housesRemaining : wasHotel ? state.housesRemaining + 4 : state.housesRemaining + 1,
+    hotelsRemaining: !returnsToSupply ? state.hotelsRemaining : wasHotel ? state.hotelsRemaining - 1 : state.hotelsRemaining,
   };
   return logEvent(next, `Sold ${wasHotel ? 'a hotel' : 'a house'} on ${tile.name}.`);
 }
