@@ -42,7 +42,7 @@ const ANOMALY_HUNT_SPEED = 6;
 const SCULPTURE_UNWATCHED_SPEED = Math.floor(BOARD_SIZE / 4);
 /** SCP-106's own main-board hunt speed - half of ANOMALY_HUNT_SPEED, since catching someone isn't itself a loss for it (see dragIntoPocketDimension), it's just the start of a much more dangerous ordeal. */
 const OLD_MAN_MAIN_BOARD_SPEED = 3;
-/** The Pocket Dimension track's length, tile 0 (the drag-in point) included. */
+/** The Pocket Dimension track's length, tile 0 (the drag-in point) included - it loops back around from the far end rather than dead-ending. */
 const POCKET_DIMENSION_LENGTH = 9;
 /** SCP-106's own crawl inside the Pocket Dimension: 1 tile closer every time the trapped player takes their turn - see movePocketDimension. */
 const OLD_MAN_POCKET_DIMENSION_SPEED = 1;
@@ -1247,10 +1247,12 @@ function terminateInsidePocketDimension(state: GameState, trappedPlayerId: strin
 /**
  * The trapped player's own turn, replacing their usual roll-and-move
  * on the main board entirely: rolls one die to advance along the
- * Pocket Dimension track (capped at its far end, no wraparound - it's
- * a dead end, not a loop). Doesn't resolve the landed tile yet - opens
- * a pendingDecision instead, so the UI can hold on the landed tile for
- * a beat before revealing what it actually does (see
+ * Pocket Dimension track, wrapping back around to tile 0 past the far
+ * end - a loop, not a dead end, so a bad run of rolls can never stall
+ * you at the last tile with nowhere left to go while SCP-106 closes
+ * in. Doesn't resolve the landed tile yet - opens a pendingDecision
+ * instead, so the UI can hold on the landed tile for a beat before
+ * revealing what it actually does (see
  * acknowledgePocketDimensionLanding). Blocks every other action in the
  * meantime, same as any other pendingDecision.
  */
@@ -1261,7 +1263,7 @@ export function movePocketDimension(state: GameState, playerId: string, rng: () 
   if (!ordeal || ordeal.trappedPlayerId !== playerId) return state;
 
   const roll = Math.floor(rng() * 6) + 1;
-  const newPlayerPos = Math.min(ordeal.playerTrackPosition + roll, POCKET_DIMENSION_LENGTH - 1);
+  const newPlayerPos = (ordeal.playerTrackPosition + roll) % POCKET_DIMENSION_LENGTH;
   return logEvent(
     {
       ...state,
@@ -1275,10 +1277,15 @@ export function movePocketDimension(state: GameState, playerId: string, rng: () 
 /**
  * Resolves whatever tile movePocketDimension just landed the trapped
  * player on, then - if the ordeal is still going - SCP-106 creeps one
- * tile closer. If that closes the gap all the way, that's a catch,
- * same as reaching an unaffordable Decaying Passage. Ends the turn
- * itself, same as keepWatchOnSculpture, since there's nothing else to
- * resolve this turn either way.
+ * tile closer. The track loops, so "closer" is the clockwise gap
+ * between them, wrapping around same as everything else here - if
+ * that gap is small enough for SCP-106's speed to close it entirely
+ * (including already being right on the player's tile), that's a
+ * catch, checked before anything else since it preempts even landing
+ * on a Fracture Point. Otherwise resolves the tile normally, then (if
+ * still trapped) advances SCP-106 by its own speed around the loop.
+ * Ends the turn itself, same as keepWatchOnSculpture, since there's
+ * nothing else to resolve this turn either way.
  */
 export function acknowledgePocketDimensionLanding(state: GameState, rng: () => number = Math.random): GameState {
   if (state.pendingDecision?.type !== 'pocketDimensionLanded') return state;
@@ -1287,6 +1294,13 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
   if (!ordeal) return { ...state, pendingDecision: null };
 
   let next: GameState = { ...state, pendingDecision: null };
+  const gapToAnomaly =
+    (ordeal.playerTrackPosition - ordeal.anomalyTrackPosition + POCKET_DIMENSION_LENGTH) % POCKET_DIMENSION_LENGTH;
+
+  if (gapToAnomaly <= OLD_MAN_POCKET_DIMENSION_SPEED) {
+    return endTurn(terminateInsidePocketDimension(next, playerId), rng);
+  }
+
   const landedTile = ordeal.track[ordeal.playerTrackPosition];
   if (landedTile === 'fracturePoint') {
     next = escapePocketDimension(next);
@@ -1299,11 +1313,8 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
 
   const stillTrapped = next.pocketDimensionOrdeal;
   if (stillTrapped) {
-    const newAnomalyPos = stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED;
-    next =
-      newAnomalyPos >= stillTrapped.playerTrackPosition
-        ? terminateInsidePocketDimension(next, playerId)
-        : { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
+    const newAnomalyPos = (stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED) % POCKET_DIMENSION_LENGTH;
+    next = { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
   }
 
   return endTurn(next, rng);

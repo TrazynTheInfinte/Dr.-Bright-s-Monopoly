@@ -1540,15 +1540,43 @@ describe('SCP-106 and the Pocket Dimension', () => {
     expect(game.pendingPieceChoice?.playerId).toBe('p1');
   });
 
-  it("movement is capped at the Pocket Dimension's far end - no wraparound", () => {
+  it('movement loops back around from the far end instead of dead-ending', () => {
     let game = makeGame();
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
       pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 0 },
     };
-    game = movePocketDimension(game, 'p1', () => 0.9); // rolls a 6, but 7 + 6 would overshoot the 9-tile track
-    expect(game.pocketDimensionOrdeal?.playerTrackPosition).toBe(8); // capped, not 13
+    game = movePocketDimension(game, 'p1', () => 0.9); // rolls a 6; 7 + 6 = 13, wraps to 4 on a 9-tile loop
+    expect(game.pocketDimensionOrdeal?.playerTrackPosition).toBe(4);
+  });
+
+  it('SCP-106 sitting on the tile you land on catches you even if it would otherwise be a Fracture Point', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = {
+      ...game,
+      looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 2 },
+    };
+    game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> (7 + 4) % 9 = 2, same tile as SCP-106
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pocketDimensionOrdeal).toBeNull();
+    expect(game.looseAnomalies).toEqual([]);
+    expect(game.players.p1.ownedTileIds).toEqual([]); // seized - a real catch, not an escape
+  });
+
+  it("SCP-106's own advance wraps around the loop too", () => {
+    let game = makeGame();
+    game = {
+      ...game,
+      pendingDecision: { type: 'pocketDimensionLanded', forPlayerId: 'p1' },
+      looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 5, anomalyTrackPosition: 8 },
+    };
+    // gap = (5 - 8 + 9) % 9 = 6, well outside SCP-106's speed (1) - no catch. Tile 5 is neutral, so the ordeal just continues.
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pocketDimensionOrdeal?.anomalyTrackPosition).toBe(0); // wrapped from 8
   });
 
   it('refuses to move for anyone other than the actual trapped player', () => {
