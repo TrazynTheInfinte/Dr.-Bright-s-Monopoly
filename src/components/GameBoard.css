@@ -37,6 +37,17 @@
   }
 }
 
+/* SCP-939's amnestic screen-blur (see useVoicesWarning/GameBoard.tsx) -
+   pointer-events: none so it never blocks a click, and a z-index below
+   every real decision modal (ActionModal is 45, the AFK prompt is 50)
+   so those stay perfectly readable on top of it. */
+.voices-blur-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
 .turn-indicator {
   font-family: var(--font-display);
   font-weight: 800;

@@ -227,15 +227,31 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   }
 
   return (
-    <main
-      className="game-board"
-      // SCP-939's amnestic secretion, felt (privately) rather than seen
-      // coming - blurs by an amount proportional to how close it
-      // currently is (see useVoicesWarning), same intensity curve as
-      // its personal warning cue's volume.
-      style={voicesCloseness > 0 ? { filter: `blur(${(voicesCloseness * MAX_VOICES_BLUR_PX).toFixed(2)}px)` } : undefined}
-    >
+    <main className="game-board">
       {isWarheadFlashing && <div className="warhead-flash" aria-hidden="true" />}
+      {voicesCloseness > 0 && (
+        // SCP-939's amnestic secretion, felt (privately) rather than seen
+        // coming - blurs by an amount proportional to how close it
+        // currently is (see useVoicesWarning), same intensity curve as
+        // its personal warning cue's volume. A backdrop-filter overlay
+        // (not a `filter` on `<main>` itself, which was the original,
+        // broken approach) - `filter` on an ancestor creates a new
+        // containing block for any `position: fixed` descendant (every
+        // ActionModal, the AFK prompt, etc.), which silently detached
+        // them from the viewport and sent them flying off to wherever
+        // `<main>`'s own (much taller) box happened to place them. This
+        // overlay has no descendants of its own, so that problem doesn't
+        // apply, and its z-index sits below every real decision modal so
+        // none of those are blurred by it.
+        <div
+          className="voices-blur-overlay"
+          aria-hidden="true"
+          style={{
+            backdropFilter: `blur(${(voicesCloseness * MAX_VOICES_BLUR_PX).toFixed(2)}px)`,
+            WebkitBackdropFilter: `blur(${(voicesCloseness * MAX_VOICES_BLUR_PX).toFixed(2)}px)`,
+          }}
+        />
+      )}
       {afkPrompt.visible && (
         <div className="afk-prompt-overlay">
           <div className="afk-prompt">
