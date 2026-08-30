@@ -27,8 +27,11 @@ export function useVoicesWarning(game: GameState | undefined, playerId: string):
   const voices = game?.looseAnomalies.find((a) => a.anomalyId === 'theVoices');
   const isTarget = voices?.status === 'hunting' && voices.targetPlayerId === playerId;
   const me = game?.players[playerId];
-  const closeness =
-    isTarget && voices && me ? Math.max(0, 1 - boardDistance(voices.tileId, me.position) / WARNING_RANGE) : 0;
+  const linear = isTarget && voices && me ? Math.max(0, 1 - boardDistance(voices.tileId, me.position) / WARNING_RANGE) : 0;
+  // Eased (squared) rather than linear - it should stay faint for most of
+  // the range and only really ramp up once it's genuinely close, not
+  // already be intense while it's still far off.
+  const closeness = linear * linear;
 
   useEffect(() => {
     setVoicesWarning(closeness);

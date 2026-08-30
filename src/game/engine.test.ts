@@ -1139,7 +1139,7 @@ describe('hostile anomalies', () => {
     game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within the 6-space hunt speed - catches this tick
-    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.credits).toBe(750); // still playing, not really out - same starting funds as D-Class's own respawn
     expect(game.players.p2.ownedTileIds).toEqual([]);
     expect(game.players.p2.isSpectating).toBe(false);
     expect(game.pendingPieceChoice?.playerId).toBe('p2');
@@ -1172,6 +1172,7 @@ describe('hostile anomalies', () => {
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: caughtId, breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.players[caughtId].isSpectating).toBe(true);
+    expect(game.players[caughtId].credits).toBe(0); // a real Termination this time, not a reassignment - 0 is correct
     expect(game.players[caughtId].position).toBe(0); // sent back to the Site Entrance regardless
     expect(game.pendingPieceChoice).toBeNull();
     expect(game.winnerId).toBeNull(); // 11 players still active
@@ -1944,7 +1945,7 @@ describe('Object Anomalies', () => {
     game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
     game = withPlayer(game, 'p2', { position: 2, credits: 1000, ownedTileIds: [6] });
     game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'player', targetPlayerId: 'p2' }, () => 0.99);
-    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.credits).toBe(750); // still playing, not really out - same starting funds as D-Class's own respawn
     expect(game.players.p2.ownedTileIds).toEqual([]);
     expect(game.pendingPieceChoice?.playerId).toBe('p2');
   });
@@ -1980,7 +1981,7 @@ describe('SCP-939 "With Many Voices"', () => {
       { anomalyId: 'theVoices', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
     ]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within its hunt speed
-    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.credits).toBe(750); // still playing, not really out - same starting funds as D-Class's own respawn
     expect(game.players.p2.ownedTileIds).toEqual([]);
     // Doesn't go dormant/visible - immediately re-targets p1 (the only
     // one left) and keeps hunting, still invisible.
@@ -2091,10 +2092,21 @@ describe('SCP-049 "The Plague Doctor"', () => {
     game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6], hasBeenCuredBy049: true });
     game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
-    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.credits).toBe(750); // still playing, not really out - same starting funds as D-Class's own respawn
     expect(game.players.p2.ownedTileIds).toEqual([]);
     expect(game.pendingPieceChoice?.playerId).toBe('p2');
     expect(game.log.some((entry) => entry.includes('SCP-049-2'))).toBe(true);
+  });
+
+  it("doesn't freeze after a fatal catch either - immediately re-diagnoses a new target instead of relying on an SCP-049-2 collision to get it moving again", () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p2', { position: 10, hasBeenCuredBy049: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    // Not frozen dormant - immediately re-diagnosed someone (p2 just got
+    // reassigned, not really excluded, so either player is a valid pick).
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+    expect(game.looseAnomalies[0].targetPlayerId).not.toBeNull();
   });
 
   it("an armed Countermeasure redirects even a first-time Cure onto a random other living player", () => {
@@ -2227,5 +2239,14 @@ describe('SCP-049-2 instances', () => {
     game = rollDice(game);
     expect(game.looseAnomalies[0].status).toBe('dormant');
     expect(game.looseAnomalies[0].targetPlayerId).toBeNull();
+  });
+
+  it('can be struck (and destroyed) with a Jailbird', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = { ...game, scp0492Instances: [{ id: 'scp0492-0', tileId: 2 }] };
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'scp0492', instanceId: 'scp0492-0' }, () => 0.99);
+    expect(game.scp0492Instances).toEqual([]);
+    expect(game.players.p1.heldCardIds).toEqual(['requisitionedJailbird']); // not consumed - reusable, same as against an anomaly
   });
 });

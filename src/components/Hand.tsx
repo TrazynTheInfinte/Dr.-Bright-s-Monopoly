@@ -356,8 +356,9 @@ function ObjectAnomalyAction({
     case 'jailbird': {
       const me = game.players[playerId];
       const anomalyTargets = game.looseAnomalies.filter((a) => a.status !== 'inPocketDimension');
+      const scp0492Targets = game.scp0492Instances;
       const playerTargets = Object.entries(game.players).filter(([id, p]) => id !== playerId && !p.isSpectating);
-      if (anomalyTargets.length === 0 && playerTargets.length === 0) {
+      if (anomalyTargets.length === 0 && scp0492Targets.length === 0 && playerTargets.length === 0) {
         return <p className="hint">Nothing in range to swing at.</p>;
       }
       return (
@@ -371,6 +372,21 @@ function ObjectAnomalyAction({
                   type="button"
                   disabled={!inRange}
                   onClick={() => useJailbirdAndSync(roomCode, game, playerId, cardId, { type: 'anomaly', anomalyId: anomaly.anomalyId })}
+                >
+                  Strike
+                </button>
+              </div>
+            );
+          })}
+          {scp0492Targets.map((instance) => {
+            const inRange = boardDistance(me.position, instance.tileId) <= JAILBIRD_RANGE_UI;
+            return (
+              <div key={instance.id} className="object-anomaly-target-row">
+                <span>SCP-049-2</span>
+                <button
+                  type="button"
+                  disabled={!inRange}
+                  onClick={() => useJailbirdAndSync(roomCode, game, playerId, cardId, { type: 'scp0492', instanceId: instance.id })}
                 >
                   Strike
                 </button>

@@ -596,15 +596,19 @@ export function useMicroHid(
   );
 }
 
-/** What useJailbird is being swung at - a loose Hostile Anomaly, or another player entirely (see the "for fun" player-vs-player option it supports). */
-export type JailbirdTarget = { type: 'anomaly'; anomalyId: string } | { type: 'player'; targetPlayerId: string };
+/** What useJailbird is being swung at - a loose Hostile Anomaly, a roaming SCP-049-2 instance, or another player entirely (see the "for fun" player-vs-player option it supports). */
+export type JailbirdTarget =
+  | { type: 'anomaly'; anomalyId: string }
+  | { type: 'player'; targetPlayerId: string }
+  | { type: 'scp0492'; instanceId: string };
 
 /**
  * Jailbird: usable anytime on your own turn, at very short range
- * (JAILBIRD_RANGE tiles either direction), against either a currently
- * loose reachable Hostile Anomaly (recontained, same outcome as Micro
- * H.I.D.) or another active player (the exact same consequence as being
- * caught by an anomaly - see applyCatchConsequence, including SCP-963
+ * (JAILBIRD_RANGE tiles either direction), against a currently loose
+ * reachable Hostile Anomaly or a roaming SCP-049-2 instance (both just
+ * dispelled/recontained, same outcome as Micro H.I.D. for the former),
+ * or another active player (the exact same consequence as being caught
+ * by an anomaly - see applyCatchConsequence, including SCP-963
  * Countermeasure interception if they're armed). Unlike every other
  * Object Anomaly, it isn't consumed by a normal successful swing -
  * every swing has a small chance of malfunctioning instead (no effect,
@@ -626,12 +630,17 @@ export function useJailbird(
 
   const attackerPosition = state.players[playerId].position;
   let anomalyTarget: LooseAnomaly | null = null;
+  let scp0492Target: Scp0492Instance | null = null;
   let playerTargetId: string | null = null;
 
   if (target.type === 'anomaly') {
     const anomaly = state.looseAnomalies.find((a) => a.anomalyId === target.anomalyId && a.status !== 'inPocketDimension');
     if (!anomaly || boardDistance(attackerPosition, anomaly.tileId) > JAILBIRD_RANGE) return state;
     anomalyTarget = anomaly;
+  } else if (target.type === 'scp0492') {
+    const instance = state.scp0492Instances.find((i) => i.id === target.instanceId);
+    if (!instance || boardDistance(attackerPosition, instance.tileId) > JAILBIRD_RANGE) return state;
+    scp0492Target = instance;
   } else {
     const victim = state.players[target.targetPlayerId];
     if (!victim || target.targetPlayerId === playerId || victim.isSpectating) return state;
@@ -656,7 +665,12 @@ export function useJailbird(
         { ...state, looseAnomalies: state.looseAnomalies.filter((a) => a !== anomalyTarget) },
         `${findAnomaly(anomalyTarget.anomalyId as AnomalyId).name} beaten back into containment with a Jailbird.`,
       )
-    : applyCatchConsequence(state, playerTargetId!, rng, 'Struck down with a Jailbird - stripped and reassigned, same as anyone caught by an anomaly.');
+    : scp0492Target
+      ? logEvent(
+          { ...state, scp0492Instances: state.scp0492Instances.filter((i) => i !== scp0492Target) },
+          'An SCP-049-2 instance was put down with a Jailbird.',
+        )
+      : applyCatchConsequence(state, playerTargetId!, rng, 'Struck down with a Jailbird - stripped and reassigned, same as anyone caught by an anomaly.');
 
   const usesSoFar = state.jailbirdUses + 1;
   if (usesSoFar >= JAILBIRD_MAX_USES) {
@@ -1441,11 +1455,18 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
     const available = availablePersonnelIds(next);
     // Sent back to the Site Entrance same as D-Class's respawn above -
     // no Go bonus, this is a consequence, not a lap actually completed.
-    next = updatePlayer(next, targetPlayerId, { credits: 0, position: 0, ownedTileIds: [], heldCardIds: [] });
+    next = updatePlayer(next, targetPlayerId, { position: 0, ownedTileIds: [], heldCardIds: [] });
     if (available.length === 0) {
-      next = updatePlayer(next, targetPlayerId, { isSpectating: true });
+      // A real Termination - genuinely out for the rest of the match, so
+      // 0 Credits is correct here (isSpectating means it never matters
+      // functionally anyway).
+      next = updatePlayer(next, targetPlayerId, { credits: 0, isSpectating: true });
       next = checkWinCondition(logEvent(next, 'Terminated - no unclaimed Personnel left to reassign.'));
     } else {
+      // Still actively playing as a freshly requisitioned Personnel -
+      // same starting funds as D-Class's own automatic respawn above,
+      // not 0 (they haven't actually left the game).
+      next = updatePlayer(next, targetPlayerId, { credits: RESPAWN_CREDITS });
       next = { ...next, pendingPieceChoice: { playerId: targetPlayerId, availablePieceIds: available } };
       next = logEvent(next, 'Requisitioning a new Personnel assignment.');
     }
@@ -1504,15 +1525,15 @@ function resolveDoctorAnomalyCatch(state: GameState, targetPlayerId: string, cau
   const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
   const { state: caught, wasFatal } = applyDoctorCatch(redirected.state, redirected.targetPlayerId, rng);
   // Whatever chase this catch just ended - boosted or not - is over.
-  const next: GameState = { ...caught, doctorSpeedBoostActive: false };
+  const withBoostCleared: GameState = { ...caught, doctorSpeedBoostActive: false };
+  // A fatal catch also leaves a corpse behind - see spawnScp0492Instance
+  // - but either way (fatal or a Cure), it doesn't freeze afterward: it
+  // immediately re-diagnoses a new random target and keeps hunting, same
+  // as losing a target any other way. Only relying on a later SCP-049-2
+  // collision to get it moving again was the bug - it should already be
+  // trying on its own.
+  const next = wasFatal ? spawnScp0492Instance(withBoostCleared, caughtAtTileId) : withBoostCleared;
 
-  if (wasFatal) {
-    return updateAnomaly(spawnScp0492Instance(next, caughtAtTileId), 'theDoctor', {
-      status: 'dormant',
-      targetPlayerId: null,
-      tileId: caughtAtTileId,
-    });
-  }
   const reacquired = randomHuntableTarget(next, rng);
   return updateAnomaly(
     next,
