@@ -42,9 +42,12 @@ import {
   unmortgageProperty,
   useBadComposition,
   useCountermeasure,
+  useEvasion,
   useGamersFuel,
   useGetOutOfJailCard,
+  useJailbird,
   useJanitorTunnelTravel,
+  useMicroHid,
   viewAnomaly,
   withdrawTrade,
 } from './engine';
@@ -1797,5 +1800,139 @@ describe('Object Anomalies', () => {
     game = declareBankruptcy(game, 'p1');
     expect(game.players.p1.isSpectating).toBe(true); // Terminated for real, not redirected
     expect(game.players.p1.hasCountermeasureArmed).toBe(true); // untouched - debt-Termination never even checks it
+  });
+
+  it('useEvasion arms the holder instead of doing anything immediately', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredEvasionHat'] });
+    game = useEvasion(game, 'p1', 'recoveredEvasionHat');
+    expect(game.players.p1.hasEvasionActive).toBe(true);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+    expect(game.anomalousEventDiscardPile).toContain('recoveredEvasionHat');
+  });
+
+  it('useEvasion is a no-op if already active', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredEvasionHat'], hasEvasionActive: true });
+    const before = game;
+    game = useEvasion(game, 'p1', 'recoveredEvasionHat');
+    expect(game).toEqual(before);
+  });
+
+  it('an evading target drops a hunting anomaly back to dormant instead of being caught', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10, hasEvasionActive: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG); // would otherwise catch p2 outright (distance 2, well within hunt speed)
+    expect(game.players.p2.credits).toBe(1500); // untouched
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 8, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+  });
+
+  it('viewAnomaly refuses to make an evading player a new target', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { hasEvasionActive: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    const before = game;
+    game = viewAnomaly(game, 'p1', 'shyGuy');
+    expect(game).toEqual(before);
+  });
+
+  it("evasion clears the instant the holder's next turn begins", () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p2', { hasEvasionActive: true });
+    game = endTurn(game, NO_BREACH_RNG); // p1's turn ends, handing it to p2
+    expect(game.players.p2.hasEvasionActive).toBe(false);
+  });
+
+  it('useMicroHid Standard Fire recontains a reachable anomaly within range', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedMicroHid'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = useMicroHid(game, 'p1', 'requisitionedMicroHid', 'shyGuy', false, () => 0.99);
+    expect(game.looseAnomalies).toEqual([]);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+  });
+
+  it('useMicroHid Standard Fire refuses a target out of range', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedMicroHid'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 20, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    const before = game;
+    game = useMicroHid(game, 'p1', 'requisitionedMicroHid', 'shyGuy', false, () => 0.99);
+    expect(game).toEqual(before);
+  });
+
+  it('useMicroHid Overcharge reaches anywhere, but can backfire instead of connecting', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedMicroHid'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 20, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = useMicroHid(game, 'p1', 'requisitionedMicroHid', 'shyGuy', true, () => 0); // below the 25% backfire chance
+    expect(game.players.p1.credits).toBe(1500 - 100);
+    expect(game.looseAnomalies).toHaveLength(1); // untouched - the shot backfired
+    expect(game.players.p1.heldCardIds).toEqual([]); // spent regardless of outcome
+  });
+
+  it('useJailbird recontains an anomaly within range and stays in hand for reuse', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 2, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'anomaly', anomalyId: 'shyGuy' }, () => 0.99); // above the 10% malfunction chance
+    expect(game.looseAnomalies).toEqual([]);
+    expect(game.players.p1.heldCardIds).toEqual(['requisitionedJailbird']); // not consumed - reusable
+    expect(game.jailbirdUses).toBe(1);
+  });
+
+  it('useJailbird refuses a target out of its short range', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    const before = game;
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'anomaly', anomalyId: 'shyGuy' }, () => 0.99);
+    expect(game).toEqual(before);
+  });
+
+  it('useJailbird can malfunction instead of connecting, costing Credits and a trip to the Containment Chamber', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 2, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'anomaly', anomalyId: 'shyGuy' }, () => 0); // below the 10% malfunction chance
+    expect(game.players.p1.credits).toBe(1500 - 150);
+    expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.heldCardIds).toEqual([]); // destroyed
+    expect(game.jailbirdUses).toBe(0); // reset - it's gone, a fresh one starts over
+    expect(game.looseAnomalies).toHaveLength(1); // anomaly untouched
+  });
+
+  it('the 3rd Jailbird swing always breaks it, cleanly, even if it never malfunctioned', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 2, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = { ...game, jailbirdUses: 2 };
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'anomaly', anomalyId: 'shyGuy' }, () => 0.99); // never malfunctions
+    expect(game.looseAnomalies).toEqual([]); // this swing still worked
+    expect(game.players.p1.heldCardIds).toEqual([]); // but it's used up now
+    expect(game.players.p1.credits).toBe(1500); // no penalty - a clean break, not a malfunction
+    expect(game.jailbirdUses).toBe(0);
+  });
+
+  it('useJailbird against another player applies the same consequence as an anomaly catch', () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = withPlayer(game, 'p2', { position: 2, credits: 1000, ownedTileIds: [6] });
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'player', targetPlayerId: 'p2' }, () => 0.99);
+    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.pendingPieceChoice?.playerId).toBe('p2');
+  });
+
+  it("an armed Countermeasure redirects a Jailbird player-attack too, same as any other anomaly-style catch", () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedJailbird'], position: 0 });
+    game = withPlayer(game, 'p2', { position: 2, credits: 1000, ownedTileIds: [6], hasCountermeasureArmed: true });
+    game = useJailbird(game, 'p1', 'requisitionedJailbird', { type: 'player', targetPlayerId: 'p2' }, () => 0.99);
+    // p2 discharged the ring and is untouched; p1 (the only other active player) took the fall instead.
+    expect(game.players.p2.hasCountermeasureArmed).toBe(false);
+    expect(game.players.p2.credits).toBe(1000);
+    expect(game.pendingPieceChoice?.playerId).toBe('p1');
   });
 });

@@ -45,12 +45,16 @@ import {
   unmortgageProperty,
   useBadComposition,
   useCountermeasure,
+  useEvasion,
   useGamersFuel,
   useGetOutOfJailCard,
+  useJailbird,
   useJanitorTunnelTravel,
+  useMicroHid,
   viewAnomaly,
   withdrawTrade,
 } from '../game/engine';
+import type { JailbirdTarget } from '../game/engine';
 
 // Every function here follows the same shape: take the game state this
 // client already has (from its live Firestore subscription), run it
@@ -179,6 +183,25 @@ export async function useBadCompositionAndSync(roomCode: string, game: GameState
 
 export async function useCountermeasureAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
   await writeGameState(roomCode, useCountermeasure(game, playerId, cardId));
+}
+
+export async function useEvasionAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
+  await writeGameState(roomCode, useEvasion(game, playerId, cardId));
+}
+
+export async function useMicroHidAndSync(
+  roomCode: string,
+  game: GameState,
+  playerId: string,
+  cardId: string,
+  anomalyId: string,
+  overcharge: boolean,
+) {
+  await writeGameState(roomCode, useMicroHid(game, playerId, cardId, anomalyId, overcharge));
+}
+
+export async function useJailbirdAndSync(roomCode: string, game: GameState, playerId: string, cardId: string, target: JailbirdTarget) {
+  await writeGameState(roomCode, useJailbird(game, playerId, cardId, target));
 }
 
 export async function useJanitorTunnelTravelAndSync(roomCode: string, game: GameState, playerId: string, targetTileId: number) {

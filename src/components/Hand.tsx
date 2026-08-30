@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { BOARD, getTile } from '../data/board';
+import type { AnomalyId } from '../data/anomalies';
+import { findAnomaly } from '../data/anomalies';
+import { BOARD, BOARD_SIZE, getTile } from '../data/board';
 import { findCard } from '../data/cards';
 import type { ObjectAnomalyId } from '../data/objectAnomalies';
 import {
@@ -9,12 +11,27 @@ import {
   unmortgageTileAndSync,
   useBadCompositionAndSync,
   useCountermeasureAndSync,
+  useEvasionAndSync,
   useGamersFuelAndSync,
   useGetOutOfJailCardAndSync,
+  useJailbirdAndSync,
+  useMicroHidAndSync,
 } from '../lib/gameSync';
 import type { GameState } from '../types/game';
 import type { Room } from '../types/room';
 import './Hand.css';
+
+// Mirrors game/engine.ts's MICRO_HID_STANDARD_RANGE and JAILBIRD_RANGE -
+// UI-only, just to gray out an option that would no-op server-side. A
+// mismatch here would only be a UX nicety issue, never a rules one, since
+// the engine enforces its own range check regardless of what this shows.
+const MICRO_HID_STANDARD_RANGE_UI = 8;
+const JAILBIRD_RANGE_UI = 3;
+
+function boardDistance(a: number, b: number): number {
+  const forward = (b - a + BOARD_SIZE) % BOARD_SIZE;
+  return Math.min(forward, BOARD_SIZE - forward);
+}
 
 function houseCountLabel(count: number): string {
   if (count === 5) return 'Hotel';
@@ -36,7 +53,7 @@ interface HandProps {
  * expand it (full details, and a use-action if applicable); click
  * again to collapse.
  */
-function Hand({ roomCode, playerId, game }: HandProps) {
+function Hand({ room, roomCode, playerId, game }: HandProps) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const me = game.players[playerId];
   if (!me || (me.ownedTileIds.length === 0 && me.heldCardIds.length === 0)) {
@@ -110,6 +127,7 @@ function Hand({ roomCode, playerId, game }: HandProps) {
                   ))}
                 {card.effect.type === 'objectAnomaly' && (
                   <ObjectAnomalyAction
+                    room={room}
                     roomCode={roomCode}
                     game={game}
                     playerId={playerId}
@@ -117,6 +135,7 @@ function Hand({ roomCode, playerId, game }: HandProps) {
                     objectId={card.effect.objectId}
                     isMyTurn={isMyTurn}
                     countermeasureArmed={me.hasCountermeasureArmed}
+                    evasionActive={me.hasEvasionActive}
                   />
                 )}
               </div>
@@ -244,6 +263,7 @@ function MortgageControls({ roomCode, playerId, game, tileId }: MortgageControls
 }
 
 interface ObjectAnomalyActionProps {
+  room: Room;
   roomCode: string;
   game: GameState;
   playerId: string;
@@ -251,12 +271,23 @@ interface ObjectAnomalyActionProps {
   objectId: ObjectAnomalyId;
   isMyTurn: boolean;
   countermeasureArmed: boolean;
+  evasionActive: boolean;
 }
 
 // Each Object Anomaly defines its own usability window (see
 // CONTEXT.md's Object Anomalies section) - all three happen to only be
 // usable on the holder's own turn, but each fires a different action.
-function ObjectAnomalyAction({ roomCode, game, playerId, cardId, objectId, isMyTurn, countermeasureArmed }: ObjectAnomalyActionProps) {
+function ObjectAnomalyAction({
+  room,
+  roomCode,
+  game,
+  playerId,
+  cardId,
+  objectId,
+  isMyTurn,
+  countermeasureArmed,
+  evasionActive,
+}: ObjectAnomalyActionProps) {
   if (!isMyTurn) {
     return <p className="hint">Usable on your own turn.</p>;
   }
@@ -282,6 +313,88 @@ function ObjectAnomalyAction({ roomCode, game, playerId, cardId, objectId, isMyT
           Put It On
         </button>
       );
+    case 'evasionHat':
+      return evasionActive ? (
+        <p className="hint">Already invisible - wears off at the start of your next turn.</p>
+      ) : (
+        <button type="button" onClick={() => useEvasionAndSync(roomCode, game, playerId, cardId)}>
+          Put It On
+        </button>
+      );
+    case 'microHid': {
+      const me = game.players[playerId];
+      const targets = game.looseAnomalies.filter((a) => a.status !== 'inPocketDimension');
+      if (targets.length === 0) {
+        return <p className="hint">Nothing loose to target right now.</p>;
+      }
+      return (
+        <div className="object-anomaly-targets">
+          {targets.map((anomaly) => {
+            const inStandardRange = boardDistance(me.position, anomaly.tileId) <= MICRO_HID_STANDARD_RANGE_UI;
+            return (
+              <div key={anomaly.anomalyId} className="object-anomaly-target-row">
+                <span>{findAnomaly(anomaly.anomalyId as AnomalyId).name}</span>
+                <button
+                  type="button"
+                  disabled={!inStandardRange}
+                  onClick={() => useMicroHidAndSync(roomCode, game, playerId, cardId, anomaly.anomalyId, false)}
+                >
+                  Standard Fire
+                </button>
+                <button
+                  type="button"
+                  onClick={() => useMicroHidAndSync(roomCode, game, playerId, cardId, anomaly.anomalyId, true)}
+                >
+                  Overcharge
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+    case 'jailbird': {
+      const me = game.players[playerId];
+      const anomalyTargets = game.looseAnomalies.filter((a) => a.status !== 'inPocketDimension');
+      const playerTargets = Object.entries(game.players).filter(([id, p]) => id !== playerId && !p.isSpectating);
+      if (anomalyTargets.length === 0 && playerTargets.length === 0) {
+        return <p className="hint">Nothing in range to swing at.</p>;
+      }
+      return (
+        <div className="object-anomaly-targets">
+          {anomalyTargets.map((anomaly) => {
+            const inRange = boardDistance(me.position, anomaly.tileId) <= JAILBIRD_RANGE_UI;
+            return (
+              <div key={anomaly.anomalyId} className="object-anomaly-target-row">
+                <span>{findAnomaly(anomaly.anomalyId as AnomalyId).name}</span>
+                <button
+                  type="button"
+                  disabled={!inRange}
+                  onClick={() => useJailbirdAndSync(roomCode, game, playerId, cardId, { type: 'anomaly', anomalyId: anomaly.anomalyId })}
+                >
+                  Strike
+                </button>
+              </div>
+            );
+          })}
+          {playerTargets.map(([id, p]) => {
+            const inRange = boardDistance(me.position, p.position) <= JAILBIRD_RANGE_UI;
+            return (
+              <div key={id} className="object-anomaly-target-row">
+                <span>{room.players[id]?.name ?? 'Someone'}</span>
+                <button
+                  type="button"
+                  disabled={!inRange}
+                  onClick={() => useJailbirdAndSync(roomCode, game, playerId, cardId, { type: 'player', targetPlayerId: id })}
+                >
+                  Strike
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
   }
 }
 

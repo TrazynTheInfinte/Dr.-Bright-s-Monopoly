@@ -139,6 +139,8 @@ export interface GamePlayerState {
   lapsCompleted: number;
   /** SCP-963 "Countermeasure" armed on this player - the next time they'd be caught by a Hostile Anomaly, the consequence redirects onto a random other living player instead, then this clears. Unrelated to debt-Termination, which this does not intercept. */
   hasCountermeasureArmed: boolean;
+  /** SCP-268 active on this player: excluded from being targeted or hunted by any Hostile Anomaly, exactly like Rogue Anomaly's permanent immunity, just temporary. Clears automatically the instant this player's next turn begins - see endTurn. */
+  hasEvasionActive: boolean;
 }
 
 /**
@@ -258,6 +260,8 @@ export interface GameState {
   scp173Watched: boolean;
   /** Set while SCP-106 is off chasing someone it already caught on the main board - see movePocketDimension in game/engine.ts. Null whenever nobody's trapped, whether SCP-106 has never breached, is still loose-but-dormant/hunting on the main board, or the ordeal already ended (escape or Termination both recontain it). */
   pocketDimensionOrdeal: PocketDimensionOrdeal | null;
+  /** Successful/attempted swings landed with the current Jailbird since it was last freshly drawn - a property of the physical item, not whoever's currently holding it (see useJailbird). Resets to 0 whenever a Jailbird card is pulled back into a hand fresh (pullBackFromDiscard); the 3rd use always breaks it, malfunction or not. */
+  jailbirdUses: number;
 }
 
 /** A proposed trade between two players - Wings/Tunnels/utilities and/or Credits, either direction. Neither side's tileIds may have houses on them (must be sold first). Not resolved until the recipient (toPlayerId) accepts or declines, or the proposer (fromPlayerId) withdraws it. */

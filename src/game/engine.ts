@@ -64,6 +64,20 @@ const BAD_COMPOSITION_EXPLOSION_CHANCE = 1 / 6;
 const BAD_COMPOSITION_STUDY_REWARD = 40;
 /** SCP-012's rare, bad outcome: the Credits cost of getting caught in the blast, on top of being sent to the Containment Chamber for observation. */
 const BAD_COMPOSITION_EXPLOSION_COST = 150;
+/** Micro H.I.D.'s Standard Fire range - anywhere within this many tiles (either direction) of the wielder. Overcharge ignores range entirely (anywhere loose, board-wide) but risks backfiring instead. */
+const MICRO_HID_STANDARD_RANGE = 8;
+/** Micro H.I.D.'s overcharge backfire odds - the price of trading Standard Fire's guaranteed short range for board-wide reach. */
+const MICRO_HID_OVERCHARGE_BACKFIRE_CHANCE = 0.25;
+/** Micro H.I.D.'s overcharge backfire cost - Credits only, no Containment Chamber trip. A tool malfunctioning is gentler than a weapon exploding in your hands (see Jailbird). */
+const MICRO_HID_BACKFIRE_COST = 100;
+/** Jailbird's melee range - anywhere within this many tiles (either direction) of the wielder, on an anomaly or another player. */
+const JAILBIRD_RANGE = 3;
+/** Jailbird's per-swing chance of violently malfunctioning instead of connecting. */
+const JAILBIRD_MALFUNCTION_CHANCE = 0.1;
+/** Jailbird's total swings before it's spent regardless of luck - the 3rd swing always breaks it, malfunction or not (a clean break costs nothing; a malfunctioning break still costs the usual penalty). */
+const JAILBIRD_MAX_USES = 3;
+/** Jailbird's malfunction penalty - same scale as SCP-012's explosion outcome, since both are "the item just went off in your hands." */
+const JAILBIRD_MALFUNCTION_COST = 150;
 // Half real Monopoly's bank supply (32/12) - makes the shared pool a
 // real constraint worth fighting over, and makes Logistics Officer's
 // Overstock (bypasses the shared pool entirely) noticeably stronger by
@@ -120,6 +134,7 @@ export function createInitialGameState(
       usedInduceBreach: false,
       lapsCompleted: 0,
       hasCountermeasureArmed: false,
+      hasEvasionActive: false,
     };
   }
 
@@ -152,6 +167,7 @@ export function createInitialGameState(
     pendingPieceChoice: null,
     scp173Watched: false,
     pocketDimensionOrdeal: null,
+    jailbirdUses: 0,
   };
 }
 
@@ -497,6 +513,132 @@ export function useCountermeasure(state: GameState, playerId: string, cardId: st
   );
 }
 
+/**
+ * SCP-268 "Invisibility Hat": usable anytime on your own turn. Excludes
+ * the wearer from being targeted or hunted by any Hostile Anomaly at
+ * all - the exact same exclusion Rogue Anomaly gets permanently (see
+ * nearestHuntableTarget, viewAnomaly, advanceHuntingAnomalies), just
+ * temporary. Clears automatically the instant this player's next turn
+ * begins (see endTurn) rather than after a fixed number of anomaly
+ * ticks, so it protects through everyone else's turns no matter how
+ * many there are. No-op if already active.
+ */
+export function useEvasion(state: GameState, playerId: string, cardId: string): GameState {
+  if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].hasEvasionActive) return state;
+  if (!heldObjectAnomaly(state, playerId, cardId, 'evasionHat')) return state;
+
+  const discarded = discardHeldCard(state, playerId, cardId);
+  return logEvent(
+    updatePlayer(discarded, playerId, { hasEvasionActive: true }),
+    'Put on SCP-268 - invisible to every Hostile Anomaly until your next turn begins.',
+  );
+}
+
+/**
+ * Micro H.I.D.: usable anytime on your own turn against any currently
+ * loose, reachable (not mid-Pocket-Dimension) Hostile Anomaly - same
+ * "back to fully recontained" outcome as a Site Warhead purge, just
+ * single-target, free, and not gated on owning the Warhead tile.
+ * Standard Fire only reaches MICRO_HID_STANDARD_RANGE tiles either
+ * direction and always works; overcharge ignores range entirely but has
+ * a real chance of backfiring (Credits cost, nothing recontained)
+ * instead of connecting. Single-use regardless of outcome.
+ */
+export function useMicroHid(
+  state: GameState,
+  playerId: string,
+  cardId: string,
+  anomalyId: string,
+  overcharge: boolean,
+  rng: () => number = Math.random,
+): GameState {
+  if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (!heldObjectAnomaly(state, playerId, cardId, 'microHid')) return state;
+
+  const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId && a.status !== 'inPocketDimension');
+  if (!anomaly) return state;
+  if (!overcharge && boardDistance(state.players[playerId].position, anomaly.tileId) > MICRO_HID_STANDARD_RANGE) return state;
+
+  const discarded = discardHeldCard(state, playerId, cardId);
+  if (overcharge && rng() < MICRO_HID_OVERCHARGE_BACKFIRE_CHANCE) {
+    return chargePlayer(logEvent(discarded, 'The Micro H.I.D. overcharged and backfired.'), playerId, MICRO_HID_BACKFIRE_COST, null);
+  }
+
+  return logEvent(
+    { ...discarded, looseAnomalies: discarded.looseAnomalies.filter((a) => a.anomalyId !== anomalyId) },
+    `${findAnomaly(anomalyId as AnomalyId).name} recontained with a Micro H.I.D.`,
+  );
+}
+
+/** What useJailbird is being swung at - a loose Hostile Anomaly, or another player entirely (see the "for fun" player-vs-player option it supports). */
+export type JailbirdTarget = { type: 'anomaly'; anomalyId: string } | { type: 'player'; targetPlayerId: string };
+
+/**
+ * Jailbird: usable anytime on your own turn, at very short range
+ * (JAILBIRD_RANGE tiles either direction), against either a currently
+ * loose reachable Hostile Anomaly (recontained, same outcome as Micro
+ * H.I.D.) or another active player (the exact same consequence as being
+ * caught by an anomaly - see applyCatchConsequence, including SCP-963
+ * Countermeasure interception if they're armed). Unlike every other
+ * Object Anomaly, it isn't consumed by a normal successful swing -
+ * every swing has a small chance of malfunctioning instead (no effect,
+ * Credits cost, and a trip to the Containment Chamber for the wielder,
+ * same penalty scale as SCP-012's explosion), and after JAILBIRD_MAX_USES
+ * swings total it always breaks - cleanly, at no cost, if the last one
+ * didn't already malfunction.
+ */
+export function useJailbird(
+  state: GameState,
+  playerId: string,
+  cardId: string,
+  target: JailbirdTarget,
+  rng: () => number = Math.random,
+): GameState {
+  if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (!heldObjectAnomaly(state, playerId, cardId, 'jailbird')) return state;
+
+  const attackerPosition = state.players[playerId].position;
+  let anomalyTarget: LooseAnomaly | null = null;
+  let playerTargetId: string | null = null;
+
+  if (target.type === 'anomaly') {
+    const anomaly = state.looseAnomalies.find((a) => a.anomalyId === target.anomalyId && a.status !== 'inPocketDimension');
+    if (!anomaly || boardDistance(attackerPosition, anomaly.tileId) > JAILBIRD_RANGE) return state;
+    anomalyTarget = anomaly;
+  } else {
+    const victim = state.players[target.targetPlayerId];
+    if (!victim || target.targetPlayerId === playerId || victim.isSpectating) return state;
+    if (boardDistance(attackerPosition, victim.position) > JAILBIRD_RANGE) return state;
+    playerTargetId = target.targetPlayerId;
+  }
+
+  if (rng() < JAILBIRD_MALFUNCTION_CHANCE) {
+    const discarded = { ...discardHeldCard(state, playerId, cardId), jailbirdUses: 0 };
+    const charged = chargePlayer(
+      logEvent(discarded, 'The Jailbird violently malfunctioned mid-swing.'),
+      playerId,
+      JAILBIRD_MALFUNCTION_COST,
+      null,
+    );
+    if (charged.pendingDecision) return charged;
+    return logEvent(sendToJail(charged, playerId), 'Rushed to the Containment Chamber for treatment.');
+  }
+
+  const next: GameState = anomalyTarget
+    ? logEvent(
+        { ...state, looseAnomalies: state.looseAnomalies.filter((a) => a !== anomalyTarget) },
+        `${findAnomaly(anomalyTarget.anomalyId as AnomalyId).name} beaten back into containment with a Jailbird.`,
+      )
+    : applyCatchConsequence(state, playerTargetId!, rng, 'Struck down with a Jailbird - stripped and reassigned, same as anyone caught by an anomaly.');
+
+  const usesSoFar = state.jailbirdUses + 1;
+  if (usesSoFar >= JAILBIRD_MAX_USES) {
+    return { ...discardHeldCard(logEvent(next, 'The Jailbird finally gave out - reduced to scrap.'), playerId, cardId), jailbirdUses: 0 };
+  }
+  return { ...next, jailbirdUses: usesSoFar };
+}
+
 /** Awards the Go bonus for passing the Site Entrance, plus Intern's "Unpaid Overtime" top-up if applicable, and tracks laps completed for Intern's "On a Learning Curve" graduation. */
 function passGo(state: GameState, playerId: string): GameState {
   const piece = pieceOf(state, playerId);
@@ -830,11 +972,15 @@ function applyCardEffect(state: GameState, playerId: string, cardId: string, eff
  * one and leaving the real draw stranded in the discard pile forever.
  */
 function pullBackFromDiscard(state: GameState, playerId: string, cardId: string): GameState {
-  const deck = findCard(cardId).deck;
-  const discardKey = deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
+  const card = findCard(cardId);
+  const discardKey = card.deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
   const pile = state[discardKey];
   if (pile[pile.length - 1] !== cardId) return state; // defensive - should always be true right after applyDrawnCard
-  const next: GameState = { ...state, [discardKey]: pile.slice(0, -1) } as GameState;
+  // A fresh Jailbird (drawn for the first time, or redrawn after a
+  // previous one broke) always starts at full durability - see
+  // useJailbird and GameState.jailbirdUses.
+  const jailbirdUses = card.effect.type === 'objectAnomaly' && card.effect.objectId === 'jailbird' ? 0 : state.jailbirdUses;
+  const next: GameState = { ...state, [discardKey]: pile.slice(0, -1), jailbirdUses } as GameState;
   return updatePlayer(next, playerId, { heldCardIds: [...state.players[playerId].heldCardIds, cardId] });
 }
 
@@ -848,6 +994,11 @@ function discardHeldCard(state: GameState, playerId: string, cardId: string): Ga
 
 function distanceAhead(from: number, to: number): number {
   return (to - from + BOARD_SIZE) % BOARD_SIZE;
+}
+
+/** Shortest distance between two tiles in either direction around the loop - for range checks (Micro H.I.D., Jailbird) where physical proximity is what matters, not "how far ahead on your route." */
+function boardDistance(a: number, b: number): number {
+  return Math.min(distanceAhead(a, b), distanceAhead(b, a));
 }
 
 function nearestAhead(from: number, candidateTileIds: number[]): number {
@@ -1159,42 +1310,42 @@ function availablePersonnelIds(state: GameState): PieceId[] {
 }
 
 /**
- * The actual consequence of being caught by a Hostile Anomaly, split
- * out from resolveAnomalyCatch below so SCP-106's Pocket Dimension can
- * reuse it too (a Termination inside the Pocket Dimension is the same
- * consequence, just reached a different way - see
- * terminateInsidePocketDimension). Every asset returns to the
- * Foundation, exactly like a real Termination. D-Class's "Standard
- * Expendability Clause" still applies first if they haven't used it.
- * Otherwise, if any Personnel nobody else is playing exists, they're
- * queued to pick one (see chooseNewPersonnel) instead of going out for
- * good - only a real Termination if nothing's left to reassign. Does
- * not touch the anomaly's own state at all - callers handle that.
+ * The actual consequence of being permanently caught - whatever the
+ * cause (a Hostile Anomaly, or a Jailbird swing, see useJailbird) - so
+ * every caller shares one consequence pipeline instead of each
+ * reimplementing it. Every asset returns to the Foundation, exactly
+ * like a real Termination. D-Class's "Standard Expendability Clause"
+ * still applies first if they haven't used it. Otherwise, if any
+ * Personnel nobody else is playing exists, they're queued to pick one
+ * (see chooseNewPersonnel) instead of going out for good - only a real
+ * Termination if nothing's left to reassign. Does not touch an
+ * anomaly's own state at all - anomaly-specific callers handle that
+ * themselves (see resolveAnomalyCatch).
  *
  * Checked first, before any of that: SCP-963 "Countermeasure" armed on
  * the target (see useCountermeasure) redirects the whole consequence
  * onto a random other living player instead - discharging the ring and
  * recursing with them as the new target. Assumes at most one
  * Countermeasure is ever armed at a time (only one such card exists in
- * the decks), so this can't ping-pong.
+ * the decks), so this can't ping-pong. openingMessage names the
+ * specific cause in the log.
  */
-function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targetPlayerId: string, rng: () => number): GameState {
+function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: () => number, openingMessage: string): GameState {
   if (state.players[targetPlayerId].hasCountermeasureArmed) {
     const candidates = activePlayerIds(state).filter((id) => id !== targetPlayerId);
     if (candidates.length > 0) {
       const redirectedId = candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
       const disarmed = updatePlayer(state, targetPlayerId, { hasCountermeasureArmed: false });
-      return resolvePlayerCaughtByAnomaly(
+      return applyCatchConsequence(
         logEvent(disarmed, "SCP-963 discharged just in time - its grip lands on someone else entirely."),
-        anomalyId,
         redirectedId,
         rng,
+        openingMessage,
       );
     }
   }
 
-  const anomaly = findAnomaly(anomalyId as AnomalyId);
-  let next = logEvent(state, `${anomaly.name} caught up with someone.`);
+  let next = logEvent(state, openingMessage);
   next = seizeAssets(next, targetPlayerId, null);
 
   if (pieceOf(next, targetPlayerId) === 'boot' && !next.players[targetPlayerId].usedExpendabilityClause) {
@@ -1223,15 +1374,23 @@ function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targe
   return next;
 }
 
+/** applyCatchConsequence, specifically for a Hostile Anomaly catch - names the anomaly in the opening log line. */
+function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targetPlayerId: string, rng: () => number): GameState {
+  const anomaly = findAnomaly(anomalyId as AnomalyId);
+  return applyCatchConsequence(state, targetPlayerId, rng, `${anomaly.name} caught up with someone.`);
+}
+
 /** Shy Guy's and SCP-173's shared catch effect on the main board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly itself goes back to dormant right where it caught them - still loose until someone purges it. SCP-106 never calls this - see dragIntoPocketDimension instead, since a main-board catch isn't a loss for it. */
 function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
   const next = resolvePlayerCaughtByAnomaly(state, anomalyId, targetPlayerId, rng);
   return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
 }
 
-/** Whoever's closest to a given tile, eligible to actually be hunted - excludes Rogue Anomaly (always immune) and anyone AFK-benched. Used for SCP-106's automatic targeting (no viewing required) and SCP-173's nearest-victim pick each unwatched tick. Null if nobody's currently eligible at all. */
+/** Whoever's closest to a given tile, eligible to actually be hunted - excludes Rogue Anomaly (always immune), anyone with SCP-268 active (temporarily immune, see useEvasion), and anyone AFK-benched. Used for SCP-106's automatic targeting (no viewing required) and SCP-173's nearest-victim pick each unwatched tick. Null if nobody's currently eligible at all. */
 function nearestHuntableTarget(state: GameState, fromTileId: number): string | null {
-  const candidates = activePlayerIds(state).filter((id) => !state.players[id].isAfkSpectating && pieceOf(state, id) !== 'trex');
+  const candidates = activePlayerIds(state).filter(
+    (id) => !state.players[id].isAfkSpectating && !state.players[id].hasEvasionActive && pieceOf(state, id) !== 'trex',
+  );
   if (candidates.length === 0) return null;
   return candidates.reduce((closest, id) =>
     distanceAhead(fromTileId, state.players[id].position) < distanceAhead(fromTileId, state.players[closest].position) ? id : closest,
@@ -1245,13 +1404,15 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     if (!current || current.status !== 'hunting' || !current.targetPlayerId) continue;
 
     const target = next.players[current.targetPlayerId];
-    if (!target || target.isSpectating || pieceOf(next, current.targetPlayerId) === 'trex') {
-      // Target's really gone (Terminated some other way), or was just reassigned into Rogue
-      // Anomaly ("Uncontained") mid-hunt. SCP-106 never needed a "look" to
-      // start engaging in the first place, so losing a target doesn't put
-      // it back to sleep either - it immediately re-picks whoever's now
-      // closest instead. Every other anomaly just loses interest and
-      // stays put dormant.
+    if (!target || target.isSpectating || target.hasEvasionActive || pieceOf(next, current.targetPlayerId) === 'trex') {
+      // Target's really gone (Terminated some other way), was just
+      // reassigned into Rogue Anomaly ("Uncontained") mid-hunt, or just
+      // went invisible via SCP-268 (see useEvasion) - same treatment as
+      // Rogue Anomaly's permanent immunity, just temporary. SCP-106
+      // never needed a "look" to start engaging in the first place, so
+      // losing a target doesn't put it back to sleep either - it
+      // immediately re-picks whoever's now closest instead. Every other
+      // anomaly just loses interest and stays put dormant.
       if (current.anomalyId === 'theOldMan') {
         const reacquired = nearestHuntableTarget(next, current.tileId);
         next = updateAnomaly(next, current.anomalyId, reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
@@ -1434,7 +1595,7 @@ export function viewAnomaly(state: GameState, playerId: string, anomalyId: strin
   if (anomalyId !== 'shyGuy') return state;
   const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId);
   if (!anomaly || anomaly.status !== 'dormant') return state;
-  if (pieceOf(state, playerId) === 'trex') return state;
+  if (pieceOf(state, playerId) === 'trex' || state.players[playerId].hasEvasionActive) return state;
   return logEvent(
     updateAnomaly(state, anomalyId, { status: 'hunting', targetPlayerId: playerId }),
     `${findAnomaly(anomalyId as AnomalyId).name} noticed it was being watched.`,
@@ -1569,6 +1730,16 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // it's revealed.
   if (sculptureBefore) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId, rng);
   afterAnomalies = advanceHuntingAnomalies(afterAnomalies, rng);
+  // SCP-268's evasion (see useEvasion) lasts "until your next turn
+  // begins" - cleared only now, after every anomaly tick for the turn
+  // that just ended has already had its chance to read it (it must
+  // still read as active through that last tick - clearing it any
+  // earlier would let a hunting anomaly catch its target on the very
+  // transition into their own next turn, defeating the whole point).
+  const nextPlayerId = state.turnOrder[nextIndex];
+  if (afterAnomalies.players[nextPlayerId].hasEvasionActive) {
+    afterAnomalies = updatePlayer(afterAnomalies, nextPlayerId, { hasEvasionActive: false });
+  }
   // scp173Watched can be set by anyone's Keep Watch during the round (see
   // keepWatchOnSculpture) - everyone's a potential target, so everyone
   // shares the job of watching it. It only actually gets read/consumed on

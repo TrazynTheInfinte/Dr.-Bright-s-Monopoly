@@ -90,3 +90,22 @@
 .hand-card-action select {
   padding: 0.2em;
 }
+
+.object-anomaly-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.object-anomaly-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.object-anomaly-target-row span {
+  flex: 1 1 auto;
+}

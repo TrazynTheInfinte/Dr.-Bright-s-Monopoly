@@ -212,6 +212,13 @@ export const ANOMALOUS_EVENT_CARDS: CardDefinition[] = [
     text: 'This may be kept until needed, or sold. An unfinished musical score - studying it is usually harmless. Usually.',
     effect: { type: 'objectAnomaly', objectId: 'badComposition' },
   },
+  {
+    id: 'recoveredEvasionHat',
+    deck: 'anomalousEvent',
+    title: 'Recovered from a Breach Site: SCP-268',
+    text: 'This may be kept until needed, or sold. A wide-brimmed hat - wear it to slip off every hostile anomaly\'s radar for a while.',
+    effect: { type: 'objectAnomaly', objectId: 'evasionHat' },
+  },
 ];
 
 export const FOUNDATION_DIRECTIVE_CARDS: CardDefinition[] = [
@@ -389,6 +396,20 @@ export const FOUNDATION_DIRECTIVE_CARDS: CardDefinition[] = [
     title: 'Requisitioned from Site Storage: SCP-963',
     text: 'This may be kept until needed, or sold. An amber ring - worn, it carries you elsewhere the instant an anomaly would otherwise catch you.',
     effect: { type: 'objectAnomaly', objectId: 'countermeasure' },
+  },
+  {
+    id: 'requisitionedMicroHid',
+    deck: 'foundationDirective',
+    title: 'Requisitioned from the Armory: Micro H.I.D.',
+    text: 'This may be kept until needed, or sold. A handheld termination beam - a careful shot reaches nearby, an overcharged one reaches anywhere, at a real risk of backfiring.',
+    effect: { type: 'objectAnomaly', objectId: 'microHid' },
+  },
+  {
+    id: 'requisitionedJailbird',
+    deck: 'foundationDirective',
+    title: 'Requisitioned from the Armory: Jailbird',
+    text: 'This may be kept until needed, or sold. A modified shock baton - short range, and already living on borrowed time.',
+    effect: { type: 'objectAnomaly', objectId: 'jailbird' },
   },
 ];
 

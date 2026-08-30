@@ -1,4 +1,4 @@
-export type ObjectAnomalyId = 'gamersFuel' | 'badComposition' | 'countermeasure';
+export type ObjectAnomalyId = 'gamersFuel' | 'badComposition' | 'countermeasure' | 'evasionHat' | 'microHid' | 'jailbird';
 
 export interface ObjectAnomalyDefinition {
   id: ObjectAnomalyId;
@@ -24,6 +24,23 @@ export const OBJECT_ANOMALIES: ObjectAnomalyDefinition[] = [
     name: 'SCP-963 "Countermeasure"',
     flavorText:
       "An amber ring. Worn continuously, it carries its wearer's mind into whoever's touching it the instant the wearer would otherwise die - so long as someone else is close enough when it happens.",
+  },
+  {
+    id: 'evasionHat',
+    name: 'SCP-268 "Invisibility Hat"',
+    flavorText: 'A wide-brimmed hat. Wear it and every hostile anomaly on-site simply loses track of you - for a little while.',
+  },
+  {
+    id: 'microHid',
+    name: 'Micro H.I.D.',
+    flavorText:
+      'A handheld anomaly-termination beam weapon. A careful shot recontains something nearby; pushing it past its rated output reaches much further, at the cost of a real chance it burns out in your hands instead.',
+  },
+  {
+    id: 'jailbird',
+    name: 'Jailbird',
+    flavorText:
+      "A modified shock baton. Reliable at close range, for a while - it's already lived past its rated service life, and every swing is a little more likely to be its last.",
   },
 ];
 

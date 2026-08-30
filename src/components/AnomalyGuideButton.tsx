@@ -44,6 +44,16 @@ const OBJECT_REDACTED_BRIEFS: Record<ObjectAnomalyId, string> = {
     'A wearable countermeasure against ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓, of a kind that should not exist and is not to be ' +
     'relied upon. Requires proximity to another living subject at the moment of failure - alone, it does nothing ' +
     'at all.',
+  evasionHat:
+    'Renders the wearer ▓▓▓▓▓▓▓▓▓▓▓▓ to on-site hostile entities for a limited window. Effective against every ' +
+    'known threat class without exception - the mechanism is not understood well enough to explain why.',
+  microHid:
+    'A directed-energy termination tool. Rated output reaches a limited distance reliably; exceeding rated output ' +
+    'reaches much further, at a real risk of ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ instead of the intended target.',
+  jailbird:
+    "Melee-range containment equipment, already past its certified service life. Every deployment carries an " +
+    "increasing risk of catastrophic failure - personnel are reminded it is authorized for exactly three more " +
+    "uses before mandatory decommissioning, malfunction or not.",
 };
 
 function AnomalyGuideButton() {

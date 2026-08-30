@@ -34,6 +34,27 @@ function ObjectAnomalyIcon({ objectId, className }: ObjectAnomalyIconProps) {
           <path d="M9 6.5 L12 2 L15 6.5" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" />
         </svg>
       );
+    case 'evasionHat': // SCP-268 - a wide-brimmed hat
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <ellipse cx="12" cy="16" rx="10" ry="2.6" stroke="currentColor" strokeWidth="2" />
+          <path d="M7 16 C7 10 9 6 12 6 C15 6 17 10 17 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'microHid': // Micro H.I.D. - a beam weapon
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="2" y="10" width="10" height="5" rx="1" stroke="currentColor" strokeWidth="2" />
+          <path d="M12 12.5 H22 M17 9 L22 12.5 L17 16" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      );
+    case 'jailbird': // Jailbird - a shock baton
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 20 L15 9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+          <rect x="14" y="3" width="7" height="7" rx="1.2" transform="rotate(45 17.5 6.5)" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      );
     default:
       return null;
   }
