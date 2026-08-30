@@ -402,16 +402,19 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
               // Shy Guy's marker only shows on the exact turn it breaches -
               // after that it's still there (and still reacts to being
               // hovered), just with no visible warning, so a table that
-              // isn't tracking it can genuinely forget. A hunting one is
-              // always shown - by then it's in plain sight. SCP-173 is
-              // never concealed like this: its whole mechanic depends on
-              // everyone knowing it's loose every turn so Keep Watch is an
-              // actual choice, not a trap for forgetting it exists. Rogue
-              // Anomaly sees every concealed one regardless of turn.
+              // isn't tracking it can genuinely forget. This concealment is
+              // SCP-096 exclusive: a hunting one is always shown regardless
+              // (by then it's in plain sight for everyone), and both SCP-173
+              // and SCP-106 are never concealed like this at all - 173's
+              // whole mechanic depends on everyone knowing it's loose every
+              // turn so Keep Watch is an actual choice, and 106 is a slow,
+              // visible threat rather than a "forget it exists" one. Rogue
+              // Anomaly sees every concealed one regardless of turn anyway.
               .filter(
                 (anomaly) =>
                   anomaly.status === 'hunting' ||
                   anomaly.anomalyId === 'theSculpture' ||
+                  anomaly.anomalyId === 'theOldMan' ||
                   anomaly.breachedOnTurnCount === game.turnCount ||
                   viewerSeesConcealedAnomalies,
               )
