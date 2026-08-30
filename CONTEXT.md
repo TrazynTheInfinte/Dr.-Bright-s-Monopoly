@@ -92,7 +92,7 @@ An SCP that can breach containment and menace players directly once loose on the
 _Avoid_: monster, enemy, creature
 
 **Containment Breach**:
-The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously.
+The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously. Can't happen at all - random or induced - until someone has completed a full lap of the board, so the first lap is always guaranteed anomaly-free.
 _Avoid_: spawn, escape
 
 **Dormant**:

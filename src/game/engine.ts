@@ -65,7 +65,7 @@ const BAD_COMPOSITION_STUDY_REWARD = 40;
 /** SCP-012's rare, bad outcome: the Credits cost of getting caught in the blast, on top of being sent to the Containment Chamber for observation. */
 const BAD_COMPOSITION_EXPLOSION_COST = 150;
 /** Micro H.I.D.'s Standard Fire range - anywhere within this many tiles (either direction) of the wielder. Overcharge ignores range entirely (anywhere loose, board-wide) but risks backfiring instead. */
-const MICRO_HID_STANDARD_RANGE = 8;
+const MICRO_HID_STANDARD_RANGE = 4;
 /** Micro H.I.D.'s overcharge backfire odds - the price of trading Standard Fire's guaranteed short range for board-wide reach. */
 const MICRO_HID_OVERCHARGE_BACKFIRE_CHANCE = 0.25;
 /** Micro H.I.D.'s overcharge backfire cost - Credits only, no Containment Chamber trip. A tool malfunctioning is gentler than a weapon exploding in your hands (see Jailbird). */
@@ -1284,7 +1284,13 @@ function spawnLooseAnomaly(state: GameState, anomaly: AnomalyDefinition, anchorP
   };
 }
 
+/** True once anyone has completed a full lap of the board (passed the Site Entrance at least once) - Hostile Anomalies can't breach containment at all before that, random or induced, so a first lap is guaranteed anomaly-free. */
+function anyLapCompleted(state: GameState): boolean {
+  return Object.values(state.players).some((p) => p.lapsCompleted > 0);
+}
+
 function maybeBreachContainment(state: GameState, rng: () => number, anchorPlayerId: string): GameState {
+  if (!anyLapCompleted(state)) return state;
   if (rng() >= BREACH_CHANCE) return state;
   const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
@@ -1623,9 +1629,10 @@ export function purgeAnomalies(state: GameState, playerId: string): GameState {
   return logEvent({ ...next, looseAnomalies: remaining }, 'Site Warhead activated - every reachable loose anomaly has been recontained.');
 }
 
-/** Rogue Anomaly's Special Power ("Induce a Breach"): forces a containment breach on demand instead of waiting on the random per-turn chance, picking a random not-yet-loose anomaly type exactly like a natural breach would. Once per game. No-op if it's not this player's power, they've already used it, or every anomaly type is already loose (nothing left to induce). */
+/** Rogue Anomaly's Special Power ("Induce a Breach"): forces a containment breach on demand instead of waiting on the random per-turn chance, picking a random not-yet-loose anomaly type exactly like a natural breach would. Once per game. No-op if it's not this player's power, they've already used it, every anomaly type is already loose (nothing left to induce), or nobody's completed a first lap yet - same restriction the random breach chance follows, and it applies here too rather than being a loophole around it. */
 export function induceBreach(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
   if (pieceOf(state, playerId) !== 'trex' || state.players[playerId].usedInduceBreach) return state;
+  if (!anyLapCompleted(state)) return state;
   const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
   if (candidates.length === 0) return state;

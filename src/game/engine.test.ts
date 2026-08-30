@@ -1065,8 +1065,15 @@ function withLooseAnomalies(state: GameState, anomalies: LooseAnomaly[]): GameSt
 describe('hostile anomalies', () => {
   it('a lucky roll breaches containment and spawns Shy Guy dormant at its spawn tile', () => {
     let game = makeGame();
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 }); // breaches can't happen at all before someone's lapped
     game = endTurn(game, () => 0); // 0 < BREACH_CHANCE every time it's called
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 1, spawnedOnPlayerId: 'p1' }]);
+  });
+
+  it("can't breach containment at all before anyone's completed a first lap, no matter how lucky the roll", () => {
+    let game = makeGame();
+    game = endTurn(game, () => 0); // 0 < BREACH_CHANCE every time it's called - would breach if a lap had completed
+    expect(game.looseAnomalies).toEqual([]);
   });
 
   it('an unlucky roll breaches nothing', () => {
@@ -1241,6 +1248,7 @@ describe('hostile anomalies', () => {
 
   it('Rogue Anomaly can induce a breach on demand', () => {
     let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     game = induceBreach(game, 'p1', () => 0);
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
     expect(game.players.p1.usedInduceBreach).toBe(true);
@@ -1248,6 +1256,7 @@ describe('hostile anomalies', () => {
 
   it("refuses to induce a breach for anyone who isn't Rogue Anomaly", () => {
     let game = makeGame();
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     const before = game;
     game = induceBreach(game, 'p1', () => 0);
     expect(game).toEqual(before);
@@ -1255,7 +1264,14 @@ describe('hostile anomalies', () => {
 
   it('only lets Rogue Anomaly induce a breach once per game', () => {
     let game = makeGame(['trex', 'car']);
-    game = withPlayer(game, 'p1', { usedInduceBreach: true });
+    game = withPlayer(game, 'p1', { usedInduceBreach: true, lapsCompleted: 1 });
+    const before = game;
+    game = induceBreach(game, 'p1', () => 0);
+    expect(game).toEqual(before);
+  });
+
+  it("can't induce a breach before anyone's completed a first lap either - not a loophole around the same restriction", () => {
+    let game = makeGame(['trex', 'car']);
     const before = game;
     game = induceBreach(game, 'p1', () => 0);
     expect(game).toEqual(before);
@@ -1263,6 +1279,7 @@ describe('hostile anomalies', () => {
 
   it('does nothing if every anomaly type is already loose', () => {
     let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     game = withLooseAnomalies(game, [
       { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
       { anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
@@ -1276,12 +1293,14 @@ describe('hostile anomalies', () => {
 
   it('Induce a Breach can spawn SCP-173 specifically', () => {
     let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     game = induceBreach(game, 'p1', () => 0.5); // 2nd of 3 candidates in ANOMALIES
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
   });
 
   it('Induce a Breach can spawn SCP-106 specifically, already hunting the only eligible player', () => {
     let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     game = induceBreach(game, 'p1', () => 0.99); // 3rd of 3 candidates in ANOMALIES
     // p1 is Rogue Anomaly (immune) - p2 is the only eligible target, so
     // SCP-106 engages automatically without anyone needing to view it.
@@ -1335,6 +1354,7 @@ describe('hostile anomalies', () => {
 
   it("doesn't move on the very turn it breaches, even if someone's right next to its spawn tile", () => {
     let game = makeGame();
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     game = withPlayer(game, 'p2', { position: 20 }); // close to Testing Chamber 12 (tile 18)
     let calls = 0;
     const rng = () => (calls++ === 0 ? 0 : 0.5); // guarantees a breach, then picks theSculpture (2nd of 3 candidates)
@@ -1847,7 +1867,7 @@ describe('Object Anomalies', () => {
   it('useMicroHid Standard Fire recontains a reachable anomaly within range', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedMicroHid'], position: 0 });
-    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 5, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 3, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = useMicroHid(game, 'p1', 'requisitionedMicroHid', 'shyGuy', false, () => 0.99);
     expect(game.looseAnomalies).toEqual([]);
     expect(game.players.p1.heldCardIds).toEqual([]);

@@ -25,7 +25,7 @@ import './Hand.css';
 // UI-only, just to gray out an option that would no-op server-side. A
 // mismatch here would only be a UX nicety issue, never a rules one, since
 // the engine enforces its own range check regardless of what this shows.
-const MICRO_HID_STANDARD_RANGE_UI = 8;
+const MICRO_HID_STANDARD_RANGE_UI = 4;
 const JAILBIRD_RANGE_UI = 3;
 
 function boardDistance(a: number, b: number): number {
