@@ -17,14 +17,38 @@
 }
 
 .lobby-code {
-  font-family: var(--font-display);
-  font-size: clamp(3rem, 15vw, 6rem);
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: clamp(2.4rem, 12vw, 4.5rem);
   font-weight: 800;
   letter-spacing: 0.2em;
-  color: var(--color-red);
-  border: 4px solid var(--color-black);
-  padding: 0.25em 0.5em;
+  color: var(--color-black);
+  text-shadow: 0 0 8px currentColor;
+  border: 1px solid var(--color-black);
+  padding: 0.25em 0.6em;
   background: var(--color-paper);
+}
+
+.lobby-code-cursor {
+  display: inline-block;
+  width: 0.14em;
+  height: 0.7em;
+  margin-left: 0.15em;
+  background: var(--color-black);
+  box-shadow: 0 0 6px var(--color-black);
+  vertical-align: text-bottom;
+  animation: lobby-code-cursor-blink 0.8s steps(1) infinite;
+}
+
+@keyframes lobby-code-cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .lobby-hint {
@@ -33,44 +57,73 @@
   margin-bottom: 1rem;
 }
 
-.lobby-ruleset-badge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.75rem;
-  color: var(--color-red);
-  border: 2px solid var(--color-red);
-  padding: 0.2em 0.6em;
-  margin-bottom: 1rem;
+.lobby-roster-label {
+  margin-top: 0.5rem;
 }
 
+/* Manifest/roster printout: a fixed-width index column, then name and
+   status, then the assigned Personnel - laid out with grid so every
+   row's columns line up like an actual printed roster rather than
+   wrapping freely per-entry. */
 .player-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  width: min(320px, 90vw);
+  gap: 0.35rem;
+  width: min(420px, 90vw);
+  text-align: left;
 }
 
 .player-list li {
+  display: grid;
+  grid-template-columns: 1.6em 1fr auto;
+  align-items: center;
+  column-gap: 0.6em;
+  row-gap: 0.15em;
   font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   background: var(--color-grey-light);
-  border: 2px solid var(--color-black);
-  padding: 0.75em 1em;
+  border: 1px solid var(--color-black);
+  padding: 0.5em 0.75em;
 }
 
 .player-list li.is-you {
-  background: var(--color-red);
-  color: var(--color-paper);
+  border-color: var(--color-red);
+  color: var(--color-red);
+  text-shadow: 0 0 4px currentColor;
+}
+
+.player-list-index {
+  opacity: 0.6;
+  font-size: 0.8em;
+}
+
+.player-list-name {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.player-list-status {
+  font-size: 0.75em;
+  letter-spacing: 0.03em;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.player-list-piece {
+  grid-column: 2 / -1;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.player-list-empty {
+  text-align: center;
+  opacity: 0.7;
 }
 
 .piece-picker {
-  width: min(320px, 90vw);
-  border: 3px solid var(--color-black);
+  width: min(420px, 90vw);
+  border: 1px solid var(--color-black);
   background: var(--color-grey-light);
   padding: 1rem;
   display: flex;
@@ -80,31 +133,40 @@
 
 .piece-picker-list {
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
 }
 
-.piece-picker-list button {
+/* A "personnel dossier" file card, not a plain button - the FILE tag
+   reads like a stamped case-number header above the actual name. */
+.piece-dossier {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.15em;
+  gap: 0.3em;
+  text-align: left;
+  border-top-width: 3px;
+}
+
+.piece-dossier-file {
+  font-size: 0.65em;
+  letter-spacing: 0.1em;
+  opacity: 0.65;
+}
+
+.piece-dossier-name {
+  font-size: 1em;
 }
 
 .lobby-leave-actions {
   margin-top: 1rem;
 }
 
-.lobby-add-bot {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
 .lobby-remove-bot {
-  float: right;
+  margin-left: 0.6em;
   font-size: 0.7rem;
   padding: 0.2em 0.5em;
 }

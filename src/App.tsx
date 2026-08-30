@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import './App.css';
 import AppHeader from './components/AppHeader';
+import BootSequence from './components/BootSequence';
 import BrutalistBackground from './components/BrutalistBackground';
 import RoomView from './components/RoomView';
 import { createRoom, joinRoom } from './lib/rooms';
@@ -51,6 +52,12 @@ function App() {
     if (getRoomCodeFromUrl()) return 'name-entry';
     return getStoredActiveRoomCode() ? 'lobby' : 'landing';
   });
+  // Plays once whenever the main menu is actually being opened (this
+  // initial mount, if not restoring straight into a Room) or returned to
+  // from a game (handleLeaveRoom below) - never on landing/name-entry
+  // navigation within that same visit, since that's just moving around
+  // the menu, not opening it.
+  const [isBooting, setIsBooting] = useState(() => view !== 'lobby');
   const [mode, setMode] = useState<Mode>('join');
   const [roomMode, setRoomMode] = useState<RoomMode>('experienced');
   const [name, setName] = useState(() => getStoredName());
@@ -118,6 +125,7 @@ function App() {
     clearActiveRoomCode();
     setActiveRoomCode('');
     setView('landing');
+    setIsBooting(true);
   }
 
   async function joinRoomAndReturnCode(
@@ -140,6 +148,10 @@ function App() {
         <RoomView roomCode={activeRoomCode} playerId={playerId} onLeaveRoom={handleLeaveRoom} />
       </>
     );
+  }
+
+  if (isBooting) {
+    return <BootSequence onComplete={() => setIsBooting(false)} />;
   }
 
   return (

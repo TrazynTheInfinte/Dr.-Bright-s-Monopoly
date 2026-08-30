@@ -62,33 +62,42 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
   return (
     <main className="lobby">
       <p className="lobby-label">Room Code</p>
-      <h1 className="lobby-code">{roomCode}</h1>
+      <h1 className="lobby-code">
+        {roomCode}
+        <span className="lobby-code-cursor" />
+      </h1>
       <p className="lobby-hint">Send this code to your fellow agents.</p>
       <RoomQrCode roomCode={roomCode} />
 
+      <p className="lobby-label lobby-roster-label">Personnel Roster</p>
       <ul className="player-list">
-        {players.map(([id, player]) => (
+        {players.map(([id, player], index) => (
           <li key={id} className={id === playerId ? 'is-you' : ''}>
-            <span className={`presence-dot ${isPlayerAway(player) ? 'is-away' : ''}`} title={isPlayerAway(player) ? 'Away' : 'Online'} />
-            {player.name}
-            {player.isBot && <span className="bot-badge">BOT {player.botDifficulty}</span>}
-            {id === playerId ? ' (you)' : ''}
-            {id === room.hostId ? ' ★' : ''}
-            {player.pieceId
-              ? ` - ${pieceName(player.pieceId)}`
-              : ' - choosing...'}
-            {isHost && player.isBot && (
-              <button
-                type="button"
-                className="lobby-remove-bot"
-                onClick={() => handleRemoveBot(id)}
-              >
-                Remove
-              </button>
-            )}
+            <span className="player-list-index">{String(index + 1).padStart(2, '0')}</span>
+            <span className="player-list-name">
+              <span className={`presence-dot ${isPlayerAway(player) ? 'is-away' : ''}`} title={isPlayerAway(player) ? 'Away' : 'Online'} />
+              {player.name}
+              {id === playerId ? ' (you)' : ''}
+              {id === room.hostId ? ' ★' : ''}
+              {isHost && player.isBot && (
+                <button
+                  type="button"
+                  className="lobby-remove-bot"
+                  onClick={() => handleRemoveBot(id)}
+                >
+                  Remove
+                </button>
+              )}
+            </span>
+            <span className="player-list-status">
+              {player.isBot ? `[BOT ${player.botDifficulty}]` : isPlayerAway(player) ? '[AWAY]' : '[ONLINE]'}
+            </span>
+            <span className="player-list-piece">
+              {player.pieceId ? pieceName(player.pieceId) : 'choosing...'}
+            </span>
           </li>
         ))}
-        {players.length === 0 && <li>Waiting for players...</li>}
+        {players.length === 0 && <li className="player-list-empty">Waiting for players...</li>}
       </ul>
 
       {room.mode === 'beginner' && me && !me.pieceId && (
@@ -97,16 +106,18 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
             Choose your Personnel - its Special Power stays hidden until the game starts.
           </p>
           <ul className="piece-picker-list">
-            {selectablePieces.map((piece) => {
+            {selectablePieces.map((piece, index) => {
               const taken = claimedPieceIds.includes(piece.id);
               return (
                 <li key={piece.id}>
                   <button
                     type="button"
+                    className="piece-dossier"
                     disabled={taken}
                     onClick={() => handleChoosePiece(piece.id)}
                   >
-                    {piece.name}
+                    <span className="piece-dossier-file">FILE {String(index + 1).padStart(2, '0')}</span>
+                    <span className="piece-dossier-name">{piece.name}</span>
                     <span className="piece-picker-title">{piece.title}</span>
                   </button>
                 </li>

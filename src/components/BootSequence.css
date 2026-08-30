@@ -1,0 +1,51 @@
+.boot-sequence {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--color-paper);
+}
+
+.boot-sequence-lines {
+  width: min(560px, 100%);
+  font-family: var(--font-mono);
+  font-size: clamp(0.75rem, 2.2vw, 1rem);
+  line-height: 1.7;
+  color: var(--color-black);
+  text-shadow: 0 0 5px currentColor;
+}
+
+.boot-sequence-lines p {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.boot-sequence-line-final {
+  margin-top: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.boot-sequence-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  background: var(--color-black);
+  box-shadow: 0 0 6px var(--color-black);
+  vertical-align: text-bottom;
+  animation: boot-sequence-blink 0.8s steps(1) infinite;
+}
+
+@keyframes boot-sequence-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
