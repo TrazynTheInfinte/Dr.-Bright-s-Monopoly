@@ -33,7 +33,7 @@ export const ANOMALIES: AnomalyDefinition[] = [
     name: 'SCP-106 "The Old Man"',
     spawnTileId: 34, // Containment Wing A
     flavorText:
-      "Corrodes anything it touches and phases through solid matter at will. Slow and patient on its own, but the instant it catches up to someone, it drags them both through into its own Pocket Dimension - and it's an entirely different fight to survive in there.",
+      "Corrodes anything it touches and phases through solid matter at will. Never needs to be watched or looked at first - the moment it's loose, it's already coming for whoever's nearest. Slow and patient, but the instant it catches up to someone, it drags them both through into its own Pocket Dimension - and it's an entirely different fight to survive in there.",
   },
 ];
 

@@ -1273,10 +1273,12 @@ describe('hostile anomalies', () => {
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
   });
 
-  it('Induce a Breach can spawn SCP-106 specifically', () => {
+  it('Induce a Breach can spawn SCP-106 specifically, already hunting the only eligible player', () => {
     let game = makeGame(['trex', 'car']);
     game = induceBreach(game, 'p1', () => 0.99); // 3rd of 3 candidates in ANOMALIES
-    expect(game.looseAnomalies).toEqual([{ anomalyId: 'theOldMan', tileId: 34, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
+    // p1 is Rogue Anomaly (immune) - p2 is the only eligible target, so
+    // SCP-106 engages automatically without anyone needing to view it.
+    expect(game.looseAnomalies).toEqual([{ anomalyId: 'theOldMan', tileId: 34, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
   });
 
   it('hovering (viewAnomaly) does nothing for SCP-173 - its own interaction is Keep Watch', () => {
@@ -1400,21 +1402,56 @@ const TEST_TRACK: PocketDimensionTile[] = [
 ];
 
 describe('SCP-106 and the Pocket Dimension', () => {
-  it('is dormant until viewed, then hunts like Shy Guy but at half speed', () => {
+  it('engages automatically on breach - no viewing required - targeting whoever is nearest', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 20 }); // further from tile 34 than p2
+    game = withPlayer(game, 'p2', { position: 35 });
+    game = devSpawnAnomaly(game, 'theOldMan');
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
+  });
+
+  it('hunts at half of Shy Guy\'s speed once engaged', () => {
     let game = makeGame();
     game = withPlayer(game, 'p2', { position: 10 });
-    game = withLooseAnomalies(game, [{ anomalyId: 'theOldMan', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
-    game = viewAnomaly(game, 'p2', 'theOldMan');
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theOldMan', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theOldMan', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.looseAnomalies[0].tileId).toBe(3); // half of Shy Guy's 6-space hunt speed
   });
 
-  it("Rogue Anomaly can't be targeted by SCP-106 either", () => {
-    let game = makeGame(['trex', 'car']);
+  it("viewing SCP-106 does nothing - it never needed to be looked at", () => {
+    let game = makeGame();
     game = withLooseAnomalies(game, [{ anomalyId: 'theOldMan', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = viewAnomaly(game, 'p1', 'theOldMan');
-    expect(game.looseAnomalies[0].status).toBe('dormant'); // no-op, immune
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theOldMan', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+  });
+
+  it("Rogue Anomaly is never picked as SCP-106's automatic target", () => {
+    let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { position: 33 }); // right next to tile 34 - would be nearest if eligible
+    game = withPlayer(game, 'p2', { position: 20 });
+    game = devSpawnAnomaly(game, 'theOldMan');
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p2'); // not the much-closer p1
+  });
+
+  it('immediately re-picks whoever is now nearest if it loses its target, instead of going dormant', () => {
+    let game = makeGame(['dog', 'car', 'trex']);
+    game = withPlayer(game, 'p1', { isSpectating: true }); // its current target - really gone
+    game = withPlayer(game, 'p2', { position: 20 }); // the only remaining eligible candidate (p3 is Rogue Anomaly)
+    game = withPlayer(game, 'p3', { position: 5 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theOldMan', tileId: 0, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].status).toBe('hunting'); // still actively hunting, not dormant
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
+  });
+
+  it('goes dormant only if literally nobody is left eligible to hunt', () => {
+    let game = makeGame(['dog', 'trex']);
+    game = withPlayer(game, 'p1', { isSpectating: true }); // its target - gone, and p2 (trex) is immune
+    game = withLooseAnomalies(game, [{ anomalyId: 'theOldMan', tileId: 0, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theOldMan', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
   });
 
   it("catching someone on the main board drags them into the Pocket Dimension instead of Terminating them", () => {

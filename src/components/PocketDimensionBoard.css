@@ -1,0 +1,124 @@
+.pocket-dimension-board {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5em;
+  border: 3px solid var(--color-black);
+  background: var(--color-paper);
+  font-family: var(--font-mono);
+}
+
+.pocket-dimension-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: clamp(1.1rem, 2.4vw, 1.6rem);
+  color: var(--color-red);
+  text-align: center;
+}
+
+.pocket-dimension-subtitle {
+  text-align: center;
+  color: var(--color-grey);
+  font-size: 0.85rem;
+  max-width: 42em;
+  margin: 0 auto;
+}
+
+.pocket-dimension-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5em, 1fr));
+  gap: 0.5em;
+}
+
+.pocket-dimension-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4em;
+  min-height: 6em;
+  padding: 0.5em;
+  border: 2px solid var(--color-black);
+  background: var(--color-grey-light);
+  text-align: center;
+}
+
+.pocket-dimension-tile-fracturePoint {
+  background: #3f6b4c;
+  color: var(--color-paper);
+}
+
+.pocket-dimension-tile-decayingPassage {
+  background: var(--color-red);
+  color: var(--color-paper);
+}
+
+.pocket-dimension-tile-index {
+  font-size: 0.7rem;
+  font-weight: 700;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.pocket-dimension-tile-label {
+  font-size: 0.72rem;
+  line-height: 1.15;
+}
+
+.pocket-dimension-tile-occupants {
+  display: flex;
+  gap: 0.3em;
+  min-height: 1.6em;
+  align-items: center;
+  justify-content: center;
+}
+
+.pocket-dimension-token {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  border: 2px solid var(--color-black);
+  background: var(--color-paper);
+  color: var(--color-black);
+  font-size: 0.85rem;
+}
+
+.pocket-dimension-token-player {
+  color: var(--color-black);
+}
+
+.pocket-dimension-token-icon {
+  width: 1em;
+  height: 1em;
+}
+
+.pocket-dimension-token-anomaly {
+  background: var(--color-black);
+  color: var(--color-red);
+  border-color: var(--color-red);
+}
+
+.pocket-dimension-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  font-size: 0.75rem;
+  color: var(--color-grey);
+  text-align: center;
+}
+
+.pocket-dimension-legend-swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid var(--color-black);
+  vertical-align: middle;
+}

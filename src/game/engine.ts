@@ -1,4 +1,4 @@
-import { ANOMALIES, findAnomaly, type AnomalyId } from '../data/anomalies';
+import { ANOMALIES, findAnomaly, type AnomalyDefinition, type AnomalyId } from '../data/anomalies';
 import { BOARD, BOARD_SIZE, getTile, RAILROAD_RENT_BY_COUNT } from '../data/board';
 import { ANOMALOUS_EVENT_CARDS, FOUNDATION_DIRECTIVE_CARDS, findCard, type CardEffect } from '../data/cards';
 import { STARTING_PIECES } from '../data/pieces';
@@ -1027,20 +1027,32 @@ function updateAnomaly(state: GameState, anomalyId: string, patch: Partial<Loose
   return { ...state, looseAnomalies: state.looseAnomalies.map((a) => (a.anomalyId === anomalyId ? { ...a, ...patch } : a)) };
 }
 
+/**
+ * Builds the LooseAnomaly entry for a fresh breach. Every anomaly
+ * starts dormant except SCP-106, which never needed a "look" to start
+ * engaging in the first place - it's already hunting whoever's closest
+ * to its spawn tile from the very first tick (falls back to dormant
+ * only in the degenerate case where literally nobody's eligible yet).
+ */
+function spawnLooseAnomaly(state: GameState, anomaly: AnomalyDefinition, anchorPlayerId: string): LooseAnomaly {
+  const targetId = anomaly.id === 'theOldMan' ? nearestHuntableTarget(state, anomaly.spawnTileId) : null;
+  return {
+    anomalyId: anomaly.id,
+    tileId: anomaly.spawnTileId,
+    status: targetId ? 'hunting' : 'dormant',
+    targetPlayerId: targetId,
+    breachedOnTurnCount: state.turnCount,
+    spawnedOnPlayerId: anchorPlayerId,
+  };
+}
+
 function maybeBreachContainment(state: GameState, rng: () => number, anchorPlayerId: string): GameState {
   if (rng() >= BREACH_CHANCE) return state;
   const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
   if (candidates.length === 0) return state; // every anomaly type is already loose
   const anomaly = candidates[Math.floor(rng() * candidates.length)];
-  const loose: LooseAnomaly = {
-    anomalyId: anomaly.id,
-    tileId: anomaly.spawnTileId,
-    status: 'dormant',
-    targetPlayerId: null,
-    breachedOnTurnCount: state.turnCount,
-    spawnedOnPlayerId: anchorPlayerId,
-  };
+  const loose = spawnLooseAnomaly(state, anomaly, anchorPlayerId);
   return logEvent(
     { ...state, looseAnomalies: [...state.looseAnomalies, loose] },
     `Containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`,
@@ -1109,6 +1121,15 @@ function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId
   return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
 }
 
+/** Whoever's closest to a given tile, eligible to actually be hunted - excludes Rogue Anomaly (always immune) and anyone AFK-benched. Used for SCP-106's automatic targeting (no viewing required) and SCP-173's nearest-victim pick each unwatched tick. Null if nobody's currently eligible at all. */
+function nearestHuntableTarget(state: GameState, fromTileId: number): string | null {
+  const candidates = activePlayerIds(state).filter((id) => !state.players[id].isAfkSpectating && pieceOf(state, id) !== 'trex');
+  if (candidates.length === 0) return null;
+  return candidates.reduce((closest, id) =>
+    distanceAhead(fromTileId, state.players[id].position) < distanceAhead(fromTileId, state.players[closest].position) ? id : closest,
+  );
+}
+
 function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState {
   let next = state;
   for (const anomaly of state.looseAnomalies) {
@@ -1118,8 +1139,17 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     const target = next.players[current.targetPlayerId];
     if (!target || target.isSpectating || pieceOf(next, current.targetPlayerId) === 'trex') {
       // Target's really gone (Terminated some other way), or was just reassigned into Rogue
-      // Anomaly ("Uncontained") mid-hunt - either way, loses interest and stays put dormant.
-      next = updateAnomaly(next, current.anomalyId, { status: 'dormant', targetPlayerId: null });
+      // Anomaly ("Uncontained") mid-hunt. SCP-106 never needed a "look" to
+      // start engaging in the first place, so losing a target doesn't put
+      // it back to sleep either - it immediately re-picks whoever's now
+      // closest instead. Every other anomaly just loses interest and
+      // stays put dormant.
+      if (current.anomalyId === 'theOldMan') {
+        const reacquired = nearestHuntableTarget(next, current.tileId);
+        next = updateAnomaly(next, current.anomalyId, reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
+      } else {
+        next = updateAnomaly(next, current.anomalyId, { status: 'dormant', targetPlayerId: null });
+      }
       continue;
     }
     if (target.isAfkSpectating) continue; // just paused, not lost - waits for them rather than giving up
@@ -1158,16 +1188,9 @@ function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string): Ga
   const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
   if (!sculpture || sculpture.spawnedOnPlayerId !== endingPlayerId || state.scp173Watched) return state;
 
-  const candidates = activePlayerIds(state).filter(
-    (id) => !state.players[id].isAfkSpectating && pieceOf(state, id) !== 'trex',
-  );
-  if (candidates.length === 0) return state;
+  const nearestId = nearestHuntableTarget(state, sculpture.tileId);
+  if (!nearestId) return state;
 
-  const nearestId = candidates.reduce((closest, id) =>
-    distanceAhead(sculpture.tileId, state.players[id].position) < distanceAhead(sculpture.tileId, state.players[closest].position)
-      ? id
-      : closest,
-  );
   const newTileId = stepToward(sculpture.tileId, state.players[nearestId].position, SCULPTURE_UNWATCHED_SPEED);
   return newTileId === state.players[nearestId].position
     ? resolveAnomalyCatch(state, 'theSculpture', nearestId, newTileId)
@@ -1267,9 +1290,9 @@ export function movePocketDimension(state: GameState, playerId: string, rng: () 
   return endTurn(next, rng);
 }
 
-/** A player "viewing" a dormant anomaly - hovering its tile. Shy Guy's and SCP-106's shared interaction (the first to do so becomes its target and it starts hunting them); no-op for SCP-173, which has its own interaction instead (see keepWatchOnSculpture). Also a no-op if it's already hunting someone, isn't loose at all, or the viewer is Rogue Anomaly ("Uncontained": fellow anomalies don't see it as prey). */
+/** A player "viewing" a dormant anomaly - hovering its tile. Shy Guy's own interaction (the first to do so becomes its target and it starts hunting them); no-op for every other anomaly - SCP-173 has its own interaction instead (see keepWatchOnSculpture), and SCP-106 never needs to be viewed at all, it engages automatically (see spawnLooseAnomaly). Also a no-op if it's already hunting someone, isn't loose at all, or the viewer is Rogue Anomaly ("Uncontained": fellow anomalies don't see it as prey). */
 export function viewAnomaly(state: GameState, playerId: string, anomalyId: string): GameState {
-  if (anomalyId === 'theSculpture') return state; // SCP-173's own interaction is keepWatchOnSculpture, not hovering
+  if (anomalyId !== 'shyGuy') return state;
   const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId);
   if (!anomaly || anomaly.status !== 'dormant') return state;
   if (pieceOf(state, playerId) === 'trex') return state;
@@ -1308,14 +1331,7 @@ export function induceBreach(state: GameState, playerId: string, rng: () => numb
   if (candidates.length === 0) return state;
 
   const anomaly = candidates[Math.floor(rng() * candidates.length)];
-  const loose: LooseAnomaly = {
-    anomalyId: anomaly.id,
-    tileId: anomaly.spawnTileId,
-    status: 'dormant',
-    targetPlayerId: null,
-    breachedOnTurnCount: state.turnCount,
-    spawnedOnPlayerId: currentPlayerId(state),
-  };
+  const loose = spawnLooseAnomaly(state, anomaly, currentPlayerId(state));
   const next = updatePlayer(state, playerId, { usedInduceBreach: true });
   return logEvent(
     { ...next, looseAnomalies: [...next.looseAnomalies, loose] },
@@ -1508,14 +1524,7 @@ export function devForceSkipTurn(state: GameState, rng: () => number = Math.rand
 export function devSpawnAnomaly(state: GameState, anomalyId: string): GameState {
   if (state.looseAnomalies.some((a) => a.anomalyId === anomalyId)) return state;
   const anomaly = findAnomaly(anomalyId as AnomalyId);
-  const loose: LooseAnomaly = {
-    anomalyId: anomaly.id,
-    tileId: anomaly.spawnTileId,
-    status: 'dormant',
-    targetPlayerId: null,
-    breachedOnTurnCount: state.turnCount,
-    spawnedOnPlayerId: currentPlayerId(state),
-  };
+  const loose = spawnLooseAnomaly(state, anomaly, currentPlayerId(state));
   return logEvent({ ...state, looseAnomalies: [...state.looseAnomalies, loose] }, `[DEV] Forced a containment breach: ${anomaly.name}.`);
 }
 

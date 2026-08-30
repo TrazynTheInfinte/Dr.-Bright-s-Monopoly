@@ -36,6 +36,7 @@ import Hand from './Hand';
 import NowPlayingBanner from './NowPlayingBanner';
 import PersonnelChoicePrompt from './PersonnelChoicePrompt';
 import PieceInfoPanel from './PieceInfoPanel';
+import PocketDimensionBoard from './PocketDimensionBoard';
 import MtfEncounterBanner from './MtfEncounterBanner';
 import RubberDuckEncounterBanner from './RubberDuckEncounterBanner';
 import TradePanel from './TradePanel';
@@ -291,10 +292,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
 
           {isMyTurn && !game.pendingDecision && game.pocketDimensionOrdeal?.trappedPlayerId === playerId && (
             <div className="actions">
-              <p className="hint">
-                Trapped in SCP-106's Pocket Dimension - currently at tile {game.pocketDimensionOrdeal.playerTrackPosition} of{' '}
-                {game.pocketDimensionOrdeal.track.length - 1}, with SCP-106 at tile {game.pocketDimensionOrdeal.anomalyTrackPosition}.
-              </p>
+              <p className="hint">Roll to advance through the Pocket Dimension - see the board below.</p>
               <button onClick={() => movePocketDimensionAndSync(roomCode, game, playerId)}>Move</button>
             </div>
           )}
@@ -545,7 +543,11 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
         </section>
 
         <div className="board-column layout-board">
-          <Board room={room} roomCode={roomCode} playerId={playerId} game={game} />
+          {game.pocketDimensionOrdeal?.trappedPlayerId === playerId ? (
+            <PocketDimensionBoard room={room} game={game} />
+          ) : (
+            <Board room={room} roomCode={roomCode} playerId={playerId} game={game} />
+          )}
         </div>
 
         <div className="dice-column layout-dice">

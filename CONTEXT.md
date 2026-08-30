@@ -100,7 +100,7 @@ A loose Hostile Anomaly's default, non-threatening state. SCP-096 stays dormant 
 _Avoid_: idle, sleeping
 
 **Hunting**:
-SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-173 has no equivalent locked-on state — see Keep Watch.
+SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-106 is always in this state from the moment it breaches — it never needs to be viewed, and automatically re-targets whoever's closest if it ever loses its current target. SCP-173 has no equivalent locked-on state — see Keep Watch.
 _Avoid_: chasing, aggro
 
 **Caught**:
