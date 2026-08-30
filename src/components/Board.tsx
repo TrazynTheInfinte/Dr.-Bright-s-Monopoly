@@ -283,7 +283,7 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
         <div className="board-center-banner">DR. BRIGHT'S MONOPOLY</div>
         <button
           type="button"
-          className={`board-center-deck board-center-deck-communist ${awaitingDeck === 'anomalousEvent' ? 'is-hot' : ''} ${awaitingDeck === 'anomalousEvent' && isMyTurn ? 'is-clickable' : ''}`}
+          className={`board-center-deck board-center-deck-anomalousEvent ${awaitingDeck === 'anomalousEvent' ? 'is-hot' : ''} ${awaitingDeck === 'anomalousEvent' && isMyTurn ? 'is-clickable' : ''}`}
           disabled={!isMyTurn || awaitingDeck !== 'anomalousEvent'}
           onClick={() => drawFromPileAndSync(roomCode, game, playerId)}
         >
@@ -292,7 +292,7 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
         </button>
         <button
           type="button"
-          className={`board-center-deck board-center-deck-nochance ${awaitingDeck === 'foundationDirective' ? 'is-hot' : ''} ${awaitingDeck === 'foundationDirective' && isMyTurn ? 'is-clickable' : ''}`}
+          className={`board-center-deck board-center-deck-foundationDirective ${awaitingDeck === 'foundationDirective' ? 'is-hot' : ''} ${awaitingDeck === 'foundationDirective' && isMyTurn ? 'is-clickable' : ''}`}
           disabled={!isMyTurn || awaitingDeck !== 'foundationDirective'}
           onClick={() => drawFromPileAndSync(roomCode, game, playerId)}
         >

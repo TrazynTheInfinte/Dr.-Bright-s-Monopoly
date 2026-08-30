@@ -12,19 +12,15 @@ let nextFlashKey = 0;
 
 const NAME_TO_TILE_ID = new Map(BOARD.map((tile) => [tile.name, tile.id]));
 
-const BUY_PATTERN = /^Bought (.+) for \d+ roubles\.$/;
-const RENT_PATTERN = /^Paid \d+ roubles rent on (.+)\.$/;
-// Kulak's/T-Rex's auto-seize and Siege of Stalingrad all embed the
-// tile's own name the same way Bought/rent do. The Volga's forced
-// transfers don't - they move a whole hand of properties at once, not
-// one named tile - so there's nothing for those to flash here (see
-// useSoundEvents' SEIZE_PATTERN for the sound, which doesn't need a
-// tile at all).
+const BUY_PATTERN = /^Bought (.+)\.$/;
+const RENT_PATTERN = /^Paid \d+ Credits rent on (.+)\.$/;
+// Rogue Anomaly's auto-consume, Logistics Officer's auto-requisition
+// (Requisition Priority), and MTF Operative's Show of Force all embed
+// the tile's own name the same way Bought/rent do.
 const SEIZE_PATTERNS = [
-  /^Automatically took (.+) for free \(Kulak's power\)\.$/,
-  /^Seized (.+) for free - no rent paid \(Kulak's power\)\.$/,
-  /^Seized (.+) - no rent paid \(T-Rex's power\)\.$/,
-  /^Seized (.+) permanently\.$/,
+  /^Automatically seized (.+) - no rent paid\.$/,
+  /^Logistics Officer automatically requisitioned (.+)\.$/,
+  /^Show of Force: seized (.+) instead of collecting rent\.$/,
 ];
 
 /**

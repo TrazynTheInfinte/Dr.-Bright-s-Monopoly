@@ -1,24 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { playCash, playDisappear, playJail, playSeize } from '../lib/sound';
 
-// Kulak's/T-Rex's auto-seize, Siege of Stalingrad, and The Volga all
-// force a property to change hands with no roubles involved, so none
-// of them match playCash's "roubles" check below - this is their own
-// catch, checked first so they don't also (redundantly) match anything
-// else. See useRecentTileFlashes for the matching tile-flash.
-const SEIZE_PATTERN =
-  /^Seized |^Automatically took .+ for free \(Kulak's power\)\.$|claimed The Volga|^Forced to surrender everything you own/;
+// Rogue Anomaly's auto-consume, Logistics Officer's auto-requisition,
+// and MTF Operative's Show of Force all force a Wing to change hands
+// with no Credits involved, so none of them match playCash's "Credits"
+// check below - this is their own catch, checked first so they don't
+// also (redundantly) match anything else. See useRecentTileFlashes for
+// the matching tile-flash.
+const SEIZE_PATTERN = /^Automatically seized |^Logistics Officer automatically requisitioned |^Show of Force:/;
 
 /**
  * Watches the shared event log for newly-appended entries and plays a
  * matching sound - covers money changing hands, forced seizures (no
- * money involved), jail, and Disappearing, for every viewer (not just
- * whoever caused it), since the log is shared game state. Dice and
- * card sounds are handled separately (DiceRoller, the card-reveal
- * banner) since those already have their own more precise animation-
- * synced triggers - and so is a Chernobyl explosion (useDestructionBursts),
- * since that one needs to play once per destroyed tile, staggered, not
- * once per log line.
+ * money involved), the Containment Chamber, and Termination, for every
+ * viewer (not just whoever caused it), since the log is shared game
+ * state. Dice and card sounds are handled separately (DiceRoller, the
+ * card-reveal banner) since those already have their own more precise
+ * animation-synced triggers.
  *
  * Diffs by comparing log CONTENT (finding where the previous log's last
  * entry still appears), not array reference - Firestore reconstructs
@@ -44,13 +42,13 @@ export function useSoundEvents(log: string[]): void {
     const newEntries = matchIndex === -1 ? [] : log.slice(matchIndex + 1);
 
     for (const entry of newEntries) {
-      if (/Disappeared/i.test(entry)) {
+      if (/Terminated/.test(entry)) {
         playDisappear();
-      } else if (/to jail/i.test(entry)) {
+      } else if (/to the Containment Chamber/i.test(entry)) {
         playJail();
       } else if (SEIZE_PATTERN.test(entry)) {
         playSeize();
-      } else if (/roubles/i.test(entry)) {
+      } else if (/Credits/i.test(entry)) {
         playCash();
       }
     }

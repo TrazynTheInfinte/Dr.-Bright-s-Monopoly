@@ -192,7 +192,7 @@ export function playDiceLand(): void {
   tone(330, 0.12, 'triangle', 0.2, 0.05);
 }
 
-/** Buying, paying/collecting rent, mortgaging, Smuggling - anything roubles-changing-hands. */
+/** Buying, paying/collecting rent, mortgaging - anything Credits-changing-hands. */
 export function playCash(): void {
   sweep(600, 1300, 0.14, 'square', 0.2);
   tone(1500, 0.08, 'square', 0.15, 0.1);
@@ -219,7 +219,7 @@ export function playEndgameFanfare(): void {
   notes.forEach((freq, i) => tone(freq, 0.35, 'square', 0.22, i * 0.15));
 }
 
-/** A property forcibly changing hands with no roubles involved - Kulak's/T-Rex's auto-seize, Siege of Stalingrad, The Volga. Harsher/darker than playCash, since nobody got paid for this. */
+/** A Wing forcibly changing hands with no Credits involved - Rogue Anomaly's auto-consume, Logistics Officer's auto-requisition, MTF Operative's Show of Force. Harsher/darker than playCash, since nobody got paid for this. */
 export function playSeize(): void {
   sweep(500, 150, 0.28, 'sawtooth', 0.25);
   noiseBurst(0.08, 0.12);

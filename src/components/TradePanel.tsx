@@ -32,7 +32,7 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
  * Player-to-player trading (both modes, not turn-gated) - always
  * visible rather than an ActionModal, since trading isn't something
  * the game is waiting on anyone to resolve. A "Propose Trade" builder
- * (pick a player, pick tiles/cards/roubles on each side) plus a list
+ * (pick a player, pick tiles/cards/Credits on each side) plus a list
  * of trades already on the table involving this player, with Accept/
  * Decline (as recipient) or Withdraw (as proposer).
  */

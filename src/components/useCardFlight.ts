@@ -3,8 +3,8 @@ import { ANOMALOUS_EVENT_CARDS } from '../data/cards';
 import type { CardDeck, GameState } from '../types/game';
 
 const DECK_SELECTOR: Record<CardDeck, string> = {
-  anomalousEvent: '.board-center-deck-communist',
-  foundationDirective: '.board-center-deck-nochance',
+  anomalousEvent: '.board-center-deck-anomalousEvent',
+  foundationDirective: '.board-center-deck-foundationDirective',
 };
 
 /**

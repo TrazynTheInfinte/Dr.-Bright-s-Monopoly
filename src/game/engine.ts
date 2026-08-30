@@ -493,7 +493,7 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
   if (!owner) {
     if (piece === 'trex') return state; // T-Rex can't buy - just sits there unowned
     if (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP) {
-      return logEvent(transferTile(state, tileId, playerId), 'Logistics Officer automatically requisitioned this Wing.');
+      return logEvent(transferTile(state, tileId, playerId), `Logistics Officer automatically requisitioned ${getTile(tileId).name}.`);
     }
     return { ...state, pendingDecision: { type: 'purchase', tileId } };
   }
@@ -501,7 +501,7 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
   if (owner === playerId || state.mortgagedTileIds.includes(tileId)) return state;
 
   if (piece === 'trex' || (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP)) {
-    return logEvent(transferTile(state, tileId, playerId), 'Automatically seized - no rent paid.');
+    return logEvent(transferTile(state, tileId, playerId), `Automatically seized ${getTile(tileId).name} - no rent paid.`);
   }
 
   // Janitor's "Below the Floor Plan" - never pays toll on a Maintenance Tunnel.
@@ -517,7 +517,7 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
   }
 
   const rent = calculateRent(state, tileId, owner, playerId);
-  return logEvent(chargePlayer(state, playerId, rent, owner), `Paid ${rent} Credits rent.`);
+  return logEvent(chargePlayer(state, playerId, rent, owner), `Paid ${rent} Credits rent on ${getTile(tileId).name}.`);
 }
 
 function calculateRent(state: GameState, tileId: number, owner: string, payerId: string): number {
@@ -796,7 +796,7 @@ export function resolveMtfEncounter(state: GameState, seize: boolean): GameState
 
   if (!seize) {
     const rent = calculateRent(next, tileId, mtfPlayerId, targetPlayerId);
-    return logEvent(chargePlayer(next, targetPlayerId, rent, mtfPlayerId), `Paid ${rent} Credits rent.`);
+    return logEvent(chargePlayer(next, targetPlayerId, rent, mtfPlayerId), `Paid ${rent} Credits rent on ${getTile(tileId).name}.`);
   }
 
   next = updatePlayer(next, mtfPlayerId, { usedShowOfForce: true });
