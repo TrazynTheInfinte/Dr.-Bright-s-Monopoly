@@ -1276,16 +1276,18 @@ export function movePocketDimension(state: GameState, playerId: string, rng: () 
 
 /**
  * Resolves whatever tile movePocketDimension just landed the trapped
- * player on, then - if the ordeal is still going - SCP-106 creeps one
- * tile closer. The track loops, so "closer" is the clockwise gap
- * between them, wrapping around same as everything else here - if
- * that gap is small enough for SCP-106's speed to close it entirely
- * (including already being right on the player's tile), that's a
- * catch, checked before anything else since it preempts even landing
- * on a Fracture Point. Otherwise resolves the tile normally, then (if
- * still trapped) advances SCP-106 by its own speed around the loop.
- * Ends the turn itself, same as keepWatchOnSculpture, since there's
- * nothing else to resolve this turn either way.
+ * player on FIRST - a Fracture Point escapes, an affordable Decaying
+ * Passage just costs Credits - and only then, if the ordeal is still
+ * going, does SCP-106 get its turn to close in. Landing somewhere safe
+ * always gets to resolve on its own terms, even if SCP-106 happens to
+ * already be sitting right there - it doesn't preempt an escape.
+ * "Closing in" is the clockwise gap between them (the track loops, so
+ * this wraps around same as everything else here): if that gap is
+ * small enough for SCP-106's speed to close it entirely (including
+ * already being coincident), that's a catch; otherwise it just
+ * advances by its speed around the loop. Ends the turn itself, same
+ * as keepWatchOnSculpture, since there's nothing else to resolve this
+ * turn either way.
  */
 export function acknowledgePocketDimensionLanding(state: GameState, rng: () => number = Math.random): GameState {
   if (state.pendingDecision?.type !== 'pocketDimensionLanded') return state;
@@ -1294,13 +1296,6 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
   if (!ordeal) return { ...state, pendingDecision: null };
 
   let next: GameState = { ...state, pendingDecision: null };
-  const gapToAnomaly =
-    (ordeal.playerTrackPosition - ordeal.anomalyTrackPosition + POCKET_DIMENSION_LENGTH) % POCKET_DIMENSION_LENGTH;
-
-  if (gapToAnomaly <= OLD_MAN_POCKET_DIMENSION_SPEED) {
-    return endTurn(terminateInsidePocketDimension(next, playerId), rng);
-  }
-
   const landedTile = ordeal.track[ordeal.playerTrackPosition];
   if (landedTile === 'fracturePoint') {
     next = escapePocketDimension(next);
@@ -1313,8 +1308,14 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
 
   const stillTrapped = next.pocketDimensionOrdeal;
   if (stillTrapped) {
-    const newAnomalyPos = (stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED) % POCKET_DIMENSION_LENGTH;
-    next = { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
+    const gapToAnomaly =
+      (stillTrapped.playerTrackPosition - stillTrapped.anomalyTrackPosition + POCKET_DIMENSION_LENGTH) % POCKET_DIMENSION_LENGTH;
+    if (gapToAnomaly <= OLD_MAN_POCKET_DIMENSION_SPEED) {
+      next = terminateInsidePocketDimension(next, playerId);
+    } else {
+      const newAnomalyPos = (stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED) % POCKET_DIMENSION_LENGTH;
+      next = { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
+    }
   }
 
   return endTurn(next, rng);

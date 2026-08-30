@@ -1551,7 +1551,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     expect(game.pocketDimensionOrdeal?.playerTrackPosition).toBe(4);
   });
 
-  it('SCP-106 sitting on the tile you land on catches you even if it would otherwise be a Fracture Point', () => {
+  it('escaping through a Fracture Point wins even if SCP-106 is sitting right on that same tile', () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { ownedTileIds: [1] });
     game = {
@@ -1559,11 +1559,27 @@ describe('SCP-106 and the Pocket Dimension', () => {
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
       pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 2 },
     };
-    game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> (7 + 4) % 9 = 2, same tile as SCP-106
+    game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> (7 + 4) % 9 = 2, same tile as SCP-106 - and a Fracture Point
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pocketDimensionOrdeal).toBeNull();
+    expect(game.looseAnomalies).toEqual([]); // SCP-106 recontained - same outcome, but via escape, not a catch
+    expect(game.players.p1.ownedTileIds).toEqual([1]); // untouched - never seized, this was an escape
+  });
+
+  it('SCP-106 sitting on a landed tile that is NOT a Fracture Point still catches you', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1] });
+    game = {
+      ...game,
+      looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
+      // Tile 5 is neutral in TEST_TRACK - nothing to preempt a catch with.
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 5 },
+    };
+    game = movePocketDimension(game, 'p1', () => 0.7); // rolls a 5 -> (0 + 5) % 9 = 5, same tile as SCP-106, neutral
     game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
     expect(game.pocketDimensionOrdeal).toBeNull();
     expect(game.looseAnomalies).toEqual([]);
-    expect(game.players.p1.ownedTileIds).toEqual([]); // seized - a real catch, not an escape
+    expect(game.players.p1.ownedTileIds).toEqual([]); // seized - a real catch this time
   });
 
   it("SCP-106's own advance wraps around the loop too", () => {
