@@ -9,6 +9,34 @@
   font-family: var(--font-mono);
 }
 
+/* The Site Warhead activating - a brief full-screen flash for everyone
+   in the Room, not just a tile-level effect, since a purge is a
+   whole-board event. pointer-events: none so it never blocks a click
+   mid-flash. */
+.warhead-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  background: var(--color-paper);
+  animation: warhead-flash 0.5s ease-out forwards;
+}
+
+@keyframes warhead-flash {
+  0% {
+    background: #fff;
+    opacity: 1;
+  }
+  30% {
+    background: var(--color-red);
+    opacity: 0.85;
+  }
+  100% {
+    background: var(--color-red);
+    opacity: 0;
+  }
+}
+
 .turn-indicator {
   font-family: var(--font-display);
   font-weight: 800;

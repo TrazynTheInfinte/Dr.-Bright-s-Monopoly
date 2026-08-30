@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { playCash, playDisappear, playJail, playSeize } from '../lib/sound';
+import { playCash, playDisappear, playExplosion, playJail, playSeize } from '../lib/sound';
 
 // Rogue Anomaly's auto-consume, Logistics Officer's auto-requisition,
 // and MTF Operative's Show of Force all force a Wing to change hands
@@ -42,7 +42,9 @@ export function useSoundEvents(log: string[]): void {
     const newEntries = matchIndex === -1 ? [] : log.slice(matchIndex + 1);
 
     for (const entry of newEntries) {
-      if (/Terminated/.test(entry)) {
+      if (entry.startsWith('Site Warhead activated')) {
+        playExplosion();
+      } else if (/Terminated/.test(entry)) {
         playDisappear();
       } else if (/to the Containment Chamber/i.test(entry)) {
         playJail();

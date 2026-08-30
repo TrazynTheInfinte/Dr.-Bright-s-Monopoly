@@ -52,6 +52,7 @@ import { useIsDesktop } from './useIsDesktop';
 import { useSoundEvents } from './useSoundEvents';
 import { useStagedGame } from './useStagedGame';
 import { useTurnStartNonce } from './useTurnStartNonce';
+import { useWarheadFlash } from './useWarheadFlash';
 import { useYourTurnChime } from './useYourTurnChime';
 import './GameBoard.css';
 
@@ -139,6 +140,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   // an empty array is a harmless placeholder for the one render where
   // game isn't available yet.
   useSoundEvents(game?.log ?? []);
+  const isWarheadFlashing = useWarheadFlash(game?.log ?? []);
   useGameMusic(game);
   const currentTrackName = useCurrentGameTrackName();
   // Both computed defensively here (game may still be undefined on this
@@ -222,6 +224,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
 
   return (
     <main className="game-board">
+      {isWarheadFlashing && <div className="warhead-flash" aria-hidden="true" />}
       {afkPrompt.visible && (
         <div className="afk-prompt-overlay">
           <div className="afk-prompt">

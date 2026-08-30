@@ -12,7 +12,7 @@ import { db } from './firebase';
 import { STARTING_PIECES } from '../data/pieces';
 import { randomBotName } from './botNames';
 import type { PieceId } from '../types/game';
-import type { Room, RoomMode } from '../types/room';
+import type { BotDifficulty, Room, RoomMode } from '../types/room';
 
 // Room Codes are typed by hand, so we stick to unambiguous uppercase
 // letters (no 0/O or 1/I mixups).
@@ -138,7 +138,7 @@ export async function choosePiece(
  */
 export async function addBotToLobby(
   roomCode: string,
-  difficulty: 'easy' | 'normal' | 'hard',
+  difficulty: BotDifficulty,
 ): Promise<void> {
   const roomRef = doc(db, 'rooms', roomCode);
   const snapshot = await getDoc(roomRef);

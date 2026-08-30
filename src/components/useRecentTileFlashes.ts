@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { BOARD } from '../data/board';
 
+export type TileFlashKind = 'buy' | 'rent' | 'seize' | 'purge';
+
 export interface TileFlash {
   key: number;
   tileId: number;
-  kind: 'buy' | 'rent' | 'seize';
+  kind: TileFlashKind;
 }
 
 const FLASH_LIFETIME_MS = 900;

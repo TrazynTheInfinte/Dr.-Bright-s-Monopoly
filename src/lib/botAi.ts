@@ -1,5 +1,6 @@
 import { getTile } from '../data/board';
 import type { ColorGroup, GamePlayerState, GameState } from '../types/game';
+import type { BotDifficulty } from '../types/room';
 import {
   acknowledgeCardAndSync,
   buildHouseAndSync,
@@ -16,7 +17,7 @@ import {
   settleDebtAndSync,
 } from './gameSync';
 
-export type BotDifficulty = 'easy' | 'normal' | 'hard';
+export type { BotDifficulty };
 
 function randomPick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
@@ -119,9 +120,9 @@ async function resolveDebt(
  * engine.ts), skips every heuristic and takes the one response that's
  * always guaranteed to actually resolve the decision.
  *
- * Bots are hidden from the Lobby UI for now (WIP) - this covers the
- * decisions the current engine actually has; nothing here handles
- * trading, since proposing/negotiating one is out of scope for a bot.
+ * Covers every decision the current engine actually has; nothing here
+ * handles trading, since proposing/negotiating one is out of scope for
+ * a bot.
  */
 export async function runBotStep(
   roomCode: string,

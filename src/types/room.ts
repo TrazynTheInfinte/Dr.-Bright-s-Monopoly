@@ -9,6 +9,9 @@ import type { GameState, PieceId } from './game';
  */
 export type RoomMode = 'beginner' | 'experienced';
 
+/** How cautiously a bot plays - see lib/botAi.ts for what each level actually changes (buy thresholds, whether it proactively builds houses). Chosen once, when the bot is added in the Lobby (see lib/rooms.ts's addBotToLobby). */
+export type BotDifficulty = 'easy' | 'normal' | 'hard';
+
 export interface RoomPlayer {
   name: string;
   // Firestore fills this in on the server once the write lands - it's
@@ -21,7 +24,7 @@ export interface RoomPlayer {
   /** True for a bot added in the lobby (see lib/rooms.ts's addBotToLobby) - absent for a real player. */
   isBot?: boolean;
   /** Set alongside isBot, chosen when the bot was added - see lib/botAi.ts. */
-  botDifficulty?: 'easy' | 'normal' | 'hard';
+  botDifficulty?: BotDifficulty;
 }
 
 export interface Room {

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { BOARD, RAILROAD_RENT_BY_COUNT } from '../data/board';
 import { findAnomaly, type AnomalyId } from '../data/anomalies';
+import AnomalyIcon from './AnomalyIcon';
 import { drawFromPileAndSync, viewAnomalyAndSync } from '../lib/gameSync';
 import type { BoardTile, GameState } from '../types/game';
 import type { Room } from '../types/room';
@@ -20,7 +21,8 @@ import {
 import { STARTING_PIECES } from '../data/pieces';
 import PieceIcon from './PieceIcon';
 import { useBoardStamps } from './useBoardStamps';
-import { useRecentTileFlashes } from './useRecentTileFlashes';
+import { useRecentTileFlashes, type TileFlashKind } from './useRecentTileFlashes';
+import { usePurgeBursts } from './usePurgeBursts';
 import './Board.css';
 
 interface BoardProps {
@@ -267,9 +269,13 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
 
   const stamps = useBoardStamps(game);
   const tileFlashes = useRecentTileFlashes(game.log);
+  const purgeBursts = usePurgeBursts(game);
   // Last one wins if two flashes somehow land on the same tile in the
-  // same tick - fine, it's a brief cosmetic flourish either way.
-  const flashKindByTileId = new Map(tileFlashes.map((flash) => [flash.tileId, flash.kind]));
+  // same tick - fine, it's a brief cosmetic flourish either way. Purge
+  // bursts are folded in after, so a Site Warhead recontainment always
+  // wins over an ordinary buy/rent/seize flash on the same tile.
+  const flashKindByTileId = new Map<number, TileFlashKind>(tileFlashes.map((flash) => [flash.tileId, flash.kind]));
+  for (const burst of purgeBursts) flashKindByTileId.set(burst.tileId, 'purge');
 
   return (
     <div
@@ -439,7 +445,7 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
                           : ' - hover to view'
                     }`}
                   >
-                    ☣
+                    <AnomalyIcon anomalyId={anomaly.anomalyId as AnomalyId} className="tile-anomaly-icon" />
                   </span>
                 );
               })}

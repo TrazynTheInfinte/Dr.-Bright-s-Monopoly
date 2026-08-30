@@ -121,6 +121,25 @@
   opacity: 0.7;
 }
 
+.lobby-add-bot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.lobby-add-bot label {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.85em;
+}
+
 .piece-picker {
   width: min(420px, 90vw);
   border: 1px solid var(--color-black);

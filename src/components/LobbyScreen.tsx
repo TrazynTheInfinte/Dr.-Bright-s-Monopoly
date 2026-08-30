@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { STARTING_PIECES } from '../data/pieces';
 import { startGame } from '../lib/gameSync';
 import { isPlayerAway } from '../lib/presence';
-import { choosePiece, closeLobby, leaveRoom } from '../lib/rooms';
+import { addBotToLobby, choosePiece, closeLobby, leaveRoom } from '../lib/rooms';
 import type { PieceId } from '../types/game';
-import type { Room } from '../types/room';
+import type { BotDifficulty, Room } from '../types/room';
 import RoomQrCode from './RoomQrCode';
 import './LobbyScreen.css';
 
@@ -22,6 +22,7 @@ function pieceName(pieceId: PieceId): string {
 
 function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
   const [error, setError] = useState('');
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('normal');
   const players = Object.entries(room.players);
   const isHost = room.hostId === playerId;
   const me = room.players[playerId];
@@ -57,6 +58,15 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
 
   async function handleRemoveBot(botId: string) {
     await leaveRoom(roomCode, botId);
+  }
+
+  async function handleAddBot() {
+    setError('');
+    try {
+      await addBotToLobby(roomCode, botDifficulty);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
   }
 
   return (
@@ -100,6 +110,22 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
         {players.length === 0 && <li className="player-list-empty">Waiting for players...</li>}
       </ul>
 
+      {isHost && claimedPieceIds.length < STARTING_PIECES.length && (
+        <div className="lobby-add-bot">
+          <label>
+            Bot difficulty
+            <select value={botDifficulty} onChange={(event) => setBotDifficulty(event.target.value as BotDifficulty)}>
+              <option value="easy">Easy</option>
+              <option value="normal">Normal</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+          <button type="button" onClick={handleAddBot}>
+            Add Bot
+          </button>
+        </div>
+      )}
+
       {room.mode === 'beginner' && me && !me.pieceId && (
         <div className="piece-picker">
           <p className="lobby-hint">
@@ -124,9 +150,10 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
               );
             })}
           </ul>
-          {error && <p className="error">{error}</p>}
         </div>
       )}
+
+      {error && <p className="error">{error}</p>}
 
       {isHost && (
         <button onClick={handleStartGame} disabled={players.length < 2 || !everyoneHasAPiece}>

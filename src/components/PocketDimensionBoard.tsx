@@ -1,5 +1,6 @@
 import type { GameState, PocketDimensionTile } from '../types/game';
 import type { Room } from '../types/room';
+import AnomalyIcon from './AnomalyIcon';
 import PieceIcon from './PieceIcon';
 import './PocketDimensionBoard.css';
 
@@ -46,7 +47,7 @@ function PocketDimensionBoard({ room, game }: PocketDimensionBoardProps) {
               )}
               {index === ordeal.anomalyTrackPosition && (
                 <span className="pocket-dimension-token pocket-dimension-token-anomaly" title="SCP-106">
-                  ☣
+                  <AnomalyIcon anomalyId="theOldMan" className="pocket-dimension-token-icon" />
                 </span>
               )}
             </div>
