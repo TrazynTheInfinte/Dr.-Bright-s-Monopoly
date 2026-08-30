@@ -43,6 +43,9 @@ import {
   sellHouse,
   settleDebt,
   unmortgageProperty,
+  useBadComposition,
+  useCountermeasure,
+  useGamersFuel,
   useGetOutOfJailCard,
   useJanitorTunnelTravel,
   viewAnomaly,
@@ -164,6 +167,18 @@ export async function payEscapeFeeAndSync(roomCode: string, game: GameState, pla
 
 export async function useGetOutOfJailCardAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
   await writeGameState(roomCode, useGetOutOfJailCard(game, playerId, cardId));
+}
+
+export async function useGamersFuelAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
+  await writeGameState(roomCode, useGamersFuel(game, playerId, cardId));
+}
+
+export async function useBadCompositionAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
+  await writeGameState(roomCode, useBadComposition(game, playerId, cardId));
+}
+
+export async function useCountermeasureAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {
+  await writeGameState(roomCode, useCountermeasure(game, playerId, cardId));
 }
 
 export async function useJanitorTunnelTravelAndSync(roomCode: string, game: GameState, playerId: string, targetTileId: number) {

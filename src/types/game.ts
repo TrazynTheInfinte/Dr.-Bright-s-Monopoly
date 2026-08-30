@@ -137,6 +137,8 @@ export interface GamePlayerState {
   usedInduceBreach: boolean;
   /** Times this player has passed the Site Entrance. Tracked for everyone, but only meaningful for Intern's "On a Learning Curve": once it reaches the graduation threshold, they roll both dice like everyone else for the rest of the game. */
   lapsCompleted: number;
+  /** SCP-963 "Countermeasure" armed on this player - the next time they'd be caught by a Hostile Anomaly, the consequence redirects onto a random other living player instead, then this clears. Unrelated to debt-Termination, which this does not intercept. */
+  hasCountermeasureArmed: boolean;
 }
 
 /**

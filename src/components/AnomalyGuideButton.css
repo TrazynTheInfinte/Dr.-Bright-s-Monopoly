@@ -8,6 +8,22 @@
   }
 }
 
+.anomaly-guide-group-heading {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  color: var(--color-red);
+  text-shadow: 0 0 6px currentColor;
+  font-size: 1rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.anomaly-guide-group-heading:first-child {
+  margin-top: 0;
+}
+
 .anomaly-guide-entries {
   display: flex;
   flex-direction: column;
@@ -28,7 +44,7 @@
   filter: drop-shadow(0 0 5px currentColor);
 }
 
-.anomaly-guide-entry-body h2 {
+.anomaly-guide-entry-body h3 {
   font-family: var(--font-display);
   font-weight: 800;
   text-transform: uppercase;

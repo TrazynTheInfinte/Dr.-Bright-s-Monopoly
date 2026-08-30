@@ -1,4 +1,5 @@
 import type { CardDeck } from '../types/game';
+import type { ObjectAnomalyId } from './objectAnomalies';
 
 export type CardEffect =
   | { type: 'collect'; amount: number }
@@ -11,7 +12,8 @@ export type CardEffect =
   | { type: 'getOutOfJailFree' }
   | { type: 'collectFromEachPlayer'; amount: number }
   | { type: 'payEachPlayer'; amount: number }
-  | { type: 'repairs'; perHouse: number; perHotel: number };
+  | { type: 'repairs'; perHouse: number; perHotel: number }
+  | { type: 'objectAnomaly'; objectId: ObjectAnomalyId };
 
 export interface CardDefinition {
   id: string;
@@ -23,9 +25,10 @@ export interface CardDefinition {
 
 // Standard classic Monopoly card effects, reskinned to SCP flavor - see
 // CONTEXT.md's Cards section. Every card automates its effect directly
-// (no read-it-aloud cards); "Get Out of Containment Free" cards are
-// held (see GamePlayerState.heldCardIds) rather than resolved
-// immediately.
+// (no read-it-aloud cards); "Get Out of Containment Free" and Object
+// Anomaly cards are both held (see GamePlayerState.heldCardIds) rather
+// than resolved immediately - see data/objectAnomalies.ts and
+// engine.ts's useGamersFuel/useBadComposition/useCountermeasure.
 export const ANOMALOUS_EVENT_CARDS: CardDefinition[] = [
   {
     id: 'realityAnchorMalfunction',
@@ -194,6 +197,20 @@ export const ANOMALOUS_EVENT_CARDS: CardDefinition[] = [
     title: 'Facility Blackout',
     text: 'Make general repairs on all your Wings: 20 Credits per house, 80 Credits per hotel.',
     effect: { type: 'repairs', perHouse: 20, perHotel: 80 },
+  },
+  {
+    id: 'recoveredGamersFuel',
+    deck: 'anomalousEvent',
+    title: 'Recovered from a Breach Site: SCP-207',
+    text: 'This may be kept until needed, or sold. A bottle of "Gamer\'s Fuel" - drink it for a burst of speed, at a cost.',
+    effect: { type: 'objectAnomaly', objectId: 'gamersFuel' },
+  },
+  {
+    id: 'recoveredBadComposition',
+    deck: 'anomalousEvent',
+    title: 'Recovered from a Breach Site: SCP-012',
+    text: 'This may be kept until needed, or sold. An unfinished musical score - studying it is usually harmless. Usually.',
+    effect: { type: 'objectAnomaly', objectId: 'badComposition' },
   },
 ];
 
@@ -365,6 +382,13 @@ export const FOUNDATION_DIRECTIVE_CARDS: CardDefinition[] = [
     title: 'Cafeteria Fund Surplus',
     text: 'Collect 5 Foundation Credits from every other player.',
     effect: { type: 'collectFromEachPlayer', amount: 5 },
+  },
+  {
+    id: 'requisitionedCountermeasure',
+    deck: 'foundationDirective',
+    title: 'Requisitioned from Site Storage: SCP-963',
+    text: 'This may be kept until needed, or sold. An amber ring - worn, it carries you elsewhere the instant an anomaly would otherwise catch you.',
+    effect: { type: 'objectAnomaly', objectId: 'countermeasure' },
   },
 ];
 

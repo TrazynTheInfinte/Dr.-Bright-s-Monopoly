@@ -1,6 +1,7 @@
 import { ANOMALIES, findAnomaly, type AnomalyDefinition, type AnomalyId } from '../data/anomalies';
 import { BOARD, BOARD_SIZE, getTile, RAILROAD_RENT_BY_COUNT } from '../data/board';
 import { ANOMALOUS_EVENT_CARDS, FOUNDATION_DIRECTIVE_CARDS, findCard, type CardEffect } from '../data/cards';
+import type { ObjectAnomalyId } from '../data/objectAnomalies';
 import { STARTING_PIECES } from '../data/pieces';
 import type {
   CardDeck,
@@ -55,6 +56,14 @@ const SITE_WARHEAD_PURGE_COST = 500;
 const INTERN_GRADUATION_LAPS = 3;
 /** Intern's "Unpaid Overtime": extra Credits collected on top of the standard Go bonus every time they pass the Site Entrance. */
 const INTERN_OVERTIME_BONUS = 50;
+/** SCP-207's Credits cost per extra space traveled - the strain of the boost, charged regardless of whether the resulting move was worth it. */
+const GAMERS_FUEL_CREDITS_PER_SPACE = 5;
+/** SCP-012's odds of finishing itself (badly) on any single use. */
+const BAD_COMPOSITION_EXPLOSION_CHANCE = 1 / 6;
+/** SCP-012's ordinary (non-explosive) outcome: a small reward for the research notes made. */
+const BAD_COMPOSITION_STUDY_REWARD = 40;
+/** SCP-012's rare, bad outcome: the Credits cost of getting caught in the blast, on top of being sent to the Containment Chamber for observation. */
+const BAD_COMPOSITION_EXPLOSION_COST = 150;
 // Half real Monopoly's bank supply (32/12) - makes the shared pool a
 // real constraint worth fighting over, and makes Logistics Officer's
 // Overstock (bypasses the shared pool entirely) noticeably stronger by
@@ -110,6 +119,7 @@ export function createInitialGameState(
       usedSafeguard: false,
       usedInduceBreach: false,
       lapsCompleted: 0,
+      hasCountermeasureArmed: false,
     };
   }
 
@@ -406,16 +416,84 @@ export function useGetOutOfJailCard(state: GameState, playerId: string, cardId: 
   const player = state.players[playerId];
   if (!player.heldCardIds.includes(cardId)) return state;
 
-  const deck = findCard(cardId).deck;
-  const discardKey = deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
-  const next: GameState = {
-    ...state,
-    [discardKey]: [...state[discardKey], cardId],
-  } as GameState;
-  return updatePlayer(
-    logEvent(next, 'Used a Get Out of Containment Free card.'),
-    playerId,
-    { inJail: false, turnsInJail: 0, heldCardIds: player.heldCardIds.filter((id) => id !== cardId) },
+  const discarded = discardHeldCard(state, playerId, cardId);
+  return updatePlayer(logEvent(discarded, 'Used a Get Out of Containment Free card.'), playerId, { inJail: false, turnsInJail: 0 });
+}
+
+/** True only if this held card is the given Object Anomaly - guards every use-function below against a stale/mismatched cardId. */
+function heldObjectAnomaly(state: GameState, playerId: string, cardId: string, objectId: ObjectAnomalyId): boolean {
+  if (!state.players[playerId].heldCardIds.includes(cardId)) return false;
+  const effect = findCard(cardId).effect;
+  return effect.type === 'objectAnomaly' && effect.objectId === objectId;
+}
+
+/**
+ * SCP-207 "Gamer's Fuel": usable anytime on your own turn. Immediately
+ * rolls the dice again and moves that many extra spaces, resolving
+ * whatever's landed on exactly like a normal move (buying, rent, cards,
+ * all of it) - but charges Credits per space traveled first, same
+ * strain-of-the-boost logic as a real forced payment. If that alone is
+ * unaffordable, the debtSettlement it opens takes over before any
+ * movement happens at all.
+ */
+export function useGamersFuel(state: GameState, playerId: string, cardId: string, rng: () => number = Math.random): GameState {
+  if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (!heldObjectAnomaly(state, playerId, cardId, 'gamersFuel')) return state;
+
+  const discarded = discardHeldCard(state, playerId, cardId);
+  const roll = rollTwoDice(rng);
+  const spaces = roll[0] + roll[1];
+  const cost = spaces * GAMERS_FUEL_CREDITS_PER_SPACE;
+  const charged = chargePlayer(logEvent(discarded, `Drank SCP-207 - a burst of speed carries you ${spaces} spaces further.`), playerId, cost, null);
+  if (charged.pendingDecision) return charged;
+  return moveAndResolve(charged, playerId, spaces);
+}
+
+/**
+ * SCP-012 "Bad Composition": usable anytime on your own turn. Almost
+ * always a small, safe reward for the research notes made studying it -
+ * but a real, standing chance it finishes itself instead, hurting
+ * whoever pushed their luck.
+ */
+export function useBadComposition(state: GameState, playerId: string, cardId: string, rng: () => number = Math.random): GameState {
+  if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (!heldObjectAnomaly(state, playerId, cardId, 'badComposition')) return state;
+
+  const discarded = discardHeldCard(state, playerId, cardId);
+  if (rng() < BAD_COMPOSITION_EXPLOSION_CHANCE) {
+    const charged = chargePlayer(
+      logEvent(discarded, 'Studied SCP-012 a little too closely - it finished itself.'),
+      playerId,
+      BAD_COMPOSITION_EXPLOSION_COST,
+      null,
+    );
+    if (charged.pendingDecision) return charged;
+    return logEvent(sendToJail(charged, playerId), 'Caught in the blast - reassigned to the Containment Chamber for observation.');
+  }
+  return logEvent(
+    giveCredits(discarded, playerId, BAD_COMPOSITION_STUDY_REWARD),
+    'Made some progress transcribing SCP-012, for a small research stipend.',
+  );
+}
+
+/**
+ * SCP-963 "Countermeasure": usable anytime on your own turn. Doesn't do
+ * anything immediately - it arms on the holder instead, and only
+ * actually discharges the next time they'd be caught by a Hostile
+ * Anomaly (see resolvePlayerCaughtByAnomaly), redirecting that fate onto
+ * a random other living player. Unrelated to debt-Termination, which it
+ * doesn't intercept. No-op if already armed - nothing more to gain from
+ * a second copy while the first is still active.
+ */
+export function useCountermeasure(state: GameState, playerId: string, cardId: string): GameState {
+  if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].hasCountermeasureArmed) return state;
+  if (!heldObjectAnomaly(state, playerId, cardId, 'countermeasure')) return state;
+
+  const discarded = discardHeldCard(state, playerId, cardId);
+  return logEvent(
+    updatePlayer(discarded, playerId, { hasCountermeasureArmed: true }),
+    'Put on SCP-963 - the next anomaly to catch you will find someone else waiting instead.',
   );
 }
 
@@ -702,9 +780,12 @@ function applyCardEffect(state: GameState, playerId: string, effect: CardEffect)
     case 'goToJail':
       return logEvent(sendToJail(state, playerId), 'Reassigned to the Containment Chamber.');
     case 'getOutOfJailFree':
-      // Held until used - see useGetOutOfJailCard. The card that granted
-      // this was already moved to the discard pile in applyDrawnCard;
-      // pull it back out since it's meant to sit with the player instead.
+    case 'objectAnomaly':
+      // Held until used - see useGetOutOfJailCard and
+      // useGamersFuel/useBadComposition/useCountermeasure. The card that
+      // granted this was already moved to the discard pile in
+      // applyDrawnCard; pull it back out since it's meant to sit with the
+      // player instead.
       return pullBackFromDiscard(state, playerId);
     case 'collectFromEachPlayer': {
       let next = state;
@@ -737,19 +818,24 @@ function applyCardEffect(state: GameState, playerId: string, effect: CardEffect)
   }
 }
 
-/** The card that just granted a Get Out of Containment Free effect gets held by the player instead of discarded - undoes the discard-pile push applyDrawnCard already did. */
+/** Whether a card's effect means it's held by its drawer rather than resolved immediately - Get Out of Containment Free cards and every Object Anomaly. */
+function isHeldCardEffect(effect: CardEffect): boolean {
+  return effect.type === 'getOutOfJailFree' || effect.type === 'objectAnomaly';
+}
+
+/** The card that just granted a held effect (Get Out of Containment Free, or an Object Anomaly) gets held by the player instead of discarded - undoes the discard-pile push applyDrawnCard already did. */
 function pullBackFromDiscard(state: GameState, playerId: string): GameState {
   const lastCardId = (deckDiscard: string[]) => deckDiscard[deckDiscard.length - 1];
   const anomalousLast = lastCardId(state.anomalousEventDiscardPile);
   const directiveLast = lastCardId(state.foundationDirectiveDiscardPile);
-  if (anomalousLast && findCard(anomalousLast).effect.type === 'getOutOfJailFree') {
+  if (anomalousLast && isHeldCardEffect(findCard(anomalousLast).effect)) {
     return updatePlayer(
       { ...state, anomalousEventDiscardPile: state.anomalousEventDiscardPile.slice(0, -1) },
       playerId,
       { heldCardIds: [...state.players[playerId].heldCardIds, anomalousLast] },
     );
   }
-  if (directiveLast && findCard(directiveLast).effect.type === 'getOutOfJailFree') {
+  if (directiveLast && isHeldCardEffect(findCard(directiveLast).effect)) {
     return updatePlayer(
       { ...state, foundationDirectiveDiscardPile: state.foundationDirectiveDiscardPile.slice(0, -1) },
       playerId,
@@ -757,6 +843,14 @@ function pullBackFromDiscard(state: GameState, playerId: string): GameState {
     );
   }
   return state;
+}
+
+/** Spends a held card, moving it from heldCardIds to its deck's discard pile - shared by useGetOutOfJailCard and every Object Anomaly's use-function. */
+function discardHeldCard(state: GameState, playerId: string, cardId: string): GameState {
+  const deck = findCard(cardId).deck;
+  const discardKey = deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
+  const next: GameState = { ...state, [discardKey]: [...state[discardKey], cardId] } as GameState;
+  return updatePlayer(next, playerId, { heldCardIds: state.players[playerId].heldCardIds.filter((id) => id !== cardId) });
 }
 
 function distanceAhead(from: number, to: number): number {
@@ -1083,8 +1177,29 @@ function availablePersonnelIds(state: GameState): PieceId[] {
  * queued to pick one (see chooseNewPersonnel) instead of going out for
  * good - only a real Termination if nothing's left to reassign. Does
  * not touch the anomaly's own state at all - callers handle that.
+ *
+ * Checked first, before any of that: SCP-963 "Countermeasure" armed on
+ * the target (see useCountermeasure) redirects the whole consequence
+ * onto a random other living player instead - discharging the ring and
+ * recursing with them as the new target. Assumes at most one
+ * Countermeasure is ever armed at a time (only one such card exists in
+ * the decks), so this can't ping-pong.
  */
-function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targetPlayerId: string): GameState {
+function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targetPlayerId: string, rng: () => number): GameState {
+  if (state.players[targetPlayerId].hasCountermeasureArmed) {
+    const candidates = activePlayerIds(state).filter((id) => id !== targetPlayerId);
+    if (candidates.length > 0) {
+      const redirectedId = candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
+      const disarmed = updatePlayer(state, targetPlayerId, { hasCountermeasureArmed: false });
+      return resolvePlayerCaughtByAnomaly(
+        logEvent(disarmed, "SCP-963 discharged just in time - its grip lands on someone else entirely."),
+        anomalyId,
+        redirectedId,
+        rng,
+      );
+    }
+  }
+
   const anomaly = findAnomaly(anomalyId as AnomalyId);
   let next = logEvent(state, `${anomaly.name} caught up with someone.`);
   next = seizeAssets(next, targetPlayerId, null);
@@ -1116,8 +1231,8 @@ function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targe
 }
 
 /** Shy Guy's and SCP-173's shared catch effect on the main board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly itself goes back to dormant right where it caught them - still loose until someone purges it. SCP-106 never calls this - see dragIntoPocketDimension instead, since a main-board catch isn't a loss for it. */
-function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number): GameState {
-  const next = resolvePlayerCaughtByAnomaly(state, anomalyId, targetPlayerId);
+function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
+  const next = resolvePlayerCaughtByAnomaly(state, anomalyId, targetPlayerId, rng);
   return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
 }
 
@@ -1166,7 +1281,7 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     next =
       current.anomalyId === 'theOldMan'
         ? dragIntoPocketDimension(next, current.targetPlayerId, rng)
-        : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId);
+        : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
   }
   return next;
 }
@@ -1184,7 +1299,7 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
  * round. Rogue Anomaly is never a valid target (immune, like with Shy
  * Guy); an AFK player is skipped too, same as a benched Shy Guy target.
  */
-function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string): GameState {
+function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string, rng: () => number): GameState {
   const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
   if (!sculpture || sculpture.spawnedOnPlayerId !== endingPlayerId || state.scp173Watched) return state;
 
@@ -1193,7 +1308,7 @@ function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string): Ga
 
   const newTileId = stepToward(sculpture.tileId, state.players[nearestId].position, SCULPTURE_UNWATCHED_SPEED);
   return newTileId === state.players[nearestId].position
-    ? resolveAnomalyCatch(state, 'theSculpture', nearestId, newTileId)
+    ? resolveAnomalyCatch(state, 'theSculpture', nearestId, newTileId, rng)
     : updateAnomaly(state, 'theSculpture', { tileId: newTileId });
 }
 
@@ -1235,8 +1350,8 @@ function escapePocketDimension(state: GameState): GameState {
 }
 
 /** Failing inside the Pocket Dimension - an unaffordable Decaying Passage, or SCP-106 reaching their tile. Same consequence as any other anomaly's catch (resolvePlayerCaughtByAnomaly), and SCP-106 is recontained either way, same as an escape. */
-function terminateInsidePocketDimension(state: GameState, trappedPlayerId: string): GameState {
-  const next = resolvePlayerCaughtByAnomaly(state, 'theOldMan', trappedPlayerId);
+function terminateInsidePocketDimension(state: GameState, trappedPlayerId: string, rng: () => number): GameState {
+  const next = resolvePlayerCaughtByAnomaly(state, 'theOldMan', trappedPlayerId, rng);
   return {
     ...next,
     looseAnomalies: next.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan'),
@@ -1302,7 +1417,7 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
   } else if (landedTile === 'decayingPassage') {
     next =
       next.players[playerId].credits < DECAYING_PASSAGE_COST
-        ? terminateInsidePocketDimension(next, playerId)
+        ? terminateInsidePocketDimension(next, playerId, rng)
         : chargePlayer(next, playerId, DECAYING_PASSAGE_COST, null);
   }
 
@@ -1311,7 +1426,7 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
     const gapToAnomaly =
       (stillTrapped.playerTrackPosition - stillTrapped.anomalyTrackPosition + POCKET_DIMENSION_LENGTH) % POCKET_DIMENSION_LENGTH;
     if (gapToAnomaly <= OLD_MAN_POCKET_DIMENSION_SPEED) {
-      next = terminateInsidePocketDimension(next, playerId);
+      next = terminateInsidePocketDimension(next, playerId, rng);
     } else {
       const newAnomalyPos = (stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED) % POCKET_DIMENSION_LENGTH;
       next = { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
@@ -1459,7 +1574,7 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // whoever's turn it spawned on) has to actually pass before its first
   // move check, rather than potentially catching someone the instant
   // it's revealed.
-  if (sculptureBefore) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId);
+  if (sculptureBefore) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId, rng);
   afterAnomalies = advanceHuntingAnomalies(afterAnomalies, rng);
   // scp173Watched can be set by anyone's Keep Watch during the round (see
   // keepWatchOnSculpture) - everyone's a potential target, so everyone

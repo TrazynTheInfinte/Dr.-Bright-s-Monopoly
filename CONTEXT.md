@@ -127,6 +127,12 @@ _Avoid_: guard, observe
 The Site Warhead's owner spending a large sum to instantly recontain every currently loose Hostile Anomaly at once. Can't reach SCP-106 while it's inside its own Pocket Dimension mid-chase - only anomalies actually out on the main board.
 _Avoid_: nuke (as a verb), detonate
 
+### Object Anomalies
+
+**Object Anomaly**:
+An anomalous item, distinct from a Hostile Anomaly - inert rather than a threat that roams the board, acquired by drawing a card (same as an ordinary Anomalous Event/Foundation Directive draw, and "Clearance Revoked"'s Get Out of the Containment Chamber Free) and kept as a held card until its holder chooses to use it. The launch roster is deliberately mixed - some are safely beneficial, some are dangerous to use at all, and a holder can't tell which just by holding one. Each Object Anomaly defines its own rule for when it can be used - there's no single shared trigger condition the way "Get Out of the Containment Chamber Free" only offers its Use button while jailed.
+_Avoid_: item, artifact, powerup, relic
+
 ### Multiplayer
 
 **Room**:

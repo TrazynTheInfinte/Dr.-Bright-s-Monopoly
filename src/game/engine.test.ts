@@ -40,6 +40,9 @@ import {
   sellHouse,
   settleDebt,
   unmortgageProperty,
+  useBadComposition,
+  useCountermeasure,
+  useGamersFuel,
   useGetOutOfJailCard,
   useJanitorTunnelTravel,
   viewAnomaly,
@@ -1674,5 +1677,102 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = devKickPlayer(game, 'p2');
     expect(game.pocketDimensionOrdeal).toBeNull();
     expect(game.looseAnomalies).toEqual([]);
+  });
+});
+
+describe('Object Anomalies', () => {
+  it('a drawn objectAnomaly-effect card is held rather than resolved immediately', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'recoveredGamersFuel');
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.heldCardIds).toEqual(['recoveredGamersFuel']);
+  });
+
+  it("useGamersFuel moves the extra roll's worth of spaces and charges Credits per space traveled", () => {
+    let game = makeGame();
+    // pieceId overridden to sidestep Field Researcher's ("dog", the
+    // default p1) Grant Funding bonus for landing on tile 2's card tile,
+    // which would otherwise perturb the Credits math this test checks.
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredGamersFuel'], position: 0, pieceId: 'iron' });
+    game = useGamersFuel(game, 'p1', 'recoveredGamersFuel', () => 0); // rollTwoDice(() => 0) -> [1, 1], 2 spaces
+    expect(game.players.p1.position).toBe(2);
+    expect(game.players.p1.credits).toBe(1500 - 2 * 5);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+    expect(game.anomalousEventDiscardPile).toContain('recoveredGamersFuel');
+  });
+
+  it("useGamersFuel opens a debtSettlement instead of moving at all if the strain is unaffordable", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredGamersFuel'], position: 0, credits: 5 });
+    game = useGamersFuel(game, 'p1', 'recoveredGamersFuel', () => 0.99); // rollTwoDice(() => 0.99) -> [6, 6], 12 spaces, cost 60
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 60, creditorId: null });
+    expect(game.players.p1.position).toBe(0); // never moved
+    expect(game.players.p1.heldCardIds).toEqual([]); // already drunk regardless
+  });
+
+  it('useGamersFuel refuses to fire outside its own usability window (not this player, or not their turn)', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredGamersFuel'] });
+    const before = game;
+    game = useGamersFuel(game, 'p2', 'recoveredGamersFuel', () => 0);
+    expect(game).toEqual(before);
+  });
+
+  it('useBadComposition usually pays out a small reward', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredBadComposition'] });
+    game = useBadComposition(game, 'p1', 'recoveredBadComposition', () => 0.99); // well above the 1/6 explosion chance
+    expect(game.players.p1.credits).toBe(1500 + 40);
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+  });
+
+  it('useBadComposition can finish itself instead, costing Credits and a trip to the Containment Chamber', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredBadComposition'] });
+    game = useBadComposition(game, 'p1', 'recoveredBadComposition', () => 0); // below the 1/6 explosion chance
+    expect(game.players.p1.credits).toBe(1500 - 150);
+    expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+  });
+
+  it('useCountermeasure arms the holder instead of doing anything immediately', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedCountermeasure'] });
+    game = useCountermeasure(game, 'p1', 'requisitionedCountermeasure');
+    expect(game.players.p1.hasCountermeasureArmed).toBe(true);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+    expect(game.foundationDirectiveDiscardPile).toContain('requisitionedCountermeasure');
+  });
+
+  it('useCountermeasure is a no-op if already armed', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['requisitionedCountermeasure'], hasCountermeasureArmed: true });
+    const before = game;
+    game = useCountermeasure(game, 'p1', 'requisitionedCountermeasure');
+    expect(game).toEqual(before);
+  });
+
+  it('an armed Countermeasure redirects a Hostile Anomaly catch onto a random other living player instead', () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6], hasCountermeasureArmed: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG); // distance 2, well within hunt speed - would otherwise catch p2 outright
+    // p2 discharged the ring and is untouched; p1 (the only other active player) took the fall instead.
+    expect(game.players.p2.hasCountermeasureArmed).toBe(false);
+    expect(game.players.p2.credits).toBe(1000);
+    expect(game.players.p2.ownedTileIds).toEqual([6]);
+    expect(game.pendingPieceChoice?.playerId).toBe('p1');
+  });
+
+  it("Countermeasure only intercepts a Hostile Anomaly catch, not debt-Termination", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { hasCountermeasureArmed: true, ownedTileIds: [1] });
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 100, creditorId: null } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(true); // Terminated for real, not redirected
+    expect(game.players.p1.hasCountermeasureArmed).toBe(true); // untouched - debt-Termination never even checks it
   });
 });

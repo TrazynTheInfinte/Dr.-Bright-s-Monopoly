@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { BOARD, getTile } from '../data/board';
 import { findCard } from '../data/cards';
+import type { ObjectAnomalyId } from '../data/objectAnomalies';
 import {
   buildHouseAndSync,
   mortgageTileAndSync,
   sellHouseAndSync,
   unmortgageTileAndSync,
+  useBadCompositionAndSync,
+  useCountermeasureAndSync,
+  useGamersFuelAndSync,
   useGetOutOfJailCardAndSync,
 } from '../lib/gameSync';
 import type { GameState } from '../types/game';
@@ -38,6 +42,7 @@ function Hand({ roomCode, playerId, game }: HandProps) {
   if (!me || (me.ownedTileIds.length === 0 && me.heldCardIds.length === 0)) {
     return null;
   }
+  const isMyTurn = !game.pendingDecision && game.turnOrder[game.currentTurnIndex] === playerId;
 
   function toggle(key: string) {
     setExpandedKey((current) => (current === key ? null : key));
@@ -95,12 +100,24 @@ function Hand({ roomCode, playerId, game }: HandProps) {
             {isExpanded && (
               <div className="hand-card-detail">
                 <p>{card.text}</p>
-                {me.inJail ? (
-                  <button type="button" onClick={() => useGetOutOfJailCardAndSync(roomCode, game, playerId, cardId)}>
-                    Use to Leave the Containment Chamber
-                  </button>
-                ) : (
-                  <p className="hint">Usable while you're in the Containment Chamber.</p>
+                {card.effect.type === 'getOutOfJailFree' &&
+                  (me.inJail ? (
+                    <button type="button" onClick={() => useGetOutOfJailCardAndSync(roomCode, game, playerId, cardId)}>
+                      Use to Leave the Containment Chamber
+                    </button>
+                  ) : (
+                    <p className="hint">Usable while you're in the Containment Chamber.</p>
+                  ))}
+                {card.effect.type === 'objectAnomaly' && (
+                  <ObjectAnomalyAction
+                    roomCode={roomCode}
+                    game={game}
+                    playerId={playerId}
+                    cardId={cardId}
+                    objectId={card.effect.objectId}
+                    isMyTurn={isMyTurn}
+                    countermeasureArmed={me.hasCountermeasureArmed}
+                  />
                 )}
               </div>
             )}
@@ -224,6 +241,48 @@ function MortgageControls({ roomCode, playerId, game, tileId }: MortgageControls
       )}
     </div>
   );
+}
+
+interface ObjectAnomalyActionProps {
+  roomCode: string;
+  game: GameState;
+  playerId: string;
+  cardId: string;
+  objectId: ObjectAnomalyId;
+  isMyTurn: boolean;
+  countermeasureArmed: boolean;
+}
+
+// Each Object Anomaly defines its own usability window (see
+// CONTEXT.md's Object Anomalies section) - all three happen to only be
+// usable on the holder's own turn, but each fires a different action.
+function ObjectAnomalyAction({ roomCode, game, playerId, cardId, objectId, isMyTurn, countermeasureArmed }: ObjectAnomalyActionProps) {
+  if (!isMyTurn) {
+    return <p className="hint">Usable on your own turn.</p>;
+  }
+
+  switch (objectId) {
+    case 'gamersFuel':
+      return (
+        <button type="button" onClick={() => useGamersFuelAndSync(roomCode, game, playerId, cardId)}>
+          Drink It
+        </button>
+      );
+    case 'badComposition':
+      return (
+        <button type="button" onClick={() => useBadCompositionAndSync(roomCode, game, playerId, cardId)}>
+          Study the Score
+        </button>
+      );
+    case 'countermeasure':
+      return countermeasureArmed ? (
+        <p className="hint">Already armed - watching for the next anomaly to catch you.</p>
+      ) : (
+        <button type="button" onClick={() => useCountermeasureAndSync(roomCode, game, playerId, cardId)}>
+          Put It On
+        </button>
+      );
+  }
 }
 
 export default Hand;
