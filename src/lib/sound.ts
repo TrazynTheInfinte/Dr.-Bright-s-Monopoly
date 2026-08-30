@@ -491,9 +491,9 @@ export function debugPlayGameTrack(kind: 'standard' | 'final', index: number): v
 export type AmbienceKind = 'menu' | 'general' | 'pocketDimension';
 
 const AMBIENCE_FILES: Record<AmbienceKind, string> = {
-  menu: 'ambience-menu.oga',
-  general: 'ambience-general.oga',
-  pocketDimension: 'ambience-pocket-dimension.oga',
+  menu: 'ambience-menu.mp3',
+  general: 'ambience-general.mp3',
+  pocketDimension: 'ambience-pocket-dimension.mp3',
 };
 
 function ambienceUrl(kind: AmbienceKind): string {
@@ -575,7 +575,7 @@ export function setAmbience(kind: AmbienceKind | null): void {
 
 // --- One-shot real-file sound effect ---------------------------------------
 
-const ENTER_RAGE_STINGER_URL = `${import.meta.env.BASE_URL}audio/096-enter-rage.oga`;
+const ENTER_RAGE_STINGER_URL = `${import.meta.env.BASE_URL}audio/096-enter-rage.mp3`;
 const ENTER_RAGE_STINGER_VOLUME = 0.4;
 
 /**
