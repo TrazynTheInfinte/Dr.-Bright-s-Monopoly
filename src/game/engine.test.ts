@@ -3,6 +3,7 @@ import { getTile } from '../data/board';
 import {
   acceptTrade,
   acknowledgeCard,
+  acknowledgePocketDimensionLanding,
   afkSkipTurn,
   buildHouse,
   buyTile,
@@ -1479,6 +1480,10 @@ describe('SCP-106 and the Pocket Dimension', () => {
       pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.2); // rolls a 2 -> tile 2, a Fracture Point
+    expect(game.pendingDecision).toEqual({ type: 'pocketDimensionLanded', forPlayerId: 'p1' }); // not resolved yet
+    expect(game.pocketDimensionOrdeal?.playerTrackPosition).toBe(2); // but the move itself already landed
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pendingDecision).toBeNull();
     expect(game.pocketDimensionOrdeal).toBeNull();
     expect(game.looseAnomalies).toEqual([]);
     expect(game.players.p1.credits).toBe(1500);
@@ -1494,6 +1499,8 @@ describe('SCP-106 and the Pocket Dimension', () => {
       pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> tile 4, a Decaying Passage
+    expect(game.players.p1.credits).toBe(1500); // not deducted yet - still just landed
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
     expect(game.players.p1.credits).toBe(1500 - 150);
     expect(game.pocketDimensionOrdeal).toEqual({ trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 4, anomalyTrackPosition: 1 });
     expect(game.looseAnomalies[0].status).toBe('inPocketDimension'); // still loose, still trapped
@@ -1508,6 +1515,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
       pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> tile 4, an unaffordable Decaying Passage
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
     expect(game.pocketDimensionOrdeal).toBeNull();
     expect(game.looseAnomalies).toEqual([]); // SCP-106 recontained, same as an escape
     expect(game.players.p1.ownedTileIds).toEqual([]); // seized
@@ -1524,12 +1532,9 @@ describe('SCP-106 and the Pocket Dimension', () => {
     };
     // Rolls a 1 -> player lands on tile 1 (neutral, no effect of its own).
     // SCP-106 then creeps from tile 1 to tile 2, which reaches/passes the
-    // player's own tile 1 - a catch. Only the first rng() call should be
-    // 0 (the movement roll) - later calls are endTurn's own breach-chance
-    // check once the ordeal resolves, which must not coincidentally
-    // trigger a real breach here too.
-    let calls = 0;
-    game = movePocketDimension(game, 'p1', () => (calls++ === 0 ? 0 : 1));
+    // player's own tile 1 - a catch.
+    game = movePocketDimension(game, 'p1', () => 0);
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
     expect(game.pocketDimensionOrdeal).toBeNull();
     expect(game.looseAnomalies).toEqual([]);
     expect(game.pendingPieceChoice?.playerId).toBe('p1');
@@ -1559,6 +1564,30 @@ describe('SCP-106 and the Pocket Dimension', () => {
   it('refuses to move when nobody is currently trapped', () => {
     const game = makeGame();
     expect(movePocketDimension(game, 'p1')).toEqual(game);
+  });
+
+  it('refuses to move again while a landing is already awaiting resolution', () => {
+    let game = makeGame();
+    game = {
+      ...game,
+      looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+    };
+    game = movePocketDimension(game, 'p1', () => 0.2);
+    const before = game;
+    expect(movePocketDimension(game, 'p1', () => 0.2)).toEqual(before);
+  });
+
+  it("acknowledgePocketDimensionLanding does nothing without a landing actually awaiting resolution", () => {
+    const game = makeGame();
+    expect(acknowledgePocketDimensionLanding(game)).toEqual(game);
+  });
+
+  it('acknowledgePocketDimensionLanding just clears a stale decision if the ordeal was already ended some other way (e.g. a dev-panel recontain)', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'pocketDimensionLanded', forPlayerId: 'p1' }, pocketDimensionOrdeal: null };
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pendingDecision).toBeNull();
   });
 
   it("Site Warhead purge can't reach SCP-106 mid-ordeal, but still clears everything else loose", () => {

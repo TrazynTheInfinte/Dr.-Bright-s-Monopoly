@@ -6,6 +6,7 @@ import { findCard } from '../data/cards';
 import type { CardDeck, GameState } from '../types/game';
 import {
   acknowledgeCardAndSync,
+  acknowledgePocketDimensionLandingAndSync,
   buyTileAndSync,
   declinePurchaseAndSync,
   endTurnAndSync,
@@ -67,6 +68,13 @@ function pieceName(pieceId: string): string {
 }
 
 const TUNNEL_TILES = BOARD.filter((tile) => tile.kind === 'tunnel');
+
+// How long to hold on the tile the trapped player just landed on in the
+// Pocket Dimension before revealing what it actually does (a Credit
+// loss, an escape, a Termination, SCP-106 closing in) - long enough to
+// register as "you landed here, and THEN this happened" rather than
+// everything resolving in one instant blur.
+const POCKET_DIMENSION_REVEAL_DELAY_MS = 2500;
 
 /** Owned Wings/Tunnels `player` could mortgage right now to raise cash before deciding on a purchase - not already mortgaged, no houses on the specific tile. Mirrors DebtSettlementPrompt's own filter (mortgageProperty itself still rejects one with houses elsewhere in its Sector, logging why, if this lighter check lets one through). */
 function mortgageableForPurchase(
@@ -148,6 +156,21 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
     [],
   );
   useCardFlight(game, layoutActionsRef.current, handleCardFlight);
+
+  const pocketDimensionLandingSignature =
+    game?.pendingDecision?.type === 'pocketDimensionLanded' ? game.pendingDecision.forPlayerId : null;
+  // Any connected client schedules and fires this, not just the trapped
+  // player's own browser - acknowledgePocketDimensionLanding is a no-op
+  // once the decision's already cleared, so multiple clients racing to
+  // call it after their own timer is harmless, and the reveal isn't held
+  // hostage by one disconnected/slow browser.
+  useEffect(() => {
+    if (!pocketDimensionLandingSignature || !game) return;
+    const timer = setTimeout(() => {
+      void acknowledgePocketDimensionLandingAndSync(roomCode, game);
+    }, POCKET_DIMENSION_REVEAL_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [pocketDimensionLandingSignature, roomCode]);
 
   // RoomView only ever renders GameBoard once room.game exists, but
   // TypeScript can't see that from here, so we still need this check to
@@ -488,6 +511,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
                 SCP-106 at tile {game.pocketDimensionOrdeal.anomalyTrackPosition}) - out of the Site Warhead's reach until the
                 ordeal ends.
               </p>
+              {game.pendingDecision?.type === 'pocketDimensionLanded' && <p className="hint">Landed - finding out what that tile does...</p>}
             </div>
           )}
 

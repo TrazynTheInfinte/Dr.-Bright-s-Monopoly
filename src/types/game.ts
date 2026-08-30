@@ -172,7 +172,8 @@ export type PendingDecision =
   | { type: 'cardChoice'; deck: CardDeck; choiceCardIds: string[] }
   | { type: 'catRedirect'; cardId: string }
   | { type: 'cardDrawn'; cardId: string; forPlayerId: string }
-  | { type: 'debtSettlement'; forPlayerId: string; amountOwed: number; creditorId: string | null };
+  | { type: 'debtSettlement'; forPlayerId: string; amountOwed: number; creditorId: string | null }
+  | { type: 'pocketDimensionLanded'; forPlayerId: string };
 
 export interface GameState {
   /** Player IDs in turn order. */

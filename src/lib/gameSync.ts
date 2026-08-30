@@ -6,6 +6,7 @@ import type { Room } from '../types/room';
 import {
   acceptTrade,
   acknowledgeCard,
+  acknowledgePocketDimensionLanding,
   afkSkipTurn,
   buildHouse,
   buyTile,
@@ -263,6 +264,10 @@ export async function keepWatchOnSculptureAndSync(roomCode: string, game: GameSt
 
 export async function movePocketDimensionAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, movePocketDimension(game, playerId));
+}
+
+export async function acknowledgePocketDimensionLandingAndSync(roomCode: string, game: GameState) {
+  await writeGameState(roomCode, acknowledgePocketDimensionLanding(game));
 }
 
 export async function devSpawnAnomalyAndSync(roomCode: string, game: GameState, anomalyId: string) {

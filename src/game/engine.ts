@@ -1248,12 +1248,11 @@ function terminateInsidePocketDimension(state: GameState, trappedPlayerId: strin
  * The trapped player's own turn, replacing their usual roll-and-move
  * on the main board entirely: rolls one die to advance along the
  * Pocket Dimension track (capped at its far end, no wraparound - it's
- * a dead end, not a loop), resolves whatever tile they land on, then -
- * if the ordeal is still going - SCP-106 creeps one tile closer. If
- * that closes the gap all the way, that's a catch, same as reaching an
- * unaffordable Decaying Passage. Ends the turn itself, same as
- * keepWatchOnSculpture, since there's nothing else to resolve this
- * turn either way.
+ * a dead end, not a loop). Doesn't resolve the landed tile yet - opens
+ * a pendingDecision instead, so the UI can hold on the landed tile for
+ * a beat before revealing what it actually does (see
+ * acknowledgePocketDimensionLanding). Blocks every other action in the
+ * meantime, same as any other pendingDecision.
  */
 export function movePocketDimension(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
   if (state.pendingDecision || state.winnerId) return state;
@@ -1263,12 +1262,32 @@ export function movePocketDimension(state: GameState, playerId: string, rng: () 
 
   const roll = Math.floor(rng() * 6) + 1;
   const newPlayerPos = Math.min(ordeal.playerTrackPosition + roll, POCKET_DIMENSION_LENGTH - 1);
-  let next = logEvent(
-    { ...state, pocketDimensionOrdeal: { ...ordeal, playerTrackPosition: newPlayerPos } },
+  return logEvent(
+    {
+      ...state,
+      pocketDimensionOrdeal: { ...ordeal, playerTrackPosition: newPlayerPos },
+      pendingDecision: { type: 'pocketDimensionLanded', forPlayerId: playerId },
+    },
     `Rolled a ${roll} in the Pocket Dimension.`,
   );
+}
 
-  const landedTile = ordeal.track[newPlayerPos];
+/**
+ * Resolves whatever tile movePocketDimension just landed the trapped
+ * player on, then - if the ordeal is still going - SCP-106 creeps one
+ * tile closer. If that closes the gap all the way, that's a catch,
+ * same as reaching an unaffordable Decaying Passage. Ends the turn
+ * itself, same as keepWatchOnSculpture, since there's nothing else to
+ * resolve this turn either way.
+ */
+export function acknowledgePocketDimensionLanding(state: GameState, rng: () => number = Math.random): GameState {
+  if (state.pendingDecision?.type !== 'pocketDimensionLanded') return state;
+  const { forPlayerId: playerId } = state.pendingDecision;
+  const ordeal = state.pocketDimensionOrdeal;
+  if (!ordeal) return { ...state, pendingDecision: null };
+
+  let next: GameState = { ...state, pendingDecision: null };
+  const landedTile = ordeal.track[ordeal.playerTrackPosition];
   if (landedTile === 'fracturePoint') {
     next = escapePocketDimension(next);
   } else if (landedTile === 'decayingPassage') {
