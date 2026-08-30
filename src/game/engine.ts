@@ -746,10 +746,10 @@ export function acknowledgeCard(state: GameState): GameState {
   const { cardId, forPlayerId } = state.pendingDecision;
   const card = findCard(cardId);
   const cleared: GameState = { ...state, pendingDecision: null };
-  return applyCardEffect(logEvent(cleared, `Drew: ${card.title}.`), forPlayerId, card.effect);
+  return applyCardEffect(logEvent(cleared, `Drew: ${card.title}.`), forPlayerId, cardId, card.effect);
 }
 
-function applyCardEffect(state: GameState, playerId: string, effect: CardEffect): GameState {
+function applyCardEffect(state: GameState, playerId: string, cardId: string, effect: CardEffect): GameState {
   switch (effect.type) {
     case 'collect':
       return giveCredits(state, playerId, effect.amount);
@@ -782,11 +782,10 @@ function applyCardEffect(state: GameState, playerId: string, effect: CardEffect)
     case 'getOutOfJailFree':
     case 'objectAnomaly':
       // Held until used - see useGetOutOfJailCard and
-      // useGamersFuel/useBadComposition/useCountermeasure. The card that
-      // granted this was already moved to the discard pile in
-      // applyDrawnCard; pull it back out since it's meant to sit with the
-      // player instead.
-      return pullBackFromDiscard(state, playerId);
+      // useGamersFuel/useBadComposition/useCountermeasure. This card was
+      // already moved to the discard pile in applyDrawnCard; pull it back
+      // out since it's meant to sit with the player instead.
+      return pullBackFromDiscard(state, playerId, cardId);
     case 'collectFromEachPlayer': {
       let next = state;
       for (const otherId of activePlayerIds(next)) {
@@ -818,31 +817,25 @@ function applyCardEffect(state: GameState, playerId: string, effect: CardEffect)
   }
 }
 
-/** Whether a card's effect means it's held by its drawer rather than resolved immediately - Get Out of Containment Free cards and every Object Anomaly. */
-function isHeldCardEffect(effect: CardEffect): boolean {
-  return effect.type === 'getOutOfJailFree' || effect.type === 'objectAnomaly';
-}
-
-/** The card that just granted a held effect (Get Out of Containment Free, or an Object Anomaly) gets held by the player instead of discarded - undoes the discard-pile push applyDrawnCard already did. */
-function pullBackFromDiscard(state: GameState, playerId: string): GameState {
-  const lastCardId = (deckDiscard: string[]) => deckDiscard[deckDiscard.length - 1];
-  const anomalousLast = lastCardId(state.anomalousEventDiscardPile);
-  const directiveLast = lastCardId(state.foundationDirectiveDiscardPile);
-  if (anomalousLast && isHeldCardEffect(findCard(anomalousLast).effect)) {
-    return updatePlayer(
-      { ...state, anomalousEventDiscardPile: state.anomalousEventDiscardPile.slice(0, -1) },
-      playerId,
-      { heldCardIds: [...state.players[playerId].heldCardIds, anomalousLast] },
-    );
-  }
-  if (directiveLast && isHeldCardEffect(findCard(directiveLast).effect)) {
-    return updatePlayer(
-      { ...state, foundationDirectiveDiscardPile: state.foundationDirectiveDiscardPile.slice(0, -1) },
-      playerId,
-      { heldCardIds: [...state.players[playerId].heldCardIds, directiveLast] },
-    );
-  }
-  return state;
+/**
+ * The card that just granted a held effect (Get Out of Containment Free,
+ * or an Object Anomaly) gets held by this specific player instead of
+ * discarded - undoes the discard-pile push applyDrawnCard already did
+ * for it. Targets cardId directly rather than guessing from whichever
+ * discard pile's tail looks like a held-effect card: that used to be a
+ * real bug - if a different held card (e.g. a just-used Object Anomaly,
+ * see discardHeldCard) happened to sit at the tail of the OTHER deck's
+ * discard pile, it got wrongly pulled back instead of the card actually
+ * just drawn, silently swapping one held card for a completely unrelated
+ * one and leaving the real draw stranded in the discard pile forever.
+ */
+function pullBackFromDiscard(state: GameState, playerId: string, cardId: string): GameState {
+  const deck = findCard(cardId).deck;
+  const discardKey = deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
+  const pile = state[discardKey];
+  if (pile[pile.length - 1] !== cardId) return state; // defensive - should always be true right after applyDrawnCard
+  const next: GameState = { ...state, [discardKey]: pile.slice(0, -1) } as GameState;
+  return updatePlayer(next, playerId, { heldCardIds: [...state.players[playerId].heldCardIds, cardId] });
 }
 
 /** Spends a held card, moving it from heldCardIds to its deck's discard pile - shared by useGetOutOfJailCard and every Object Anomaly's use-function. */

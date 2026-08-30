@@ -1767,6 +1767,29 @@ describe('Object Anomalies', () => {
     expect(game.pendingPieceChoice?.playerId).toBe('p1');
   });
 
+  it("drawing and using one Object Anomaly doesn't corrupt a later draw of a different one from the other deck", () => {
+    // Regression test: pullBackFromDiscard used to guess which discard
+    // pile's tail card to pull back into the drawer's hand, rather than
+    // targeting the specific card just drawn. Using SCP-207 (Anomalous
+    // Event) pushes it onto anomalousEventDiscardPile's tail via
+    // discardHeldCard - if a later draw of SCP-963 (Foundation
+    // Directive) mistakenly checked that pile first, it would pull the
+    // already-used 207 back into the hand instead of holding the
+    // actually-drawn 963, stranding 963 in its own discard pile forever.
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { heldCardIds: ['recoveredGamersFuel'], pieceId: 'iron', position: 0 });
+    game = useGamersFuel(game, 'p1', 'recoveredGamersFuel', () => 0);
+    expect(game.players.p1.heldCardIds).toEqual([]);
+    expect(game.anomalousEventDiscardPile[game.anomalousEventDiscardPile.length - 1]).toBe('recoveredGamersFuel');
+
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
+    game = devSetForcedCard(game, 'requisitionedCountermeasure');
+    game = drawFromPile(game, 'p1');
+    game = acknowledgeCard(game);
+    expect(game.players.p1.heldCardIds).toEqual(['requisitionedCountermeasure']);
+    expect(game.foundationDirectiveDiscardPile).not.toContain('requisitionedCountermeasure');
+  });
+
   it("Countermeasure only intercepts a Hostile Anomaly catch, not debt-Termination", () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { hasCountermeasureArmed: true, ownedTileIds: [1] });
