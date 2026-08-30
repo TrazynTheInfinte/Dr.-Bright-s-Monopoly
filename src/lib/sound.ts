@@ -9,7 +9,7 @@ const MUSIC_VOLUME_STORAGE_KEY = 'comunopoly-music-volume';
 // The gain/volume actually applied is this, scaled by the user's music
 // volume preference (0-1) - these are the "100%" ceilings, tuned so
 // music sits behind the sound effects rather than over them.
-const MAX_GAME_MUSIC_VOLUME = 0.35;
+const MAX_GAME_MUSIC_VOLUME = 0.7;
 // Ambience layers underneath whatever music is playing (menu ambience
 // under nothing, in-game ambience under the shuffling tracks) - quieter
 // than the music itself so it reads as atmosphere, not a second song.
