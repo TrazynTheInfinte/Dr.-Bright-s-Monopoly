@@ -46,29 +46,17 @@
   transform: rotate(-16deg);
 }
 
-/* A five-pointed star, upper right - low-opacity enough to read as
-   atmosphere, not a logo. */
+/* The Foundation insignia, upper right - low-opacity enough to read as
+   atmosphere, not a logo plastered on the page. */
 .brutalist-bg-star {
   position: absolute;
   top: 5vh;
   right: 6vw;
   width: clamp(90px, 12vw, 160px);
   height: clamp(90px, 12vw, 160px);
-  background: var(--color-red);
-  opacity: 0.4;
+  color: var(--color-black);
+  opacity: 0.35;
   transform: rotate(14deg);
-  clip-path: polygon(
-    50% 0%,
-    61% 35%,
-    98% 35%,
-    68% 57%,
-    79% 91%,
-    50% 70%,
-    21% 91%,
-    32% 57%,
-    2% 35%,
-    39% 35%
-  );
 }
 
 /* A thin outlined ring, lower left - a quiet counterweight to the star. */
