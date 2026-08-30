@@ -92,7 +92,7 @@ An SCP that can breach containment and menace players directly once loose on the
 _Avoid_: monster, enemy, creature
 
 **Containment Breach**:
-The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously. Can't happen at all - random or induced - until someone has completed a full lap of the board, so the first lap is always guaranteed anomaly-free. SCP-939 is the one exception to "an event" - its breach is never announced at all, no log entry and no visible marker, so nobody actually witnesses it happening.
+The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously. Can't happen at all - random or induced - until someone has completed a full lap of the board, so the first lap is always guaranteed anomaly-free. SCP-939 is the one exception to "an event" - its breach is never announced at all, no log entry and no visible marker, so nobody actually witnesses it happening. The one exception to that exception: whoever it's currently approaching gets a private early warning nobody else does, in keeping with it being heard, not seen, coming.
 _Avoid_: spawn, escape
 
 **Dormant**:
@@ -104,7 +104,7 @@ SCP-096's state once someone views it: it locks onto that one player and steadil
 _Avoid_: chasing, aggro
 
 **Diagnosed**:
-SCP-049's own equivalent of Hunting - always active from the moment it breaches, same as SCP-106/SCP-939, but the target is a random pick completely unrelated to anyone's position on the board, and it never re-diagnoses a player currently Cured. If its target becomes ineligible, it re-diagnoses a new random one the same way SCP-106 re-targets.
+SCP-049's own equivalent of Hunting - always active from the moment it breaches, same as SCP-106/SCP-939, but the target is a random pick completely unrelated to anyone's position on the board, and it never re-diagnoses a player currently Cured. It also moves toward its target directly (whichever direction around the board is actually shorter) rather than only with the flow of play like every other anomaly - its diagnosis was never about anyone's position in the first place. If its target becomes ineligible, or is cured, it re-diagnoses a new random one immediately rather than pausing - it never freezes as long as anyone eligible is left.
 _Avoid_: hunting (reserved for the proximity-based version above), infected
 
 **Caught**:

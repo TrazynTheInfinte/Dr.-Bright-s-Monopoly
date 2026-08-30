@@ -14,6 +14,10 @@ const MAX_GAME_MUSIC_VOLUME = 0.7;
 // under nothing, in-game ambience under the shuffling tracks) - quieter
 // than the music itself so it reads as atmosphere, not a second song.
 const MAX_AMBIENCE_VOLUME = 0.18;
+// SCP-939's personal early-warning loop (see setVoicesWarning) - louder
+// than ambience, since this one is meant to actually be noticed by the
+// one player it's for, but still under the music/ambience on top of it.
+const MAX_VOICES_WARNING_VOLUME = 0.3;
 
 function clamp01(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
@@ -39,6 +43,7 @@ export function setMusicVolume(value: number): void {
   if (el && !muted) el.volume = MAX_GAME_MUSIC_VOLUME * musicVolume;
   const ambEl = activeAmbienceEl();
   if (ambEl && !muted) ambEl.volume = MAX_AMBIENCE_VOLUME * musicVolume;
+  if (voicesWarningEl && voicesWarningActive && !muted) voicesWarningEl.volume = MAX_VOICES_WARNING_VOLUME * musicVolume;
 }
 
 function ensureContext(): AudioContext | null {
@@ -98,15 +103,16 @@ export function setMuted(value: boolean): void {
     gameMusicElB?.pause();
     ambienceElA?.pause();
     ambienceElB?.pause();
+    voicesWarningEl?.pause();
     return;
   }
 
   initAudio();
-  // Resume whichever track/ambience was actually supposed to be playing
-  // (gameMusicMode/currentAmbienceKind both survive muting, even though
-  // actual playback was paused while muted) - resumes the same paused
-  // element rather than picking something new, same as hitting "play"
-  // again on any paused <audio> element.
+  // Resume whichever track/ambience/warning was actually supposed to be
+  // playing (gameMusicMode/currentAmbienceKind/voicesWarningActive all
+  // survive muting, even though actual playback was paused while muted)
+  // - resumes the same paused element rather than picking something new,
+  // same as hitting "play" again on any paused <audio> element.
   const el = activeGameMusicEl();
   if (gameMusicMode && el) {
     el.volume = MAX_GAME_MUSIC_VOLUME * musicVolume;
@@ -116,6 +122,10 @@ export function setMuted(value: boolean): void {
   if (currentAmbienceKind && ambEl) {
     ambEl.volume = MAX_AMBIENCE_VOLUME * musicVolume;
     ambEl.play().catch(() => {});
+  }
+  if (voicesWarningActive && voicesWarningEl) {
+    voicesWarningEl.volume = MAX_VOICES_WARNING_VOLUME * musicVolume;
+    voicesWarningEl.play().catch(() => {});
   }
 }
 
@@ -591,4 +601,52 @@ export function playEnterRageStinger(): void {
   const audio = new Audio(ENTER_RAGE_STINGER_URL);
   audio.volume = ENTER_RAGE_STINGER_VOLUME;
   audio.play().catch(() => {});
+}
+
+// --- SCP-939's personal early-warning loop ---------------------------------
+//
+// Since SCP-939's own breach and hunt are otherwise completely silent
+// and invisible (see setAmbience's usage and Board.tsx), the one player
+// it's currently approaching gets a private cue instead - nobody else
+// hears this. A single looping element (not a crossfading pair like
+// ambience/music above) since there's only ever one thing to play here:
+// on or off, for whichever single player it's meant for on this client.
+
+const VOICES_WARNING_URL = `${import.meta.env.BASE_URL}audio/warning-939.mp3`;
+
+let voicesWarningEl: HTMLAudioElement | null = null;
+let voicesWarningActive = false;
+
+/**
+ * Fades the SCP-939 early-warning loop in or out - call with `true` for
+ * as long as (and only while) the viewing player is currently the one it
+ * approaching (see useVoicesWarning), `false` otherwise. No-op if
+ * already in the requested state.
+ */
+export function setVoicesWarning(active: boolean): void {
+  if (active === voicesWarningActive) return;
+  voicesWarningActive = active;
+  if (typeof Audio === 'undefined') return;
+  if (!voicesWarningEl) {
+    voicesWarningEl = new Audio(VOICES_WARNING_URL);
+    voicesWarningEl.loop = true;
+    voicesWarningEl.volume = 0;
+  }
+  const el = voicesWarningEl;
+
+  if (!active) {
+    if (muted) {
+      el.pause();
+    } else {
+      fadeVolume(el, 0, CROSSFADE_MS, () => el.pause());
+    }
+    return;
+  }
+
+  if (muted) {
+    el.volume = 0;
+    return;
+  }
+  el.play().catch(() => {});
+  fadeVolume(el, MAX_VOICES_WARNING_VOLUME * musicVolume, CROSSFADE_MS);
 }

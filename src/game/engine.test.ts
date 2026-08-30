@@ -2012,8 +2012,18 @@ describe('SCP-049 "The Plague Doctor"', () => {
     ]);
   });
 
-  it('a first catch "cures" the target instead of seizing their assets', () => {
+  it('moves toward its target in whichever direction is shorter, not just clockwise like every other anomaly', () => {
     let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 38 }); // counterclockwise from tile 2 is only 4 away; clockwise would be 36
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 2, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG); // DOCTOR_HUNT_SPEED (6) easily covers the short way, not the long way
+    // Caught this same tick - only possible if it actually took the
+    // counterclockwise shortcut instead of crawling clockwise.
+    expect(game.players.p2.hasBeenCuredBy049).toBe(true);
+  });
+
+  it('a first catch "cures" the target instead of seizing their assets, and immediately moves on to a new patient instead of freezing', () => {
+    let game = makeGame(); // p1 'dog', p2 'car' - only p1 is left eligible once p2 is Cured
     game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
     game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within its hunt speed
@@ -2021,6 +2031,17 @@ describe('SCP-049 "The Plague Doctor"', () => {
     expect(game.players.p2.ownedTileIds).toEqual([6]); // untouched
     expect(game.players.p2.curedTurnsRemaining).toBe(3);
     expect(game.players.p2.hasBeenCuredBy049).toBe(true);
+    // Doesn't go dormant - immediately re-diagnoses p1 (the only one left
+    // eligible, since p2 is now excluded while Cured) and keeps hunting.
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theDoctor', tileId: 10, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 });
+  });
+
+  it('goes dormant after curing someone only if nobody else is left eligible to re-diagnose', () => {
+    let game = makeGame(['car', 'trex']); // p2 is Rogue Anomaly - never eligible
+    game = withPlayer(game, 'p1', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p1.hasBeenCuredBy049).toBe(true);
     expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theDoctor', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
   });
 

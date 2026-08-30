@@ -1336,6 +1336,22 @@ function stepToward(from: number, to: number, maxSteps: number): number {
   return (from + Math.min(clockwiseDistance, maxSteps)) % BOARD_SIZE;
 }
 
+/**
+ * SCP-049's own movement, unlike every other anomaly's: it doesn't move
+ * with the flow of play like a token would, it beelines - closing in via
+ * whichever direction (clockwise or counterclockwise) is actually
+ * shorter, matching its diagnosis being unrelated to board position in
+ * the first place (see randomHuntableTarget).
+ */
+function stepTowardEitherWay(from: number, to: number, maxSteps: number): number {
+  const clockwiseDistance = distanceAhead(from, to);
+  if (clockwiseDistance === 0) return from;
+  const counterClockwiseDistance = distanceAhead(to, from);
+  return clockwiseDistance <= counterClockwiseDistance
+    ? (from + Math.min(clockwiseDistance, maxSteps)) % BOARD_SIZE
+    : (from - Math.min(counterClockwiseDistance, maxSteps) + BOARD_SIZE) % BOARD_SIZE;
+}
+
 function availablePersonnelIds(state: GameState): PieceId[] {
   const claimed = new Set(Object.values(state.players).filter((p) => !p.isSpectating).map((p) => p.pieceId));
   return STARTING_PIECES.map((p) => p.id).filter((id) => !claimed.has(id));
@@ -1441,24 +1457,45 @@ function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId
  * a mindless SCP-049-2, via the exact same applyCatchConsequence
  * pipeline every other catch uses, just with its own opening message.
  */
-function resolveDoctorCatch(state: GameState, targetPlayerId: string, rng: () => number): GameState {
-  const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
-  state = redirected.state;
-  targetPlayerId = redirected.targetPlayerId;
-
+/** SCP-049's own catch consequence for one already-resolved target (past any Countermeasure redirect - see resolveDoctorAnomalyCatch, the only caller). Reports whether this was fatal, since that decides whether it keeps hunting afterward. */
+function applyDoctorCatch(state: GameState, targetPlayerId: string, rng: () => number): { state: GameState; wasFatal: boolean } {
   if (state.players[targetPlayerId].hasBeenCuredBy049) {
-    return applyCatchConsequence(state, targetPlayerId, rng, 'SCP-049 finishes what it started - reanimated as a mindless SCP-049-2.');
+    return {
+      state: applyCatchConsequence(state, targetPlayerId, rng, 'SCP-049 finishes what it started - reanimated as a mindless SCP-049-2.'),
+      wasFatal: true,
+    };
   }
-  return logEvent(
+  const cured = logEvent(
     updatePlayer(state, targetPlayerId, { curedTurnsRemaining: CURE_DURATION_TURNS, hasBeenCuredBy049: true }),
     `SCP-049 "cured" someone of the Pestilence - diminished for the next ${CURE_DURATION_TURNS} turns.`,
   );
+  return { state: cured, wasFatal: false };
 }
 
-/** SCP-049's version of resolveAnomalyCatch: resolveDoctorCatch's consequence, then it goes back to dormant right where it caught them - still loose until someone purges it, exactly like every other main-board catch. */
+/**
+ * SCP-049's version of resolveAnomalyCatch - but unlike every other
+ * anomaly's catch, curing someone doesn't end its rounds: it
+ * immediately re-diagnoses a new random target and keeps hunting,
+ * rather than going dormant. A fatal (SCP-049-2) catch is different -
+ * that one does go dormant right where it happened, same as every
+ * other anomaly's catch, since there's nothing left to immediately move
+ * on to.
+ */
 function resolveDoctorAnomalyCatch(state: GameState, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
-  const next = resolveDoctorCatch(state, targetPlayerId, rng);
-  return updateAnomaly(next, 'theDoctor', { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+  const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
+  const { state: next, wasFatal } = applyDoctorCatch(redirected.state, redirected.targetPlayerId, rng);
+
+  if (wasFatal) {
+    return updateAnomaly(next, 'theDoctor', { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+  }
+  const reacquired = randomHuntableTarget(next, rng);
+  return updateAnomaly(
+    next,
+    'theDoctor',
+    reacquired
+      ? { targetPlayerId: reacquired, tileId: caughtAtTileId }
+      : { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId },
+  );
 }
 
 /** Every player eligible to be hunted at all, by anything - excludes Rogue Anomaly (always immune), anyone with SCP-268 active (temporarily immune, see useEvasion), and anyone AFK-benched. Shared by nearestHuntableTarget and randomHuntableTarget below. */
@@ -1521,7 +1558,10 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
           : current.anomalyId === 'theDoctor'
             ? DOCTOR_HUNT_SPEED
             : ANOMALY_HUNT_SPEED;
-    const newTileId = stepToward(current.tileId, target.position, speed);
+    const newTileId =
+      current.anomalyId === 'theDoctor'
+        ? stepTowardEitherWay(current.tileId, target.position, speed)
+        : stepToward(current.tileId, target.position, speed);
     if (newTileId !== target.position) {
       next = updateAnomaly(next, current.anomalyId, { tileId: newTileId });
       continue;

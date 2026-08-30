@@ -52,6 +52,7 @@ import { useIsDesktop } from './useIsDesktop';
 import { useSoundEvents } from './useSoundEvents';
 import { useStagedGame } from './useStagedGame';
 import { useTurnStartNonce } from './useTurnStartNonce';
+import { useVoicesWarning } from './useVoicesWarning';
 import { useWarheadFlash } from './useWarheadFlash';
 import { useYourTurnChime } from './useYourTurnChime';
 import './GameBoard.css';
@@ -142,6 +143,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   useSoundEvents(game?.log ?? []);
   const isWarheadFlashing = useWarheadFlash(game?.log ?? []);
   useGameMusic(game);
+  useVoicesWarning(game, playerId);
   const currentTrackName = useCurrentGameTrackName();
   // Both computed defensively here (game may still be undefined on this
   // render) so the two watchdog hooks below - which also can't be
