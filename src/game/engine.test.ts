@@ -1146,6 +1146,7 @@ describe('hostile anomalies', () => {
     expect(game.pendingPieceChoice?.availablePieceIds.length).toBeGreaterThan(0);
     expect(game.pendingPieceChoice?.availablePieceIds).not.toContain('car'); // can't "reassign" to the piece they already had
     expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+    expect(game.players.p2.position).toBe(0); // sent back to the Site Entrance - no Go bonus, just reset
   });
 
   it('a D-Class survives being caught via its own Standard Expendability Clause instead', () => {
@@ -1171,6 +1172,7 @@ describe('hostile anomalies', () => {
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: caughtId, breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.players[caughtId].isSpectating).toBe(true);
+    expect(game.players[caughtId].position).toBe(0); // sent back to the Site Entrance regardless
     expect(game.pendingPieceChoice).toBeNull();
     expect(game.winnerId).toBeNull(); // 11 players still active
   });

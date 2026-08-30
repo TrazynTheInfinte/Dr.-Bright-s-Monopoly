@@ -1320,10 +1320,12 @@ function availablePersonnelIds(state: GameState): PieceId[] {
  * cause (a Hostile Anomaly, or a Jailbird swing, see useJailbird) - so
  * every caller shares one consequence pipeline instead of each
  * reimplementing it. Every asset returns to the Foundation, exactly
- * like a real Termination. D-Class's "Standard Expendability Clause"
- * still applies first if they haven't used it. Otherwise, if any
- * Personnel nobody else is playing exists, they're queued to pick one
- * (see chooseNewPersonnel) instead of going out for good - only a real
+ * like a real Termination, and the target's position resets to the Site
+ * Entrance - no Go bonus, since this is a consequence, not a lap
+ * actually completed. D-Class's "Standard Expendability Clause" still
+ * applies first if they haven't used it. Otherwise, if any Personnel
+ * nobody else is playing exists, they're queued to pick one (see
+ * chooseNewPersonnel) instead of going out for good - only a real
  * Termination if nothing's left to reassign. Does not touch an
  * anomaly's own state at all - anomaly-specific callers handle that
  * themselves (see resolveAnomalyCatch).
@@ -1367,7 +1369,9 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
     next = logEvent(next, 'Requisitioned a replacement D-Class - back in play with reduced funding.');
   } else {
     const available = availablePersonnelIds(next);
-    next = updatePlayer(next, targetPlayerId, { credits: 0, ownedTileIds: [], heldCardIds: [] });
+    // Sent back to the Site Entrance same as D-Class's respawn above -
+    // no Go bonus, this is a consequence, not a lap actually completed.
+    next = updatePlayer(next, targetPlayerId, { credits: 0, position: 0, ownedTileIds: [], heldCardIds: [] });
     if (available.length === 0) {
       next = updatePlayer(next, targetPlayerId, { isSpectating: true });
       next = checkWinCondition(logEvent(next, 'Terminated - no unclaimed Personnel left to reassign.'));

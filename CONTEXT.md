@@ -104,7 +104,7 @@ SCP-096's state once someone views it: it locks onto that one player and steadil
 _Avoid_: chasing, aggro
 
 **Caught**:
-A player a Hostile Anomaly has reached. Every asset returns to the Foundation exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply. The one exception is SCP-106: being caught by it on the main board isn't itself a loss - it drags the player into the Pocket Dimension instead. Only failing inside the Pocket Dimension actually triggers this.
+A player a Hostile Anomaly (or Jailbird, swung at another player instead of an anomaly) has reached. Every asset returns to the Foundation and their position resets to the Site Entrance (no Go bonus) exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply. The one exception is SCP-106: being caught by it on the main board isn't itself a loss - it drags the player into the Pocket Dimension instead. Only failing inside the Pocket Dimension actually triggers this.
 _Avoid_: killed, eaten
 
 **Pocket Dimension**:
