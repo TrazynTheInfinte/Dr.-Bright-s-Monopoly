@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { playCash, playDisappear, playExplosion, playJail, playSeize } from '../lib/sound';
+import { playCash, playDisappear, playEnterRageStinger, playExplosion, playJail, playSeize } from '../lib/sound';
 
 // Rogue Anomaly's auto-consume, Logistics Officer's auto-requisition,
 // and MTF Operative's Show of Force all force a Wing to change hands
@@ -44,6 +44,10 @@ export function useSoundEvents(log: string[]): void {
     for (const entry of newEntries) {
       if (entry.startsWith('Site Warhead activated')) {
         playExplosion();
+      } else if (entry.includes('noticed it was being watched')) {
+        // Only SCP-096 ("The Shy Guy") ever triggers this, via viewAnomaly
+        // - the moment it locks onto a target and starts hunting.
+        playEnterRageStinger();
       } else if (/Terminated/.test(entry)) {
         playDisappear();
       } else if (/to the Containment Chamber/i.test(entry)) {

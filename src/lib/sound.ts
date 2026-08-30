@@ -1,17 +1,19 @@
-// Procedural sound (no audio files) - everything here is synthesized at
-// runtime with the Web Audio API: short oscillator/noise bursts for
-// sound effects, and a tiny chiptune-style sequencer for background
-// music. Deliberately simple/8-bit sounding rather than realistic -
-// swap in real audio files later if/when they exist, this module's
-// exported function names are the integration point either way.
+// Two kinds of sound in here: short procedural sound effects, synthesized
+// at runtime with the Web Audio API (oscillator/noise bursts, deliberately
+// simple/8-bit sounding rather than realistic), and real supplied audio
+// files for anything longer - background music, ambience loops, and the
+// one real-file sound effect stinger (see playEnterRageStinger).
 
 const MUTE_STORAGE_KEY = 'comunopoly-muted';
 const MUSIC_VOLUME_STORAGE_KEY = 'comunopoly-music-volume';
 // The gain/volume actually applied is this, scaled by the user's music
 // volume preference (0-1) - these are the "100%" ceilings, tuned so
 // music sits behind the sound effects rather than over them.
-const MAX_MENU_MUSIC_GAIN = 0.16;
 const MAX_GAME_MUSIC_VOLUME = 0.35;
+// Ambience layers underneath whatever music is playing (menu ambience
+// under nothing, in-game ambience under the shuffling tracks) - quieter
+// than the music itself so it reads as atmosphere, not a second song.
+const MAX_AMBIENCE_VOLUME = 0.18;
 
 function clamp01(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
@@ -20,7 +22,6 @@ function clamp01(value: number): number {
 let audioContext: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 let sfxGain: GainNode | null = null;
-let musicGain: GainNode | null = null;
 let muted = localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
 let musicVolume = clamp01(Number(localStorage.getItem(MUSIC_VOLUME_STORAGE_KEY) ?? '1'));
 
@@ -28,15 +29,16 @@ export function getMusicVolume(): number {
   return musicVolume;
 }
 
-/** A 0-1 preference, independent of the mute toggle - applies to both the menu's procedural music and the real in-game tracks. */
+/** A 0-1 preference, independent of the mute toggle - applies to the real in-game music tracks and the ambience layer alike. */
 export function setMusicVolume(value: number): void {
   musicVolume = clamp01(value);
   localStorage.setItem(MUSIC_VOLUME_STORAGE_KEY, String(musicVolume));
-  if (musicGain) musicGain.gain.value = MAX_MENU_MUSIC_GAIN * musicVolume;
   // Only the active element, not whichever's mid-fade-out on its way to
   // silence - touching that one would undo the fade.
   const el = activeGameMusicEl();
   if (el && !muted) el.volume = MAX_GAME_MUSIC_VOLUME * musicVolume;
+  const ambEl = activeAmbienceEl();
+  if (ambEl && !muted) ambEl.volume = MAX_AMBIENCE_VOLUME * musicVolume;
 }
 
 function ensureContext(): AudioContext | null {
@@ -56,10 +58,6 @@ function ensureContext(): AudioContext | null {
     sfxGain = audioContext.createGain();
     sfxGain.gain.value = 0.5;
     sfxGain.connect(masterGain);
-
-    musicGain = audioContext.createGain();
-    musicGain.gain.value = MAX_MENU_MUSIC_GAIN * musicVolume;
-    musicGain.connect(masterGain);
   }
   return audioContext;
 }
@@ -75,12 +73,12 @@ export function initAudio(): void {
   }
 }
 
-/** Wires a one-time "first click anywhere" listener that unlocks audio and starts music (if not muted) - so sound works even if the player never touches the dedicated sound toggle, since joining/creating a room is itself a qualifying click. */
+/** Wires a one-time "first click anywhere" listener that unlocks audio and starts the menu ambience (if not muted) - so sound works even if the player never touches the dedicated sound toggle, since joining/creating a room is itself a qualifying click. */
 export function wireAutoInitOnFirstInteraction(): void {
   if (typeof document === 'undefined') return;
   const handler = () => {
     initAudio();
-    if (!muted) startMenuMusic();
+    if (!muted) setAmbience('menu');
     document.removeEventListener('pointerdown', handler);
   };
   document.addEventListener('pointerdown', handler, { once: true });
@@ -96,25 +94,28 @@ export function setMuted(value: boolean): void {
   if (masterGain) masterGain.gain.value = value ? 0 : 1;
 
   if (value) {
-    stopMenuMusic();
     gameMusicElA?.pause();
     gameMusicElB?.pause();
+    ambienceElA?.pause();
+    ambienceElB?.pause();
     return;
   }
 
   initAudio();
-  // Resume whichever was actually supposed to be playing - a game
-  // already in progress (gameMusicMode survives muting, even though
-  // actual playback was paused while muted) takes priority over
-  // falling back to menu music. Resumes the same paused track rather
-  // than picking a new one, same as hitting "play" again on any paused
-  // <audio> element.
+  // Resume whichever track/ambience was actually supposed to be playing
+  // (gameMusicMode/currentAmbienceKind both survive muting, even though
+  // actual playback was paused while muted) - resumes the same paused
+  // element rather than picking something new, same as hitting "play"
+  // again on any paused <audio> element.
   const el = activeGameMusicEl();
   if (gameMusicMode && el) {
     el.volume = MAX_GAME_MUSIC_VOLUME * musicVolume;
     el.play().catch(() => {});
-  } else {
-    startMenuMusic();
+  }
+  const ambEl = activeAmbienceEl();
+  if (currentAmbienceKind && ambEl) {
+    ambEl.volume = MAX_AMBIENCE_VOLUME * musicVolume;
+    ambEl.play().catch(() => {});
   }
 }
 
@@ -254,127 +255,18 @@ export function playAfkAlert(): void {
   tone(220, 0.12, 'square', 0.2, 0.4);
 }
 
-// --- Background music: a tiny chiptune sequencer --------------------------
-
-const NOTE_FREQ: Record<string, number> = {
-  C4: 261.63,
-  D4: 293.66,
-  Eb4: 311.13,
-  F4: 349.23,
-  G4: 392.0,
-  Ab4: 415.3,
-  Bb4: 466.16,
-  C5: 523.25,
-  D5: 587.33,
-  Eb5: 622.25,
-};
-
-interface Note {
-  note: keyof typeof NOTE_FREQ;
-  beats: number;
-}
-
-// Short, minor-key, march-ish loops - not meant to be a real
-// composition, just enough motion that looping doesn't feel static.
-const TRACKS: Note[][] = [
-  [
-    { note: 'C4', beats: 1 },
-    { note: 'Eb4', beats: 1 },
-    { note: 'G4', beats: 1 },
-    { note: 'C5', beats: 1 },
-    { note: 'Bb4', beats: 1 },
-    { note: 'G4', beats: 1 },
-    { note: 'Eb4', beats: 1 },
-    { note: 'D4', beats: 2 },
-  ],
-  [
-    { note: 'D4', beats: 1 },
-    { note: 'F4', beats: 1 },
-    { note: 'Ab4', beats: 1 },
-    { note: 'G4', beats: 1 },
-    { note: 'F4', beats: 1 },
-    { note: 'D4', beats: 1 },
-    { note: 'C4', beats: 2 },
-  ],
-  [
-    { note: 'G4', beats: 0.5 },
-    { note: 'G4', beats: 0.5 },
-    { note: 'Eb4', beats: 1 },
-    { note: 'F4', beats: 1 },
-    { note: 'D4', beats: 1 },
-    { note: 'Eb5', beats: 1 },
-    { note: 'C5', beats: 2 },
-  ],
-];
-
-const BEAT_SECONDS = 0.33;
-
-let menuMusicTimer: ReturnType<typeof setTimeout> | null = null;
-let menuMusicPlaying = false;
-let lastMenuTrackIndex = -1;
-
-function playTrack(track: Note[]): number {
-  const ctx = ensureContext();
-  if (!ctx || !musicGain) return 1;
-  let t = ctx.currentTime + 0.05;
-  for (const { note, beats } of track) {
-    const freq = NOTE_FREQ[note];
-    const duration = beats * BEAT_SECONDS;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(0.22, t + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration * 0.92);
-    osc.connect(gain);
-    gain.connect(musicGain);
-    osc.start(t);
-    osc.stop(t + duration);
-    t += duration;
-  }
-  return t - ctx.currentTime;
-}
-
-/** Starts (or continues) the shuffling menu-music loop. No-op if already playing, muted, or a game's real background track is active - menu music must never play underneath the in-game tracks (they're separate audio systems, so nothing else would stop the overlap). See startGameMusic/startFinalRoundMusic for the real-audio-file tracks that play once a game's actually underway. */
-export function startMenuMusic(): void {
-  if (menuMusicPlaying || muted || gameMusicMode) return;
-  const ctx = ensureContext();
-  if (!ctx) return;
-  menuMusicPlaying = true;
-
-  const loop = () => {
-    if (!menuMusicPlaying) return;
-    let index = Math.floor(Math.random() * TRACKS.length);
-    if (TRACKS.length > 1 && index === lastMenuTrackIndex) {
-      index = (index + 1) % TRACKS.length;
-    }
-    lastMenuTrackIndex = index;
-    const duration = playTrack(TRACKS[index]);
-    menuMusicTimer = setTimeout(loop, duration * 1000 + 500);
-  };
-  loop();
-}
-
-export function stopMenuMusic(): void {
-  menuMusicPlaying = false;
-  if (menuMusicTimer) {
-    clearTimeout(menuMusicTimer);
-    menuMusicTimer = null;
-  }
-}
-
 // --- Background music: real tracks for in-game play -----------------------
 //
-// Two pools of real audio files (public/audio/), supplied rather than
-// synthesized: "standard" tracks shuffle continuously during normal
-// play, same idea as the menu's procedural loop; once the Endgame's
-// final lap starts, one "final" (LMS - Last Man Standing) track is
-// chosen at random and just loops for the rest of the match instead
-// of continuing to shuffle. Plain <audio> elements rather than the Web
-// Audio graph above - these are multi-minute files, and <audio>
-// streams them instead of decoding the whole thing into memory up
-// front the way Web Audio's decodeAudioData would.
+// Two pools of real audio files (public/audio/): "standard" tracks
+// shuffle continuously during normal play; once the Endgame's final lap
+// starts, one "final" (LMS - Last Man Standing) track is chosen at
+// random and just loops for the rest of the match instead of continuing
+// to shuffle. Plain <audio> elements rather than the Web Audio graph
+// above - these are multi-minute files, and <audio> streams them
+// instead of decoding the whole thing into memory up front the way Web
+// Audio's decodeAudioData would. See the Ambience section further down
+// for the separate, quieter layer that plays underneath these (and
+// underneath silence, on the menu).
 //
 // Two elements (not one) so a transition can be a real crossfade: the
 // incoming track fades in on whichever element is currently idle while
@@ -583,4 +475,120 @@ export function debugPlayGameTrack(kind: 'standard' | 'final', index: number): v
     transitionGameMusic(track.url, true, null);
   }
   notifyGameTrack(track.name);
+}
+
+// --- Ambience: a quiet loop layered underneath whatever music (or
+// silence) is currently playing ---------------------------------------
+//
+// Three loops, one active at a time: 'menu' on the landing/lobby screen,
+// 'general' for ordinary in-game play, 'pocketDimension' specifically
+// while SCP-106's Pocket Dimension ordeal is underway (see useGameMusic).
+// Same crossfade-via-two-elements approach as the game music tracks
+// above, but entirely independent of it - this plays simultaneously
+// with music, not instead of it, at MAX_AMBIENCE_VOLUME rather than
+// MAX_GAME_MUSIC_VOLUME.
+
+export type AmbienceKind = 'menu' | 'general' | 'pocketDimension';
+
+const AMBIENCE_FILES: Record<AmbienceKind, string> = {
+  menu: 'ambience-menu.oga',
+  general: 'ambience-general.oga',
+  pocketDimension: 'ambience-pocket-dimension.oga',
+};
+
+function ambienceUrl(kind: AmbienceKind): string {
+  return `${import.meta.env.BASE_URL}audio/${AMBIENCE_FILES[kind]}`;
+}
+
+let ambienceElA: HTMLAudioElement | null = null;
+let ambienceElB: HTMLAudioElement | null = null;
+let activeAmbienceSlot: 'A' | 'B' = 'A';
+let currentAmbienceKind: AmbienceKind | null = null;
+
+function activeAmbienceEl(): HTMLAudioElement | null {
+  return activeAmbienceSlot === 'A' ? ambienceElA : ambienceElB;
+}
+
+function inactiveAmbienceEl(): HTMLAudioElement | null {
+  return activeAmbienceSlot === 'A' ? ambienceElB : ambienceElA;
+}
+
+function ensureAmbienceElements(): boolean {
+  if (typeof Audio === 'undefined') return false;
+  if (!ambienceElA) {
+    ambienceElA = new Audio();
+    ambienceElA.volume = 0;
+  }
+  if (!ambienceElB) {
+    ambienceElB = new Audio();
+    ambienceElB.volume = 0;
+  }
+  return true;
+}
+
+export function getCurrentAmbienceKind(): AmbienceKind | null {
+  return currentAmbienceKind;
+}
+
+/**
+ * Crossfades to the given ambience loop, or fades out to silence if
+ * `kind` is null. No-op if that kind is already playing. See
+ * transitionGameMusic above for the identical crossfade mechanics -
+ * this is the same idea on its own pair of elements so it can run
+ * simultaneously with (not instead of) the music tracks.
+ */
+export function setAmbience(kind: AmbienceKind | null): void {
+  if (kind === currentAmbienceKind) return;
+  currentAmbienceKind = kind;
+  if (!ensureAmbienceElements()) return;
+  const outgoing = activeAmbienceEl();
+  const incoming = inactiveAmbienceEl();
+  if (!outgoing || !incoming) return;
+
+  if (kind === null) {
+    if (muted) {
+      outgoing.pause();
+    } else {
+      fadeVolume(outgoing, 0, CROSSFADE_MS, () => outgoing.pause());
+    }
+    return;
+  }
+
+  incoming.loop = true;
+  incoming.src = ambienceUrl(kind);
+
+  if (muted) {
+    outgoing.pause();
+    incoming.volume = 0;
+  } else {
+    incoming.volume = 0;
+    incoming.play().catch(() => {
+      // Refused (no gesture yet, still loading, etc.) - harmless, whatever
+      // triggers next (a click, the next call) will retry.
+    });
+    fadeVolume(incoming, MAX_AMBIENCE_VOLUME * musicVolume, CROSSFADE_MS);
+    fadeVolume(outgoing, 0, CROSSFADE_MS, () => outgoing.pause());
+  }
+
+  activeAmbienceSlot = activeAmbienceSlot === 'A' ? 'B' : 'A';
+}
+
+// --- One-shot real-file sound effect ---------------------------------------
+
+const ENTER_RAGE_STINGER_URL = `${import.meta.env.BASE_URL}audio/096-enter-rage.oga`;
+const ENTER_RAGE_STINGER_VOLUME = 0.4;
+
+/**
+ * SCP-096's "entered rage" stinger - played the instant it starts
+ * hunting (see useSoundEvents). A real audio file rather than a
+ * synthesized tone, so unlike every other playX function above it isn't
+ * routed through the Web Audio graph - just a fresh <audio> element each
+ * call, which means it has to check the mute toggle itself rather than
+ * inheriting it from masterGain.
+ */
+export function playEnterRageStinger(): void {
+  if (muted || typeof Audio === 'undefined') return;
+  const audio = new Audio(ENTER_RAGE_STINGER_URL);
+  audio.volume = ENTER_RAGE_STINGER_VOLUME;
+  audio.play().catch(() => {});
 }
