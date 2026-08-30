@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import InfoModalShell from './InfoModalShell';
 import './RuleBookButton.css';
 
 interface RuleBookSection {
@@ -60,6 +61,14 @@ const SECTIONS: RuleBookSection[] = [
       "Owe more than you can pay, and can't raise the difference by selling houses or mortgaging Wings? You're Terminated - everything you held returns to the Foundation (or whoever you owed), and you're out for the rest of the match. The game ends the instant only one player is left.",
     ],
   },
+  {
+    title: 'IX. Hostile Anomalies',
+    body: [
+      'Containment isn\'t guaranteed. Every so often, something breaches and ends up loose on the board - and until it\'s dealt with, it can catch a player and take everything they own, same as Termination by debt.',
+      "Some can be avoided if you're careful, some can't be avoided at all, and one drags whoever it catches into its own separate ordeal before anything is actually decided. The Site Warhead (one of the utility tiles) lets its owner recontain every loose anomaly at once, for a price - though not always all of them.",
+      'What exactly is loose, and how each one actually behaves, is deliberately not spelled out here - see the Anomaly Guide.',
+    ],
+  },
 ];
 
 function RuleBookButton() {
@@ -72,34 +81,23 @@ function RuleBookButton() {
       </button>
 
       {open && (
-        <div className="rule-book-overlay" onClick={() => setOpen(false)}>
-          <div className="rule-book" onClick={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              className="rule-book-close"
-              onClick={() => setOpen(false)}
-              aria-label="Close rule book"
-            >
-              ✕
-            </button>
-
-            <p className="rule-book-eyebrow">Cleared for Level 2 Personnel and Above</p>
-            <h1 className="rule-book-title">Rules of Dr. Bright's Monopoly</h1>
-
-            <div className="rule-book-sections">
-              {SECTIONS.map((section) => (
-                <section key={section.title}>
-                  <h2>{section.title}</h2>
-                  {section.body.map((paragraph, index) => (
-                    <p key={index}>{paragraph}</p>
-                  ))}
-                </section>
-              ))}
-            </div>
-
-            <p className="rule-book-closing">Secure. Contain. Bankrupt.</p>
+        <InfoModalShell
+          eyebrow="Cleared for Level 2 Personnel and Above"
+          title="Rules of Dr. Bright's Monopoly"
+          closing="Secure. Contain. Bankrupt."
+          onClose={() => setOpen(false)}
+        >
+          <div className="rule-book-sections">
+            {SECTIONS.map((section) => (
+              <section key={section.title}>
+                <h2>{section.title}</h2>
+                {section.body.map((paragraph, index) => (
+                  <p key={index}>{paragraph}</p>
+                ))}
+              </section>
+            ))}
           </div>
-        </div>
+        </InfoModalShell>
       )}
     </>
   );
