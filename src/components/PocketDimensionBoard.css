@@ -9,9 +9,10 @@
   max-width: 760px;
   margin: 0 auto;
   padding: 1.5em;
-  border: 3px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-paper);
   font-family: var(--font-mono);
+  box-shadow: 0 0 24px rgba(51, 255, 92, 0.15);
 }
 
 .pocket-dimension-title {
@@ -20,6 +21,7 @@
   letter-spacing: 0.04em;
   font-size: clamp(1.1rem, 2.4vw, 1.6rem);
   color: var(--color-red);
+  text-shadow: 0 0 8px currentColor;
   text-align: center;
 }
 
@@ -45,7 +47,7 @@
   gap: 0.4em;
   min-height: 6em;
   padding: 0.5em;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-grey-light);
   text-align: center;
 }
@@ -87,7 +89,7 @@
   width: 1.6em;
   height: 1.6em;
   border-radius: 50%;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-paper);
   color: var(--color-black);
   font-size: 0.85rem;
@@ -130,5 +132,5 @@
   flex-shrink: 0;
   width: 0.9em;
   height: 0.9em;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
 }

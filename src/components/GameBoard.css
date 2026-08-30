@@ -15,6 +15,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-red);
+  text-shadow: 0 0 6px currentColor;
   font-size: 1.25rem;
   text-align: center;
 }
@@ -47,7 +48,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
-  border: 3px solid var(--color-red);
+  border: 1px solid var(--color-red);
   background: var(--color-paper);
   padding: 1.5rem 2rem;
   text-align: center;
@@ -56,6 +57,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-red);
+  text-shadow: 0 0 8px currentColor;
 }
 
 .afk-prompt-countdown {
@@ -195,13 +197,6 @@
   color: var(--color-grey);
 }
 
-.trotsky-banner {
-  font-size: 0.8rem;
-  color: var(--color-red);
-  border: 2px dashed var(--color-red);
-  padding: 0.5em;
-}
-
 .player-summary {
   list-style: none;
   display: flex;
@@ -213,7 +208,7 @@
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-grey-light);
   padding: 0.5em 0.75em;
   font-size: 0.8rem;
@@ -232,7 +227,7 @@
     box-shadow: 0 0 0 2px var(--color-red);
   }
   50% {
-    box-shadow: 0 0 10px 3px rgba(179, 0, 0, 0.8);
+    box-shadow: 0 0 10px 3px rgba(255, 59, 59, 0.8);
   }
 }
 
@@ -254,15 +249,15 @@
 @keyframes action-button-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(179, 0, 0, 0.5);
+    box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.5);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(179, 0, 0, 0);
+    box-shadow: 0 0 0 6px rgba(255, 59, 59, 0);
   }
 }
 
 .purchase-prompt {
-  border: 3px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-grey-light);
   padding: 1rem;
   display: flex;
@@ -309,6 +304,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-red);
+  text-shadow: 0 0 6px currentColor;
 }
 
 /* A quick flourish for a just-drawn card - flips face-up like it just
@@ -338,7 +334,7 @@
   gap: 0.25rem;
   max-height: 160px;
   overflow-y: auto;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   padding: 0.5em;
   font-size: 0.8rem;
   color: var(--color-grey);
@@ -347,13 +343,4 @@
 .hint {
   font-size: 0.85rem;
   color: var(--color-grey);
-}
-
-/* Fills the empty space at the bottom of the sidebar once the status/
-   actions/log above it settle into their normal (fairly short) height. */
-.propaganda-banner {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 3px solid var(--color-black);
 }

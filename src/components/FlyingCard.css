@@ -18,16 +18,21 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-paper);
-  border: 2px solid var(--color-black);
-  box-shadow: 2px 2px 0 rgba(17, 17, 17, 0.4);
+  border: 1px solid var(--color-black);
+  box-shadow: 0 0 10px rgba(51, 255, 92, 0.4);
   animation: flying-card-move 0.5s cubic-bezier(0.3, 0, 0.4, 1) forwards;
 }
 
-.flying-card-communistTest {
+/* Class names match CardDeck's actual values (types/game.ts) - these
+   were still named after the pre-SCP-reskin deck ids (communistTest,
+   noChance) and so never actually matched flying-card-${deck}'s real
+   className, silently leaving every flying card with no background at
+   all. */
+.flying-card-anomalousEvent {
   background: var(--color-red);
 }
 
-.flying-card-noChance {
+.flying-card-foundationDirective {
   background: var(--color-black);
 }
 

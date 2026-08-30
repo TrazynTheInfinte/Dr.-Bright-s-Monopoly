@@ -2,11 +2,11 @@
   position: sticky;
   bottom: 0;
   /* Higher than anything in the board (tile occupants and the jail/
-     Disappear poster stamp are the highest there, at z-index 3 and 5) -
-     without this, the sticky-positioned Hand strip only wins the
-     stacking order by DOM position, and a sufficiently tall board (on
-     a narrow mobile screen, the board is often taller than the
-     viewport) scrolls its own z-indexed content - the "COMMUNOPOLY"
+     Disappear terminal-alert stamp are the highest there, at z-index 3
+     and 5) - without this, the sticky-positioned Hand strip only wins
+     the stacking order by DOM position, and a sufficiently tall board
+     (on a narrow mobile screen, the board is often taller than the
+     viewport) scrolls its own z-indexed content - the board-center
      banner, piece tokens - right over the top of it instead of under. */
   z-index: 10;
   display: flex;
@@ -14,7 +14,7 @@
   padding: 0.75rem;
   overflow-x: auto;
   background: var(--color-paper);
-  border-top: 3px solid var(--color-black);
+  border-top: 1px solid var(--color-black);
 }
 
 .hand-card {
@@ -23,7 +23,7 @@
   flex-direction: column;
   min-width: 6rem;
   max-width: 6rem;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-grey-light);
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -88,8 +88,5 @@
 }
 
 .hand-card-action select {
-  font-family: var(--font-mono);
-  border: 2px solid var(--color-black);
   padding: 0.2em;
-  background: var(--color-paper);
 }
