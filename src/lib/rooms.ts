@@ -127,6 +127,34 @@ export async function choosePiece(
 }
 
 /**
+ * Host-only lobby action: reassigns every current player and bot a
+ * fresh, random, non-colliding Personnel in one shot - a quick re-roll
+ * instead of leaving/rejoining (experienced mode) or picking one at a
+ * time (beginner mode), and a fast way to fill out a test game.
+ */
+export async function shufflePieces(roomCode: string): Promise<void> {
+  const roomRef = doc(db, 'rooms', roomCode);
+  const snapshot = await getDoc(roomRef);
+  if (!snapshot.exists()) {
+    throw new Error(`No room found with code "${roomCode}".`);
+  }
+
+  const room = snapshot.data() as Room;
+  const playerIds = Object.keys(room.players);
+  const shuffledPieceIds = STARTING_PIECES.map((piece) => piece.id);
+  for (let i = shuffledPieceIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledPieceIds[i], shuffledPieceIds[j]] = [shuffledPieceIds[j], shuffledPieceIds[i]];
+  }
+
+  const updates: Record<string, PieceId> = {};
+  playerIds.forEach((id, index) => {
+    updates[`players.${id}.pieceId`] = shuffledPieceIds[index];
+  });
+  await updateDoc(roomRef, updates);
+}
+
+/**
  * Host-only lobby action: adds a bot with an immediately-assigned random
  * Personnel and a random name (see lib/botNames.ts). Modeled directly on
  * joinRoom above, minus the beginner-mode blind-pick path - bots always

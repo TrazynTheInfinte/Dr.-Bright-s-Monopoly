@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { STARTING_PIECES } from '../data/pieces';
 import { startGame } from '../lib/gameSync';
 import { isPlayerAway } from '../lib/presence';
-import { addBotToLobby, choosePiece, closeLobby, leaveRoom } from '../lib/rooms';
+import { addBotToLobby, choosePiece, closeLobby, leaveRoom, shufflePieces } from '../lib/rooms';
 import type { PieceId } from '../types/game';
 import type { BotDifficulty, Room } from '../types/room';
 import RoomQrCode from './RoomQrCode';
@@ -69,6 +69,15 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
     }
   }
 
+  async function handleShufflePieces() {
+    setError('');
+    try {
+      await shufflePieces(roomCode);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  }
+
   return (
     <main className="lobby">
       <p className="lobby-label">Room Code</p>
@@ -124,6 +133,12 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
             Add Bot
           </button>
         </div>
+      )}
+
+      {isHost && players.length > 0 && (
+        <button type="button" onClick={handleShufflePieces}>
+          Shuffle Pieces
+        </button>
       )}
 
       {room.mode === 'beginner' && me && !me.pieceId && (
