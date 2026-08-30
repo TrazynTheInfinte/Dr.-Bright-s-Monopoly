@@ -27,6 +27,15 @@ const REDACTED_BRIEFS: Record<AnomalyId, string> = {
     'Passes through solid matter and corrodes organic tissue on contact. Containment Chamber breaches are ' +
     'self-initiated and require no external stimulus. Entity does not need to see, hear, or otherwise detect a ' +
     'target to begin pursuit. Anyone caught is pulled into a ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ from which escape is not guaranteed.',
+  theVoices:
+    'Blind. Locates prey by ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ and begins pursuit immediately upon breach - no visual ' +
+    'confirmation required or possible. Breach events involving this entity are not to be logged through standard ' +
+    'channels; the first reliable indicator of an active breach is a missing person.',
+  theDoctor:
+    'Cooperative under normal circumstances. Periodically and unpredictably identifies a specific individual as ' +
+    '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓, with no observable pattern to the selection. A first identification is non-fatal but ' +
+    'debilitating; personnel already once identified are not to be reintroduced to its presence under any ' +
+    'circumstances, as a second identification does not end the same way.',
 };
 
 // Same redaction convention as REDACTED_BRIEFS above, applied to Object

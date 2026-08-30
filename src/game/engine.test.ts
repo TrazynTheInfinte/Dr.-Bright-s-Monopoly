@@ -1286,6 +1286,8 @@ describe('hostile anomalies', () => {
       { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
       { anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
       { anomalyId: 'theOldMan', tileId: 34, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+      { anomalyId: 'theVoices', tileId: 27, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
+      { anomalyId: 'theDoctor', tileId: 13, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
     ]);
     const before = game;
     game = induceBreach(game, 'p1', () => 0);
@@ -1296,14 +1298,14 @@ describe('hostile anomalies', () => {
   it('Induce a Breach can spawn SCP-173 specifically', () => {
     let game = makeGame(['trex', 'car']);
     game = withPlayer(game, 'p1', { lapsCompleted: 1 });
-    game = induceBreach(game, 'p1', () => 0.5); // 2nd of 3 candidates in ANOMALIES
+    game = induceBreach(game, 'p1', () => 0.3); // 2nd of 5 candidates in ANOMALIES
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'theSculpture', tileId: 18, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
   });
 
   it('Induce a Breach can spawn SCP-106 specifically, already hunting the only eligible player', () => {
     let game = makeGame(['trex', 'car']);
     game = withPlayer(game, 'p1', { lapsCompleted: 1 });
-    game = induceBreach(game, 'p1', () => 0.99); // 3rd of 3 candidates in ANOMALIES
+    game = induceBreach(game, 'p1', () => 0.5); // 3rd of 5 candidates in ANOMALIES
     // p1 is Rogue Anomaly (immune) - p2 is the only eligible target, so
     // SCP-106 engages automatically without anyone needing to view it.
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'theOldMan', tileId: 34, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
@@ -1359,7 +1361,7 @@ describe('hostile anomalies', () => {
     game = withPlayer(game, 'p1', { lapsCompleted: 1 });
     game = withPlayer(game, 'p2', { position: 20 }); // close to Testing Chamber 12 (tile 18)
     let calls = 0;
-    const rng = () => (calls++ === 0 ? 0 : 0.5); // guarantees a breach, then picks theSculpture (2nd of 3 candidates)
+    const rng = () => (calls++ === 0 ? 0 : 0.3); // guarantees a breach, then picks theSculpture (2nd of 5 candidates)
     game = endTurn(game, rng);
     const sculpture = game.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
     expect(sculpture?.tileId).toBe(18); // spawned, didn't also move this same tick
@@ -1956,5 +1958,153 @@ describe('Object Anomalies', () => {
     expect(game.players.p2.hasCountermeasureArmed).toBe(false);
     expect(game.players.p2.credits).toBe(1000);
     expect(game.pendingPieceChoice?.playerId).toBe('p1');
+  });
+});
+
+describe('SCP-939 "With Many Voices"', () => {
+  it('breaches silently (no log entry at all) and auto-targets the nearest player immediately, same as SCP-106', () => {
+    let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
+    const logLengthBefore = game.log.length;
+    game = induceBreach(game, 'p1', () => 0.7); // 4th of 5 candidates in ANOMALIES -> theVoices
+    expect(game.looseAnomalies).toEqual([
+      { anomalyId: 'theVoices', tileId: 27, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
+    expect(game.log.length).toBe(logLengthBefore); // no announcement, induced or not
+  });
+
+  it('catching someone resolves through the standard consequence pipeline, revealing it in the log for the first time', () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theVoices', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG); // distance 2, well within its hunt speed
+    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theVoices', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+    expect(game.log.some((entry) => entry.includes('With Many Voices'))).toBe(true);
+  });
+
+  it('re-acquires the nearest player instead of going dormant if its target is lost mid-hunt, same as SCP-106', () => {
+    let game = makeGame(['car', 'iron', 'trex']); // p3 is Rogue Anomaly, immune
+    game = withPlayer(game, 'p1', { isSpectating: true }); // its current target - really gone
+    game = withPlayer(game, 'p2', { position: 20 }); // the only remaining eligible candidate
+    game = withLooseAnomalies(game, [{ anomalyId: 'theVoices', tileId: 15, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+  });
+});
+
+describe('SCP-049 "The Plague Doctor"', () => {
+  it('spawns already diagnosing a random target, ignoring proximity entirely', () => {
+    let game = makeGame(['trex', 'car', 'iron']); // p1 Rogue Anomaly (excluded)
+    game = withPlayer(game, 'p1', { lapsCompleted: 1 });
+    game = withPlayer(game, 'p2', { position: 39 }); // far from spawn tile 13
+    game = withPlayer(game, 'p3', { position: 14 }); // right next to spawn tile 13 - nearest, but shouldn't matter
+    let calls = 0;
+    // 1st call picks theDoctor (5th of 5 candidates); 2nd call picks the
+    // FARTHER player (p2, index 0 of [p2, p3]) despite p3 being nearest -
+    // proof the pick really is random, not proximity-based.
+    const rng = () => (calls++ === 0 ? 0.9 : 0.1);
+    game = induceBreach(game, 'p1', rng);
+    expect(game.looseAnomalies).toEqual([
+      { anomalyId: 'theDoctor', tileId: 13, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
+  });
+
+  it('a first catch "cures" the target instead of seizing their assets', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG); // distance 2, well within its hunt speed
+    expect(game.players.p2.credits).toBe(1000); // untouched
+    expect(game.players.p2.ownedTileIds).toEqual([6]); // untouched
+    expect(game.players.p2.curedTurnsRemaining).toBe(3);
+    expect(game.players.p2.hasBeenCuredBy049).toBe(true);
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theDoctor', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+  });
+
+  it('a second catch, ever, is fatal - reanimated as SCP-049-2 via the standard consequence pipeline', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6], hasBeenCuredBy049: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.credits).toBe(0);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.pendingPieceChoice?.playerId).toBe('p2');
+    expect(game.log.some((entry) => entry.includes('SCP-049-2'))).toBe(true);
+  });
+
+  it("an armed Countermeasure redirects even a first-time Cure onto a random other living player", () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p2', { position: 10, hasCountermeasureArmed: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.hasCountermeasureArmed).toBe(false);
+    expect(game.players.p2.curedTurnsRemaining).toBe(0);
+    expect(game.players.p1.curedTurnsRemaining).toBe(3); // redirected onto the only other active player
+    expect(game.players.p1.hasBeenCuredBy049).toBe(true);
+  });
+
+  it('re-diagnoses a new random target if the current one is lost mid-hunt, excluding anyone already Cured', () => {
+    let game = makeGame(['car', 'iron', 'boot']);
+    game = withPlayer(game, 'p1', { isSpectating: true }); // its current target - really gone
+    game = withPlayer(game, 'p2', { curedTurnsRemaining: 2 }); // already being treated - not re-eligible
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 15, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p3'); // the only eligible candidate left
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+  });
+
+  describe("Cured status", () => {
+    it('rolls only one die regardless of Personnel', () => {
+      let game = makeGame(['car', 'dog']);
+      game = withPlayer(game, 'p1', { curedTurnsRemaining: 2 });
+      game = rollDice(game, () => 0.5); // one-die roll: floor(0.5 * 6) + 1 = 4
+      expect(game.lastRoll).toEqual([4, 0]);
+      expect(game.players.p1.position).toBe(4);
+    });
+
+    it('counts down by the afflicted player\'s own turns and eventually wears off', () => {
+      let game = makeGame();
+      game = withPlayer(game, 'p1', { curedTurnsRemaining: 1 });
+      game = endTurn(game, NO_BREACH_RNG); // ends p1's turn
+      expect(game.players.p1.curedTurnsRemaining).toBe(0);
+    });
+
+    it('blocks Induce a Breach', () => {
+      let game = makeGame(['trex', 'car']);
+      game = withPlayer(game, 'p1', { curedTurnsRemaining: 1, lapsCompleted: 1 });
+      const before = game;
+      game = induceBreach(game, 'p1', () => 0);
+      expect(game).toEqual(before);
+    });
+
+    it('blocks the Janitor tunnel shortcut', () => {
+      let game = makeGame(['iron', 'boot']);
+      game = withPlayer(game, 'p1', { position: 5, curedTurnsRemaining: 1 });
+      const before = game;
+      game = useJanitorTunnelTravel(game, 'p1', 15);
+      expect(game).toEqual(before);
+    });
+
+    it('blocks Show of Force - falls back to collecting normal rent', () => {
+      let game = makeGame(['battleship', 'boot']);
+      game = withPlayer(game, 'p1', { ownedTileIds: [1], curedTurnsRemaining: 1 });
+      game = withPlayer(game, 'p2', { position: 0, ownedTileIds: [6] });
+      game = { ...game, mtfEncounter: { mtfPlayerId: 'p1', targetPlayerId: 'p2', tileId: 1 } };
+      game = resolveMtfEncounter(game, true);
+      expect(game.players.p1.usedShowOfForce).toBe(false);
+      expect(game.players.p2.ownedTileIds).toEqual([6]); // nothing seized
+      expect(game.players.p2.credits).toBe(1500 - 2); // paid rent instead
+    });
+
+    it('blocks Object Anomaly use', () => {
+      let game = makeGame();
+      game = withPlayer(game, 'p1', { heldCardIds: ['recoveredEvasionHat'], curedTurnsRemaining: 1 });
+      const before = game;
+      game = useEvasion(game, 'p1', 'recoveredEvasionHat');
+      expect(game).toEqual(before);
+    });
   });
 });

@@ -411,22 +411,23 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
               // Shy Guy's marker only shows on the exact turn it breaches -
               // after that it's still there (and still reacts to being
               // hovered), just with no visible warning, so a table that
-              // isn't tracking it can genuinely forget. This concealment is
-              // SCP-096 exclusive: a hunting one is always shown regardless
-              // (by then it's in plain sight for everyone), and both SCP-173
-              // and SCP-106 are never concealed like this at all - 173's
-              // whole mechanic depends on everyone knowing it's loose every
-              // turn so Keep Watch is an actual choice, and 106 is a slow,
-              // visible threat rather than a "forget it exists" one. Rogue
-              // Anomaly sees every concealed one regardless of turn anyway.
-              .filter(
-                (anomaly) =>
-                  anomaly.status === 'hunting' ||
-                  anomaly.anomalyId === 'theSculpture' ||
-                  anomaly.anomalyId === 'theOldMan' ||
-                  anomaly.breachedOnTurnCount === game.turnCount ||
-                  viewerSeesConcealedAnomalies,
-              )
+              // isn't tracking it can genuinely forget. SCP-939 goes
+              // further: no marker at all while it's actually hunting (its
+              // whole "never announced" gimmick - see maybeBreachContainment/
+              // induceBreach's matching silence), only reappearing once it's
+              // caught someone and gone dormant, same as every other
+              // anomaly's post-catch visibility. SCP-173, SCP-106, and
+              // SCP-049 are never concealed like this at all - 173's whole
+              // mechanic depends on everyone knowing it's loose every turn
+              // so Keep Watch is an actual choice, and 106/049 are visible
+              // threats whose danger is in what they do, not that they
+              // exist. Rogue Anomaly sees every concealed one regardless.
+              .filter((anomaly) => {
+                if (viewerSeesConcealedAnomalies) return true;
+                if (anomaly.anomalyId === 'theVoices') return anomaly.status !== 'hunting';
+                if (anomaly.anomalyId === 'shyGuy') return anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount;
+                return true;
+              })
               .map((anomaly, index) => {
                 const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
                 return (

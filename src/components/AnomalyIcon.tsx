@@ -32,6 +32,32 @@ function AnomalyIcon({ anomalyId, className }: AnomalyIconProps) {
           <path d="M18 8 A7 7 0 1 0 19 15" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
+    case 'theVoices': // SCP-939 - blind, hunts by sound
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M9 4 C5 4 3 8 3 12 C3 16 5 20 9 20 C9 16 6 15 6 12 C6 9 9 8 9 4 Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <path d="M13 8 C15 9.5 15 14.5 13 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M17 5 C21 8.5 21 15.5 17 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'theDoctor': // SCP-049 - a plague doctor's beaked mask
+      return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M6 10 C6 6 8.5 3 12 3 C15.5 3 18 6 18 10 C18 11 21 12.5 21 14.5 C21 16 18.5 16.5 17 15.5 C16 18 14 20 12 20 C10 20 8 18 7 15.5 C5.5 16.5 3 16 3 14.5 C3 12.5 6 11 6 10 Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <circle cx="9.5" cy="10" r="1.1" fill="currentColor" />
+          <circle cx="14.5" cy="10" r="1.1" fill="currentColor" />
+        </svg>
+      );
     default:
       return null;
   }

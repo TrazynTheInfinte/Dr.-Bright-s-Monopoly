@@ -43,6 +43,12 @@ const ANOMALY_HUNT_SPEED = 6;
 const SCULPTURE_UNWATCHED_SPEED = Math.floor(BOARD_SIZE / 4);
 /** SCP-106's own main-board hunt speed - half of ANOMALY_HUNT_SPEED, since catching someone isn't itself a loss for it (see dragIntoPocketDimension), it's just the start of a much more dangerous ordeal. */
 const OLD_MAN_MAIN_BOARD_SPEED = 3;
+/** SCP-939's hunt speed while loose and (invisibly) closing in - same pace as ANOMALY_HUNT_SPEED, since it's every bit as much of a real threat, just an unannounced one. */
+const VOICES_HUNT_SPEED = ANOMALY_HUNT_SPEED;
+/** SCP-049's hunt speed toward its randomly diagnosed target - same pace as ANOMALY_HUNT_SPEED. */
+const DOCTOR_HUNT_SPEED = ANOMALY_HUNT_SPEED;
+/** SCP-049's "Cured" status: how many of the afflicted player's own turns it lasts - rolls one die and can't use Induce a Breach/tunnel travel/Show of Force/any Object Anomaly for that long. Matches the Containment Chamber's own "3 turns" rhythm elsewhere in the game. */
+const CURE_DURATION_TURNS = 3;
 /** The Pocket Dimension track's length, tile 0 (the drag-in point) included - it loops back around from the far end rather than dead-ending. */
 const POCKET_DIMENSION_LENGTH = 9;
 /** SCP-106's own crawl inside the Pocket Dimension: 1 tile closer every time the trapped player takes their turn - see movePocketDimension. */
@@ -135,6 +141,8 @@ export function createInitialGameState(
       lapsCompleted: 0,
       hasCountermeasureArmed: false,
       hasEvasionActive: false,
+      curedTurnsRemaining: 0,
+      hasBeenCuredBy049: false,
     };
   }
 
@@ -329,7 +337,8 @@ export function rollDice(state: GameState, rng: () => number = Math.random): Gam
   const player = state.players[playerId];
   if (player.isSpectating || player.isAfkSpectating) return state;
 
-  const rollingOneDie = pieceOf(state, playerId) === 'thimble' && player.lapsCompleted < INTERN_GRADUATION_LAPS;
+  const rollingOneDie =
+    (pieceOf(state, playerId) === 'thimble' && player.lapsCompleted < INTERN_GRADUATION_LAPS) || player.curedTurnsRemaining > 0;
   const roll: [number, number] = state.forcedRoll
     ? state.forcedRoll
     : rollingOneDie
@@ -454,6 +463,7 @@ function heldObjectAnomaly(state: GameState, playerId: string, cardId: string, o
  */
 export function useGamersFuel(state: GameState, playerId: string, cardId: string, rng: () => number = Math.random): GameState {
   if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (!heldObjectAnomaly(state, playerId, cardId, 'gamersFuel')) return state;
 
   const discarded = discardHeldCard(state, playerId, cardId);
@@ -473,6 +483,7 @@ export function useGamersFuel(state: GameState, playerId: string, cardId: string
  */
 export function useBadComposition(state: GameState, playerId: string, cardId: string, rng: () => number = Math.random): GameState {
   if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (!heldObjectAnomaly(state, playerId, cardId, 'badComposition')) return state;
 
   const discarded = discardHeldCard(state, playerId, cardId);
@@ -503,6 +514,7 @@ export function useBadComposition(state: GameState, playerId: string, cardId: st
  */
 export function useCountermeasure(state: GameState, playerId: string, cardId: string): GameState {
   if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (state.players[playerId].hasCountermeasureArmed) return state;
   if (!heldObjectAnomaly(state, playerId, cardId, 'countermeasure')) return state;
 
@@ -525,6 +537,7 @@ export function useCountermeasure(state: GameState, playerId: string, cardId: st
  */
 export function useEvasion(state: GameState, playerId: string, cardId: string): GameState {
   if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (state.players[playerId].hasEvasionActive) return state;
   if (!heldObjectAnomaly(state, playerId, cardId, 'evasionHat')) return state;
 
@@ -554,6 +567,7 @@ export function useMicroHid(
   rng: () => number = Math.random,
 ): GameState {
   if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (!heldObjectAnomaly(state, playerId, cardId, 'microHid')) return state;
 
   const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId && a.status !== 'inPocketDimension');
@@ -596,6 +610,7 @@ export function useJailbird(
   rng: () => number = Math.random,
 ): GameState {
   if (state.pendingDecision || currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (!heldObjectAnomaly(state, playerId, cardId, 'jailbird')) return state;
 
   const attackerPosition = state.players[playerId].position;
@@ -1032,7 +1047,9 @@ export function resolveMtfEncounter(state: GameState, seize: boolean): GameState
   const { mtfPlayerId, targetPlayerId, tileId } = state.mtfEncounter;
   let next: GameState = { ...state, mtfEncounter: null };
 
-  if (!seize) {
+  // SCP-049's "Cured" status blocks Show of Force same as every other
+  // actively-used Special Power - falls back to collecting normal rent.
+  if (!seize || state.players[mtfPlayerId].curedTurnsRemaining > 0) {
     const rent = calculateRent(next, tileId, mtfPlayerId, targetPlayerId);
     return logEvent(chargePlayer(next, targetPlayerId, rent, mtfPlayerId), `Paid ${rent} Credits rent on ${getTile(tileId).name}.`);
   }
@@ -1067,6 +1084,7 @@ export function useJanitorTunnelTravel(state: GameState, playerId: string, targe
   if (state.pendingDecision || state.winnerId) return state;
   if (currentPlayerId(state) !== playerId || pieceOf(state, playerId) !== 'iron') return state;
   const player = state.players[playerId];
+  if (player.curedTurnsRemaining > 0) return state;
   if (player.inJail || state.lastRoll || player.usedTunnelTravelThisTurn) return state;
   if (getTile(player.position).kind !== 'tunnel') return state;
   if (getTile(targetTileId).kind !== 'tunnel') return state;
@@ -1272,8 +1290,13 @@ function updateAnomaly(state: GameState, anomalyId: string, patch: Partial<Loose
  * to its spawn tile from the very first tick (falls back to dormant
  * only in the degenerate case where literally nobody's eligible yet).
  */
-function spawnLooseAnomaly(state: GameState, anomaly: AnomalyDefinition, anchorPlayerId: string): LooseAnomaly {
-  const targetId = anomaly.id === 'theOldMan' ? nearestHuntableTarget(state, anomaly.spawnTileId) : null;
+function spawnLooseAnomaly(state: GameState, anomaly: AnomalyDefinition, anchorPlayerId: string, rng: () => number): LooseAnomaly {
+  const targetId =
+    anomaly.id === 'theOldMan' || anomaly.id === 'theVoices'
+      ? nearestHuntableTarget(state, anomaly.spawnTileId)
+      : anomaly.id === 'theDoctor'
+        ? randomHuntableTarget(state, rng)
+        : null;
   return {
     anomalyId: anomaly.id,
     tileId: anomaly.spawnTileId,
@@ -1296,11 +1319,14 @@ function maybeBreachContainment(state: GameState, rng: () => number, anchorPlaye
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
   if (candidates.length === 0) return state; // every anomaly type is already loose
   const anomaly = candidates[Math.floor(rng() * candidates.length)];
-  const loose = spawnLooseAnomaly(state, anomaly, anchorPlayerId);
-  return logEvent(
-    { ...state, looseAnomalies: [...state.looseAnomalies, loose] },
-    `Containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`,
-  );
+  const loose = spawnLooseAnomaly(state, anomaly, anchorPlayerId, rng);
+  const next: GameState = { ...state, looseAnomalies: [...state.looseAnomalies, loose] };
+  // SCP-939 is never announced - no log line, same as no visible marker
+  // (see Board.tsx) - the first anyone learns it's out is the moment it
+  // actually catches someone.
+  return anomaly.id === 'theVoices'
+    ? next
+    : logEvent(next, `Containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`);
 }
 
 /** Moves `from` toward `to` by at most `maxSteps`, always clockwise - the same direction every player token moves in. */
@@ -1313,6 +1339,28 @@ function stepToward(from: number, to: number, maxSteps: number): number {
 function availablePersonnelIds(state: GameState): PieceId[] {
   const claimed = new Set(Object.values(state.players).filter((p) => !p.isSpectating).map((p) => p.pieceId));
   return STARTING_PIECES.map((p) => p.id).filter((id) => !claimed.has(id));
+}
+
+/**
+ * Checks whether targetPlayerId has an armed SCP-963 Countermeasure and,
+ * if so, redirects onto a random other living player instead - shared by
+ * every catch pathway, not just the standard asset-seizure one (see
+ * applyCatchConsequence and resolveDoctorCatch). Assumes at most one
+ * Countermeasure is ever armed at a time (only one such card exists in
+ * the decks), so the recursive re-check below can't ping-pong.
+ */
+function checkCountermeasureRedirect(
+  state: GameState,
+  targetPlayerId: string,
+  rng: () => number,
+): { state: GameState; targetPlayerId: string } {
+  if (!state.players[targetPlayerId].hasCountermeasureArmed) return { state, targetPlayerId };
+  const candidates = activePlayerIds(state).filter((id) => id !== targetPlayerId);
+  if (candidates.length === 0) return { state, targetPlayerId };
+  const redirectedId = candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
+  const disarmed = updatePlayer(state, targetPlayerId, { hasCountermeasureArmed: false });
+  const logged = logEvent(disarmed, "SCP-963 discharged just in time - its grip lands on someone else entirely.");
+  return checkCountermeasureRedirect(logged, redirectedId, rng);
 }
 
 /**
@@ -1330,28 +1378,15 @@ function availablePersonnelIds(state: GameState): PieceId[] {
  * anomaly's own state at all - anomaly-specific callers handle that
  * themselves (see resolveAnomalyCatch).
  *
- * Checked first, before any of that: SCP-963 "Countermeasure" armed on
- * the target (see useCountermeasure) redirects the whole consequence
- * onto a random other living player instead - discharging the ring and
- * recursing with them as the new target. Assumes at most one
- * Countermeasure is ever armed at a time (only one such card exists in
- * the decks), so this can't ping-pong. openingMessage names the
- * specific cause in the log.
+ * Checked first, before any of that (via checkCountermeasureRedirect):
+ * SCP-963 "Countermeasure" armed on the target redirects the whole
+ * consequence onto a random other living player instead. openingMessage
+ * names the specific cause in the log.
  */
 function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: () => number, openingMessage: string): GameState {
-  if (state.players[targetPlayerId].hasCountermeasureArmed) {
-    const candidates = activePlayerIds(state).filter((id) => id !== targetPlayerId);
-    if (candidates.length > 0) {
-      const redirectedId = candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
-      const disarmed = updatePlayer(state, targetPlayerId, { hasCountermeasureArmed: false });
-      return applyCatchConsequence(
-        logEvent(disarmed, "SCP-963 discharged just in time - its grip lands on someone else entirely."),
-        redirectedId,
-        rng,
-        openingMessage,
-      );
-    }
-  }
+  const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
+  state = redirected.state;
+  targetPlayerId = redirected.targetPlayerId;
 
   let next = logEvent(state, openingMessage);
   next = seizeAssets(next, targetPlayerId, null);
@@ -1390,21 +1425,62 @@ function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targe
   return applyCatchConsequence(state, targetPlayerId, rng, `${anomaly.name} caught up with someone.`);
 }
 
-/** Shy Guy's and SCP-173's shared catch effect on the main board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly itself goes back to dormant right where it caught them - still loose until someone purges it. SCP-106 never calls this - see dragIntoPocketDimension instead, since a main-board catch isn't a loss for it. */
+/** Shy Guy's, SCP-173's, and SCP-939's shared catch effect on the main board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly itself goes back to dormant right where it caught them - still loose (and, for every one of these except SCP-939, still visible) until someone purges it. SCP-106 never calls this - see dragIntoPocketDimension instead, since a main-board catch isn't a loss for it. SCP-049 has its own version below instead, since its consequence isn't the standard seizure. */
 function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
   const next = resolvePlayerCaughtByAnomaly(state, anomalyId, targetPlayerId, rng);
   return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
 }
 
-/** Whoever's closest to a given tile, eligible to actually be hunted - excludes Rogue Anomaly (always immune), anyone with SCP-268 active (temporarily immune, see useEvasion), and anyone AFK-benched. Used for SCP-106's automatic targeting (no viewing required) and SCP-173's nearest-victim pick each unwatched tick. Null if nobody's currently eligible at all. */
-function nearestHuntableTarget(state: GameState, fromTileId: number): string | null {
-  const candidates = activePlayerIds(state).filter(
+/**
+ * SCP-049's own catch consequence: "curing" a first-time patient is a
+ * temporary status effect (see GamePlayerState.curedTurnsRemaining), not
+ * the standard asset-seizure every other catch uses - checked for
+ * Countermeasure interception the same way applyCatchConsequence is,
+ * since being cured is still being caught by a Hostile Anomaly. A
+ * second catch on the same player, ever, is fatal instead: reanimated as
+ * a mindless SCP-049-2, via the exact same applyCatchConsequence
+ * pipeline every other catch uses, just with its own opening message.
+ */
+function resolveDoctorCatch(state: GameState, targetPlayerId: string, rng: () => number): GameState {
+  const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
+  state = redirected.state;
+  targetPlayerId = redirected.targetPlayerId;
+
+  if (state.players[targetPlayerId].hasBeenCuredBy049) {
+    return applyCatchConsequence(state, targetPlayerId, rng, 'SCP-049 finishes what it started - reanimated as a mindless SCP-049-2.');
+  }
+  return logEvent(
+    updatePlayer(state, targetPlayerId, { curedTurnsRemaining: CURE_DURATION_TURNS, hasBeenCuredBy049: true }),
+    `SCP-049 "cured" someone of the Pestilence - diminished for the next ${CURE_DURATION_TURNS} turns.`,
+  );
+}
+
+/** SCP-049's version of resolveAnomalyCatch: resolveDoctorCatch's consequence, then it goes back to dormant right where it caught them - still loose until someone purges it, exactly like every other main-board catch. */
+function resolveDoctorAnomalyCatch(state: GameState, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
+  const next = resolveDoctorCatch(state, targetPlayerId, rng);
+  return updateAnomaly(next, 'theDoctor', { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+}
+
+/** Every player eligible to be hunted at all, by anything - excludes Rogue Anomaly (always immune), anyone with SCP-268 active (temporarily immune, see useEvasion), and anyone AFK-benched. Shared by nearestHuntableTarget and randomHuntableTarget below. */
+function huntableCandidates(state: GameState): string[] {
+  return activePlayerIds(state).filter(
     (id) => !state.players[id].isAfkSpectating && !state.players[id].hasEvasionActive && pieceOf(state, id) !== 'trex',
   );
+}
+
+function nearestHuntableTarget(state: GameState, fromTileId: number): string | null {
+  const candidates = huntableCandidates(state);
   if (candidates.length === 0) return null;
   return candidates.reduce((closest, id) =>
     distanceAhead(fromTileId, state.players[id].position) < distanceAhead(fromTileId, state.players[closest].position) ? id : closest,
   );
+}
+
+/** SCP-049's own target selection - a random pick, completely unrelated to anyone's board position, matching its "diagnosis" rather than a hunt. Also excludes anyone already under its own "Cured" status (see resolveDoctorCatch) - it doesn't re-diagnose a patient it's already treating. */
+function randomHuntableTarget(state: GameState, rng: () => number): string | null {
+  const candidates = huntableCandidates(state).filter((id) => state.players[id].curedTurnsRemaining === 0);
+  if (candidates.length === 0) return null;
+  return candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
 }
 
 function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState {
@@ -1418,13 +1494,17 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
       // Target's really gone (Terminated some other way), was just
       // reassigned into Rogue Anomaly ("Uncontained") mid-hunt, or just
       // went invisible via SCP-268 (see useEvasion) - same treatment as
-      // Rogue Anomaly's permanent immunity, just temporary. SCP-106
-      // never needed a "look" to start engaging in the first place, so
-      // losing a target doesn't put it back to sleep either - it
-      // immediately re-picks whoever's now closest instead. Every other
+      // Rogue Anomaly's permanent immunity, just temporary. SCP-106 and
+      // SCP-939 never needed a "look" to start engaging in the first
+      // place, so losing a target doesn't put them back to sleep either
+      // - they immediately re-pick whoever's now closest instead; SCP-049
+      // re-diagnoses a new random target the same way. Every other
       // anomaly just loses interest and stays put dormant.
-      if (current.anomalyId === 'theOldMan') {
+      if (current.anomalyId === 'theOldMan' || current.anomalyId === 'theVoices') {
         const reacquired = nearestHuntableTarget(next, current.tileId);
+        next = updateAnomaly(next, current.anomalyId, reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
+      } else if (current.anomalyId === 'theDoctor') {
+        const reacquired = randomHuntableTarget(next, rng);
         next = updateAnomaly(next, current.anomalyId, reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
       } else {
         next = updateAnomaly(next, current.anomalyId, { status: 'dormant', targetPlayerId: null });
@@ -1433,7 +1513,14 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     }
     if (target.isAfkSpectating) continue; // just paused, not lost - waits for them rather than giving up
 
-    const speed = current.anomalyId === 'theOldMan' ? OLD_MAN_MAIN_BOARD_SPEED : ANOMALY_HUNT_SPEED;
+    const speed =
+      current.anomalyId === 'theOldMan'
+        ? OLD_MAN_MAIN_BOARD_SPEED
+        : current.anomalyId === 'theVoices'
+          ? VOICES_HUNT_SPEED
+          : current.anomalyId === 'theDoctor'
+            ? DOCTOR_HUNT_SPEED
+            : ANOMALY_HUNT_SPEED;
     const newTileId = stepToward(current.tileId, target.position, speed);
     if (newTileId !== target.position) {
       next = updateAnomaly(next, current.anomalyId, { tileId: newTileId });
@@ -1441,11 +1528,14 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     }
     // Caught. SCP-106 doesn't resolve like every other anomaly - catching
     // someone on the main board isn't itself a loss, it drags them into
-    // the Pocket Dimension instead (see dragIntoPocketDimension).
+    // the Pocket Dimension instead (see dragIntoPocketDimension). SCP-049
+    // doesn't either - see resolveDoctorAnomalyCatch.
     next =
       current.anomalyId === 'theOldMan'
         ? dragIntoPocketDimension(next, current.targetPlayerId, rng)
-        : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
+        : current.anomalyId === 'theDoctor'
+          ? resolveDoctorAnomalyCatch(next, current.targetPlayerId, newTileId, rng)
+          : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
   }
   return next;
 }
@@ -1636,18 +1726,22 @@ export function purgeAnomalies(state: GameState, playerId: string): GameState {
 /** Rogue Anomaly's Special Power ("Induce a Breach"): forces a containment breach on demand instead of waiting on the random per-turn chance, picking a random not-yet-loose anomaly type exactly like a natural breach would. Once per game. No-op if it's not this player's power, they've already used it, every anomaly type is already loose (nothing left to induce), or nobody's completed a first lap yet - same restriction the random breach chance follows, and it applies here too rather than being a loophole around it. */
 export function induceBreach(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
   if (pieceOf(state, playerId) !== 'trex' || state.players[playerId].usedInduceBreach) return state;
+  if (state.players[playerId].curedTurnsRemaining > 0) return state;
   if (!anyLapCompleted(state)) return state;
   const looseIds = new Set(state.looseAnomalies.map((a) => a.anomalyId));
   const candidates = ANOMALIES.filter((a) => !looseIds.has(a.id));
   if (candidates.length === 0) return state;
 
   const anomaly = candidates[Math.floor(rng() * candidates.length)];
-  const loose = spawnLooseAnomaly(state, anomaly, currentPlayerId(state));
-  const next = updatePlayer(state, playerId, { usedInduceBreach: true });
-  return logEvent(
-    { ...next, looseAnomalies: [...next.looseAnomalies, loose] },
-    `Induced a containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`,
-  );
+  const loose = spawnLooseAnomaly(state, anomaly, currentPlayerId(state), rng);
+  const next: GameState = {
+    ...updatePlayer(state, playerId, { usedInduceBreach: true }),
+    looseAnomalies: [...state.looseAnomalies, loose],
+  };
+  // SCP-939 is never announced, even induced - see maybeBreachContainment.
+  return anomaly.id === 'theVoices'
+    ? next
+    : logEvent(next, `Induced a containment breach: ${anomaly.name} has escaped into ${getTile(anomaly.spawnTileId).name}.`);
 }
 
 // --- Trading -------------------------------------------------------------
@@ -1721,7 +1815,12 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
     }
   }
 
-  const cleared = updatePlayer(state, playerId, { usedTunnelTravelThisTurn: false });
+  const cleared = updatePlayer(state, playerId, {
+    usedTunnelTravelThisTurn: false,
+    // SCP-049's "Cured" status counts down by the afflicted player's own
+    // turns, same rhythm as the Containment Chamber's Holding Fee turns.
+    curedTurnsRemaining: Math.max(0, state.players[playerId].curedTurnsRemaining - 1),
+  });
   const next: GameState = {
     ...cleared,
     currentTurnIndex: nextIndex,
@@ -1842,10 +1941,10 @@ export function devForceSkipTurn(state: GameState, rng: () => number = Math.rand
 }
 
 /** Forces a containment breach right now, bypassing the random per-turn chance - a no-op if that anomaly is already loose. */
-export function devSpawnAnomaly(state: GameState, anomalyId: string): GameState {
+export function devSpawnAnomaly(state: GameState, anomalyId: string, rng: () => number = Math.random): GameState {
   if (state.looseAnomalies.some((a) => a.anomalyId === anomalyId)) return state;
   const anomaly = findAnomaly(anomalyId as AnomalyId);
-  const loose = spawnLooseAnomaly(state, anomaly, currentPlayerId(state));
+  const loose = spawnLooseAnomaly(state, anomaly, currentPlayerId(state), rng);
   return logEvent({ ...state, looseAnomalies: [...state.looseAnomalies, loose] }, `[DEV] Forced a containment breach: ${anomaly.name}.`);
 }
 

@@ -88,11 +88,11 @@ The in-fiction role name for a Personnel (e.g. "D-Class Personnel", "Field Resea
 ### Hostile Anomalies
 
 **Hostile Anomaly**:
-An SCP that can breach containment and menace players directly once loose on the board, distinct from ordinary Wings and cards. Currently SCP-096 ("The Shy Guy") and SCP-173 ("The Sculpture") — each with its own bespoke behavior, not a shared "monster AI."
+An SCP that can breach containment and menace players directly once loose on the board, distinct from ordinary Wings and cards. Currently SCP-096 ("The Shy Guy"), SCP-173 ("The Sculpture"), SCP-106 ("The Old Man"), SCP-939 ("With Many Voices"), and SCP-049 ("The Plague Doctor") — each with its own bespoke behavior, not a shared "monster AI."
 _Avoid_: monster, enemy, creature
 
 **Containment Breach**:
-The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously. Can't happen at all - random or induced - until someone has completed a full lap of the board, so the first lap is always guaranteed anomaly-free.
+The event of a Hostile Anomaly escaping containment onto the board. Happens by random chance at the end of any completed turn, or on demand via Rogue Anomaly's Induce a Breach. At most one of each Hostile Anomaly can be loose at a time; different ones can be loose simultaneously. Can't happen at all - random or induced - until someone has completed a full lap of the board, so the first lap is always guaranteed anomaly-free. SCP-939 is the one exception to "an event" - its breach is never announced at all, no log entry and no visible marker, so nobody actually witnesses it happening.
 _Avoid_: spawn, escape
 
 **Dormant**:
@@ -100,12 +100,20 @@ A loose Hostile Anomaly's default, non-threatening state. SCP-096 stays dormant 
 _Avoid_: idle, sleeping
 
 **Hunting**:
-SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-106 is always in this state from the moment it breaches — it never needs to be viewed, and automatically re-targets whoever's closest if it ever loses its current target. SCP-173 has no equivalent locked-on state — see Keep Watch.
+SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-106 and SCP-939 are always in this state from the moment they breach — neither ever needs to be viewed, and both automatically re-target whoever's closest if they ever lose their current target (SCP-939's marker stays hidden the entire time it's hunting - see Containment Breach). SCP-173 has no equivalent locked-on state — see Keep Watch. SCP-049 has its own separate targeting state instead — see Diagnosed.
 _Avoid_: chasing, aggro
 
+**Diagnosed**:
+SCP-049's own equivalent of Hunting - always active from the moment it breaches, same as SCP-106/SCP-939, but the target is a random pick completely unrelated to anyone's position on the board, and it never re-diagnoses a player currently Cured. If its target becomes ineligible, it re-diagnoses a new random one the same way SCP-106 re-targets.
+_Avoid_: hunting (reserved for the proximity-based version above), infected
+
 **Caught**:
-A player a Hostile Anomaly (or Jailbird, swung at another player instead of an anomaly) has reached. Every asset returns to the Foundation and their position resets to the Site Entrance (no Go bonus) exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply. The one exception is SCP-106: being caught by it on the main board isn't itself a loss - it drags the player into the Pocket Dimension instead. Only failing inside the Pocket Dimension actually triggers this.
+A player a Hostile Anomaly (or Jailbird, swung at another player instead of an anomaly) has reached. Every asset returns to the Foundation and their position resets to the Site Entrance (no Go bonus) exactly like a real Termination, though D-Class's Standard Expendability Clause and Personnel reassignment can still apply. SCP-106 has its own exception: being caught by it on the main board isn't itself a loss - it drags the player into the Pocket Dimension instead, and only failing inside that actually triggers this. SCP-049 has its own exception too - see Cured.
 _Avoid_: killed, eaten
+
+**Cured**:
+SCP-049's own consequence for a first-time catch, replacing the standard seizure entirely: the target keeps everything, but rolls only one die and can't use Induce a Breach, the Janitor tunnel shortcut, Show of Force, or any Object Anomaly for a few turns, and can't be re-diagnosed while it lasts. A second catch on the same player, ever, is fatal instead - reanimated as a mindless SCP-049-2, via the same Caught consequence every other catch uses.
+_Avoid_: infected, poisoned, debuffed
 
 **Pocket Dimension**:
 SCP-106's own Hostile Anomaly mechanic: a separate 9-tile track that the player it caught, and SCP-106 itself, both enter together. The player advances along it each of their own turns instead of acting on the main board; SCP-106 creeps after them a little each time. Landing on a Fracture Point escapes back to the main board; running out of Credits on a Decaying Passage, or SCP-106 actually reaching the player's tile, both Get the player Caught for real. Either way the ordeal ending recontains SCP-106. Its tile order (past the fixed neutral entry tile) is reshuffled fresh every time someone's dragged in.

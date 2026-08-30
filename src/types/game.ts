@@ -141,6 +141,10 @@ export interface GamePlayerState {
   hasCountermeasureArmed: boolean;
   /** SCP-268 active on this player: excluded from being targeted or hunted by any Hostile Anomaly, exactly like Rogue Anomaly's permanent immunity, just temporary. Clears automatically the instant this player's next turn begins - see endTurn. */
   hasEvasionActive: boolean;
+  /** SCP-049's "Cured" status: rolls only one die, and can't use Induce a Breach, the Janitor tunnel shortcut, Show of Force, or any Object Anomaly, until this counts back down to 0 - decremented at the end of each of this player's own turns. Also excludes them from being re-diagnosed while it's still active. */
+  curedTurnsRemaining: number;
+  /** True once SCP-049 has already "cured" this player once - a second catch is fatal (reanimated as SCP-049-2) instead of another temporary cure. */
+  hasBeenCuredBy049: boolean;
 }
 
 /**
