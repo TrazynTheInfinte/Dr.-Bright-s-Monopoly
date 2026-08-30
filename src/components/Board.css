@@ -487,6 +487,14 @@
   animation: anomaly-pulse 0.6s ease-in-out infinite alternate;
 }
 
+/* A lesser threat than a real Hostile Anomaly - dimmer, desaturated
+   phosphor-green rather than the shared danger-red, so it reads as
+   "something to avoid" without competing with an actual anomaly marker. */
+.tile-scp0492 {
+  color: var(--color-grey);
+  filter: drop-shadow(0 0 3px rgba(120, 120, 120, 0.8));
+}
+
 @keyframes anomaly-pulse {
   from {
     transform: scale(1);

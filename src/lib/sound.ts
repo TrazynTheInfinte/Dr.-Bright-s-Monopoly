@@ -43,7 +43,9 @@ export function setMusicVolume(value: number): void {
   if (el && !muted) el.volume = MAX_GAME_MUSIC_VOLUME * musicVolume;
   const ambEl = activeAmbienceEl();
   if (ambEl && !muted) ambEl.volume = MAX_AMBIENCE_VOLUME * musicVolume;
-  if (voicesWarningEl && voicesWarningActive && !muted) voicesWarningEl.volume = MAX_VOICES_WARNING_VOLUME * musicVolume;
+  if (voicesWarningEl && voicesWarningIntensity > 0 && !muted) {
+    voicesWarningEl.volume = MAX_VOICES_WARNING_VOLUME * musicVolume * voicesWarningIntensity;
+  }
 }
 
 function ensureContext(): AudioContext | null {
@@ -109,7 +111,7 @@ export function setMuted(value: boolean): void {
 
   initAudio();
   // Resume whichever track/ambience/warning was actually supposed to be
-  // playing (gameMusicMode/currentAmbienceKind/voicesWarningActive all
+  // playing (gameMusicMode/currentAmbienceKind/voicesWarningIntensity all
   // survive muting, even though actual playback was paused while muted)
   // - resumes the same paused element rather than picking something new,
   // same as hitting "play" again on any paused <audio> element.
@@ -123,8 +125,8 @@ export function setMuted(value: boolean): void {
     ambEl.volume = MAX_AMBIENCE_VOLUME * musicVolume;
     ambEl.play().catch(() => {});
   }
-  if (voicesWarningActive && voicesWarningEl) {
-    voicesWarningEl.volume = MAX_VOICES_WARNING_VOLUME * musicVolume;
+  if (voicesWarningIntensity > 0 && voicesWarningEl) {
+    voicesWarningEl.volume = MAX_VOICES_WARNING_VOLUME * musicVolume * voicesWarningIntensity;
     voicesWarningEl.play().catch(() => {});
   }
 }
@@ -610,22 +612,29 @@ export function playEnterRageStinger(): void {
 // it's currently approaching gets a private cue instead - nobody else
 // hears this. A single looping element (not a crossfading pair like
 // ambience/music above) since there's only ever one thing to play here:
-// on or off, for whichever single player it's meant for on this client.
+// on or off (and how loud), for whichever single player it's meant for
+// on this client. Volume scales with proximity (see useVoicesWarning) -
+// a shorter fade than the ambience/music crossfades above, since this
+// updates every time distance changes (once a round) rather than only
+// on a real track/scene change.
 
 const VOICES_WARNING_URL = `${import.meta.env.BASE_URL}audio/warning-939.mp3`;
+const VOICES_WARNING_FADE_MS = 600;
 
 let voicesWarningEl: HTMLAudioElement | null = null;
-let voicesWarningActive = false;
+let voicesWarningIntensity = 0;
 
 /**
- * Fades the SCP-939 early-warning loop in or out - call with `true` for
- * as long as (and only while) the viewing player is currently the one it
- * approaching (see useVoicesWarning), `false` otherwise. No-op if
- * already in the requested state.
+ * Fades the SCP-939 early-warning loop toward a given 0-1 closeness -
+ * 0 silences and eventually pauses it, anything above 0 plays (or keeps
+ * playing) at a proportional volume. Call every time proximity changes
+ * (see useVoicesWarning) - no-op if already at this exact intensity.
  */
-export function setVoicesWarning(active: boolean): void {
-  if (active === voicesWarningActive) return;
-  voicesWarningActive = active;
+export function setVoicesWarning(closeness: number): void {
+  const clamped = clamp01(closeness);
+  if (clamped === voicesWarningIntensity) return;
+  const wasSilent = voicesWarningIntensity === 0;
+  voicesWarningIntensity = clamped;
   if (typeof Audio === 'undefined') return;
   if (!voicesWarningEl) {
     voicesWarningEl = new Audio(VOICES_WARNING_URL);
@@ -634,19 +643,20 @@ export function setVoicesWarning(active: boolean): void {
   }
   const el = voicesWarningEl;
 
-  if (!active) {
+  if (clamped === 0) {
     if (muted) {
       el.pause();
     } else {
-      fadeVolume(el, 0, CROSSFADE_MS, () => el.pause());
+      fadeVolume(el, 0, VOICES_WARNING_FADE_MS, () => el.pause());
     }
     return;
   }
 
+  const targetVolume = MAX_VOICES_WARNING_VOLUME * musicVolume * clamped;
   if (muted) {
     el.volume = 0;
     return;
   }
-  el.play().catch(() => {});
-  fadeVolume(el, MAX_VOICES_WARNING_VOLUME * musicVolume, CROSSFADE_MS);
+  if (wasSilent) el.play().catch(() => {});
+  fadeVolume(el, targetVolume, VOICES_WARNING_FADE_MS);
 }

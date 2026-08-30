@@ -77,6 +77,8 @@ const TUNNEL_TILES = BOARD.filter((tile) => tile.kind === 'tunnel');
 // register as "you landed here, and THEN this happened" rather than
 // everything resolving in one instant blur.
 const POCKET_DIMENSION_REVEAL_DELAY_MS = 2500;
+/** SCP-939's amnestic screen-blur, at full closeness - subtle grogginess, not an unreadable whiteout. */
+const MAX_VOICES_BLUR_PX = 6;
 
 /** Owned Wings/Tunnels `player` could mortgage right now to raise cash before deciding on a purchase - not already mortgaged, no houses on the specific tile. Mirrors DebtSettlementPrompt's own filter (mortgageProperty itself still rejects one with houses elsewhere in its Sector, logging why, if this lighter check lets one through). */
 function mortgageableForPurchase(
@@ -143,7 +145,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   useSoundEvents(game?.log ?? []);
   const isWarheadFlashing = useWarheadFlash(game?.log ?? []);
   useGameMusic(game);
-  useVoicesWarning(game, playerId);
+  const voicesCloseness = useVoicesWarning(game, playerId);
   const currentTrackName = useCurrentGameTrackName();
   // Both computed defensively here (game may still be undefined on this
   // render) so the two watchdog hooks below - which also can't be
@@ -225,7 +227,14 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   }
 
   return (
-    <main className="game-board">
+    <main
+      className="game-board"
+      // SCP-939's amnestic secretion, felt (privately) rather than seen
+      // coming - blurs by an amount proportional to how close it
+      // currently is (see useVoicesWarning), same intensity curve as
+      // its personal warning cue's volume.
+      style={voicesCloseness > 0 ? { filter: `blur(${(voicesCloseness * MAX_VOICES_BLUR_PX).toFixed(2)}px)` } : undefined}
+    >
       {isWarheadFlashing && <div className="warhead-flash" aria-hidden="true" />}
       {afkPrompt.visible && (
         <div className="afk-prompt-overlay">

@@ -11,6 +11,7 @@ import type {
   LooseAnomaly,
   PieceId,
   PocketDimensionTile,
+  Scp0492Instance,
   TradeOffer,
 } from '../types/game';
 
@@ -49,6 +50,13 @@ const VOICES_HUNT_SPEED = ANOMALY_HUNT_SPEED;
 const DOCTOR_HUNT_SPEED = OLD_MAN_MAIN_BOARD_SPEED;
 /** SCP-049's "Cured" status: how many of the afflicted player's own turns it lasts - rolls one die and can't use Induce a Breach/tunnel travel/Show of Force/any Object Anomaly for that long. Matches the Containment Chamber's own "3 turns" rhythm elsewhere in the game. */
 const CURE_DURATION_TURNS = 3;
+/** SCP-049's boosted hunt speed - see doctorSpeedBoostActive/designateScp0492Target - kicks in only while it's closing in on a target an SCP-049-2 handed it from far away, so a distant designation is still actually reachable rather than a hollow threat. */
+const DOCTOR_SPEED_BOOSTED = DOCTOR_HUNT_SPEED * 2;
+/** How far (in either direction around the board) an SCP-049-2 collision's target has to be from SCP-049's current tile before it's worth the speed boost above - close by, its normal pace already gets there soon enough. */
+const DOCTOR_DESIGNATION_FAR_THRESHOLD = Math.floor(BOARD_SIZE / 4);
+/** An SCP-049-2 instance's per-turn roam: 1 or 2 spaces, a coin flip - slow, aimless wandering, not a hunt. */
+const SCP_0492_ROAM_MIN_SPACES = 1;
+const SCP_0492_ROAM_MAX_SPACES = 2;
 /** The Pocket Dimension track's length, tile 0 (the drag-in point) included - it loops back around from the far end rather than dead-ending. */
 const POCKET_DIMENSION_LENGTH = 9;
 /** SCP-106's own crawl inside the Pocket Dimension: 1 tile closer every time the trapped player takes their turn - see movePocketDimension. */
@@ -176,6 +184,9 @@ export function createInitialGameState(
     scp173Watched: false,
     pocketDimensionOrdeal: null,
     jailbirdUses: 0,
+    scp0492Instances: [],
+    scp0492NextId: 0,
+    doctorSpeedBoostActive: false,
   };
 }
 
@@ -696,6 +707,14 @@ function resolveLanding(state: GameState, playerId: string, position: number): G
   if (pieceOf(next, playerId) === 'rubberDuck') {
     const occupant = findOccupant(next, position, playerId);
     if (occupant) next = { ...next, rubberDuckEncounter: { rubberDuckPlayerId: playerId, targetPlayerId: occupant } };
+  }
+
+  // Landing on an SCP-049-2 instance (the other collision direction -
+  // one roaming onto a player - is checked in advanceScp0492Instances)
+  // designates this player as SCP-049's new target, regardless of the
+  // tile itself.
+  if (next.scp0492Instances.some((i) => i.tileId === position)) {
+    next = designateScp0492Target(next, playerId);
   }
 
   switch (tile.kind) {
@@ -1483,10 +1502,16 @@ function applyDoctorCatch(state: GameState, targetPlayerId: string, rng: () => n
  */
 function resolveDoctorAnomalyCatch(state: GameState, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
   const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
-  const { state: next, wasFatal } = applyDoctorCatch(redirected.state, redirected.targetPlayerId, rng);
+  const { state: caught, wasFatal } = applyDoctorCatch(redirected.state, redirected.targetPlayerId, rng);
+  // Whatever chase this catch just ended - boosted or not - is over.
+  const next: GameState = { ...caught, doctorSpeedBoostActive: false };
 
   if (wasFatal) {
-    return updateAnomaly(next, 'theDoctor', { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+    return updateAnomaly(spawnScp0492Instance(next, caughtAtTileId), 'theDoctor', {
+      status: 'dormant',
+      targetPlayerId: null,
+      tileId: caughtAtTileId,
+    });
   }
   const reacquired = randomHuntableTarget(next, rng);
   return updateAnomaly(
@@ -1496,6 +1521,64 @@ function resolveDoctorAnomalyCatch(state: GameState, targetPlayerId: string, cau
       ? { targetPlayerId: reacquired, tileId: caughtAtTileId }
       : { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId },
   );
+}
+
+/** Leaves a new, independent SCP-049-2 instance roaming from wherever a fatal SCP-049 catch just happened - see GameState.scp0492Instances and advanceScp0492Instances. */
+function spawnScp0492Instance(state: GameState, tileId: number): GameState {
+  const instance: Scp0492Instance = { id: `scp0492-${state.scp0492NextId}`, tileId };
+  return logEvent(
+    { ...state, scp0492Instances: [...state.scp0492Instances, instance], scp0492NextId: state.scp0492NextId + 1 },
+    'An SCP-049-2 instance is now shambling around the site.',
+  );
+}
+
+/**
+ * An SCP-049-2 colliding with a player - either it roamed onto them (see
+ * advanceScp0492Instances) or they moved onto it (see resolveLanding) -
+ * hands SCP-049 a forced new target, interrupting whatever it was doing,
+ * regardless of its own current state (dormant or already hunting
+ * someone else). No-op if SCP-049 isn't actually loose right now (it's
+ * been fully recontained), or the player in question isn't eligible to
+ * be hunted at all (Rogue Anomaly, AFK-benched, evading, or already
+ * gone). If the new target is far from SCP-049's current position, this
+ * also grants it a temporary speed boost - see doctorSpeedBoostActive.
+ */
+function designateScp0492Target(state: GameState, targetPlayerId: string): GameState {
+  const doctor = state.looseAnomalies.find((a) => a.anomalyId === 'theDoctor');
+  if (!doctor) return state;
+  const target = state.players[targetPlayerId];
+  if (!target || target.isSpectating || target.isAfkSpectating || target.hasEvasionActive || pieceOf(state, targetPlayerId) === 'trex') {
+    return state;
+  }
+
+  const isFar = boardDistance(doctor.tileId, target.position) > DOCTOR_DESIGNATION_FAR_THRESHOLD;
+  const next = updateAnomaly({ ...state, doctorSpeedBoostActive: isFar }, 'theDoctor', { status: 'hunting', targetPlayerId });
+  return logEvent(next, 'SCP-049-2 led SCP-049 straight to someone.');
+}
+
+/**
+ * Every SCP-049-2 instance's own turn: a slow, aimless roam (1-2 spaces,
+ * a coin flip), entirely independent of SCP-049's own containment
+ * status - these keep shambling around even after it's been purged.
+ * Colliding with a player along the way designates them as SCP-049's
+ * new target (see designateScp0492Target) - the other collision
+ * direction (a player moving onto one) is checked in resolveLanding
+ * instead, since that happens mid-turn rather than at turn end.
+ */
+function advanceScp0492Instances(state: GameState, rng: () => number, idsToMove: Set<string>): GameState {
+  let next = state;
+  for (const instance of state.scp0492Instances) {
+    if (!idsToMove.has(instance.id)) continue; // spawned this same tick - doesn't also move the instant it appears
+    const spaces = rng() < 0.5 ? SCP_0492_ROAM_MIN_SPACES : SCP_0492_ROAM_MAX_SPACES;
+    const newTileId = (instance.tileId + spaces) % BOARD_SIZE;
+    next = {
+      ...next,
+      scp0492Instances: next.scp0492Instances.map((i) => (i.id === instance.id ? { ...i, tileId: newTileId } : i)),
+    };
+    const occupant = activePlayerIds(next).find((id) => next.players[id].position === newTileId);
+    if (occupant) next = designateScp0492Target(next, occupant);
+  }
+  return next;
 }
 
 /** Every player eligible to be hunted at all, by anything - excludes Rogue Anomaly (always immune), anyone with SCP-268 active (temporarily immune, see useEvasion), and anyone AFK-benched. Shared by nearestHuntableTarget and randomHuntableTarget below. */
@@ -1531,6 +1614,9 @@ function randomHuntableTarget(state: GameState, rng: () => number): string | nul
 function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState {
   let next = state;
   for (const anomaly of state.looseAnomalies) {
+    // SCP-939 ticks once per round instead of every turn - see
+    // advanceVoices, called separately from endTurn.
+    if (anomaly.anomalyId === 'theVoices') continue;
     const current = next.looseAnomalies.find((a) => a.anomalyId === anomaly.anomalyId);
     if (!current || current.status !== 'hunting' || !current.targetPlayerId) continue;
 
@@ -1539,17 +1625,18 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
       // Target's really gone (Terminated some other way), was just
       // reassigned into Rogue Anomaly ("Uncontained") mid-hunt, or just
       // went invisible via SCP-268 (see useEvasion) - same treatment as
-      // Rogue Anomaly's permanent immunity, just temporary. SCP-106 and
-      // SCP-939 never needed a "look" to start engaging in the first
-      // place, so losing a target doesn't put them back to sleep either
-      // - they immediately re-pick whoever's now closest instead; SCP-049
+      // Rogue Anomaly's permanent immunity, just temporary. SCP-106
+      // never needed a "look" to start engaging in the first place, so
+      // losing a target doesn't put it back to sleep either - it
+      // immediately re-picks whoever's now closest instead; SCP-049
       // re-diagnoses a new random target the same way. Every other
       // anomaly just loses interest and stays put dormant.
-      if (current.anomalyId === 'theOldMan' || current.anomalyId === 'theVoices') {
+      if (current.anomalyId === 'theOldMan') {
         const reacquired = nearestHuntableTarget(next, current.tileId);
         next = updateAnomaly(next, current.anomalyId, reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
       } else if (current.anomalyId === 'theDoctor') {
         const reacquired = randomHuntableTarget(next, rng);
+        next = { ...next, doctorSpeedBoostActive: false }; // whatever chase it was on, boosted or not, is over
         next = updateAnomaly(next, current.anomalyId, reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
       } else {
         next = updateAnomaly(next, current.anomalyId, { status: 'dormant', targetPlayerId: null });
@@ -1561,11 +1648,9 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     const speed =
       current.anomalyId === 'theOldMan'
         ? OLD_MAN_MAIN_BOARD_SPEED
-        : current.anomalyId === 'theVoices'
-          ? VOICES_HUNT_SPEED
-          : current.anomalyId === 'theDoctor'
-            ? DOCTOR_HUNT_SPEED
-            : ANOMALY_HUNT_SPEED;
+        : current.anomalyId === 'theDoctor'
+          ? (next.doctorSpeedBoostActive ? DOCTOR_SPEED_BOOSTED : DOCTOR_HUNT_SPEED)
+          : ANOMALY_HUNT_SPEED;
     const newTileId =
       current.anomalyId === 'theDoctor'
         ? stepTowardEitherWay(current.tileId, target.position, speed)
@@ -1577,18 +1662,41 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     // Caught. SCP-106 doesn't resolve like every other anomaly - catching
     // someone on the main board isn't itself a loss, it drags them into
     // the Pocket Dimension instead (see dragIntoPocketDimension). SCP-049
-    // and SCP-939 don't either - see resolveDoctorAnomalyCatch and
-    // resolveVoicesAnomalyCatch.
+    // doesn't either - see resolveDoctorAnomalyCatch.
     next =
       current.anomalyId === 'theOldMan'
         ? dragIntoPocketDimension(next, current.targetPlayerId, rng)
         : current.anomalyId === 'theDoctor'
           ? resolveDoctorAnomalyCatch(next, current.targetPlayerId, newTileId, rng)
-          : current.anomalyId === 'theVoices'
-            ? resolveVoicesAnomalyCatch(next, current.targetPlayerId, newTileId, rng)
-            : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
+          : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
   }
   return next;
+}
+
+/**
+ * SCP-939's own tick, entirely separate from advanceHuntingAnomalies
+ * above - it only ever moves once per round, specifically on whichever
+ * player's turn it happened to breach on (spawnedOnPlayerId), same
+ * cadence as SCP-173's Keep Watch check (see advanceUnwatchedSculpture),
+ * so it isn't excessively fast despite hunting automatically. No-op if
+ * it's not loose, isn't this round's move check, or already went
+ * dormant (nobody left - see resolveVoicesAnomalyCatch).
+ */
+function advanceVoices(state: GameState, endingPlayerId: string, rng: () => number): GameState {
+  const voices = state.looseAnomalies.find((a) => a.anomalyId === 'theVoices');
+  if (!voices || voices.spawnedOnPlayerId !== endingPlayerId || voices.status !== 'hunting' || !voices.targetPlayerId) return state;
+
+  const target = state.players[voices.targetPlayerId];
+  if (!target || target.isSpectating || target.hasEvasionActive || pieceOf(state, voices.targetPlayerId) === 'trex') {
+    const reacquired = nearestHuntableTarget(state, voices.tileId);
+    return updateAnomaly(state, 'theVoices', reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
+  }
+  if (target.isAfkSpectating) return state; // just paused, not lost - waits for them rather than giving up
+
+  const newTileId = stepToward(voices.tileId, target.position, VOICES_HUNT_SPEED);
+  return newTileId === target.position
+    ? resolveVoicesAnomalyCatch(state, voices.targetPlayerId, newTileId, rng)
+    : updateAnomaly(state, 'theVoices', { tileId: newTileId });
 }
 
 /**
@@ -1902,13 +2010,17 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // hostile-anomaly "world events" tick: a new one might breach
   // containment, and any already loose ones take a step.
   const sculptureBefore = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
+  const voicesBefore = state.looseAnomalies.find((a) => a.anomalyId === 'theVoices');
   let afterAnomalies = maybeBreachContainment(next, rng, playerId);
   // Skip the very tick it breaches on - a full round (back around to
   // whoever's turn it spawned on) has to actually pass before its first
   // move check, rather than potentially catching someone the instant
   // it's revealed.
   if (sculptureBefore) afterAnomalies = advanceUnwatchedSculpture(afterAnomalies, playerId, rng);
+  if (voicesBefore) afterAnomalies = advanceVoices(afterAnomalies, playerId, rng);
+  const scp0492IdsBefore = new Set(afterAnomalies.scp0492Instances.map((i) => i.id));
   afterAnomalies = advanceHuntingAnomalies(afterAnomalies, rng);
+  afterAnomalies = advanceScp0492Instances(afterAnomalies, rng, scp0492IdsBefore);
   // SCP-268's evasion (see useEvasion) lasts "until your next turn
   // begins" - cleared only now, after every anomaly tick for the turn
   // that just ended has already had its chance to read it (it must

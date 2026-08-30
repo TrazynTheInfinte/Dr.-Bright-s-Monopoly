@@ -39,14 +39,14 @@ export const ANOMALIES: AnomalyDefinition[] = [
     name: 'SCP-939 "With Many Voices"',
     spawnTileId: 27, // Amnestics Dispensary
     flavorText:
-      "Blind, and already hunting the instant it's loose - same as SCP-106, no viewing required. Unlike every other breach, this one is never announced: nothing appears on the board and nothing gets logged. The first anyone learns it's out is the moment it's already caught someone.",
+      "Blind, and already hunting the instant it's loose - same as SCP-106, no viewing required. Unlike every other breach, this one is never announced: nothing appears on the board and nothing gets logged. The first anyone learns it's out is the moment it's already caught someone. Whoever it's currently closing in on may notice something, privately, the closer it gets.",
   },
   {
     id: 'theDoctor',
     name: 'SCP-049 "The Plague Doctor"',
     spawnTileId: 13, // Medical Bay
     flavorText:
-      "Calm and cooperative, right up until it diagnoses someone with the Pestilence - a random pick, unrelated to where anyone stands on the board. Its cure only diminishes a first-time patient; anyone it diagnoses a second time is cured for good, reanimated as something that used to be them.",
+      "Calm and cooperative, right up until it diagnoses someone with the Pestilence - a random pick, unrelated to where anyone stands on the board. Its cure only diminishes a first-time patient; anyone it diagnoses a second time is cured for good, reanimated as something that used to be them - and that reanimated SCP-049-2 goes on roaming the site aimlessly, colliding with the next person it stumbles into and handing SCP-049 a fresh diagnosis.",
   },
 ];
 

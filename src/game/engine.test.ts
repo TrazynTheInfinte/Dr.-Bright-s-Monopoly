@@ -1976,13 +1976,22 @@ describe('SCP-939 "With Many Voices"', () => {
   it('catching someone resolves through the standard consequence pipeline (revealed in the log this once), then immediately keeps hunting silently instead of freezing', () => {
     let game = makeGame(); // p1 'dog', p2 'car'
     game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
-    game = withLooseAnomalies(game, [{ anomalyId: 'theVoices', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'theVoices', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within its hunt speed
     expect(game.players.p2.credits).toBe(0);
     expect(game.players.p2.ownedTileIds).toEqual([]);
     // Doesn't go dormant/visible - immediately re-targets p1 (the only
     // one left) and keeps hunting, still invisible.
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theVoices', tileId: 10, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 });
+    expect(game.looseAnomalies[0]).toEqual({
+      anomalyId: 'theVoices',
+      tileId: 10,
+      status: 'hunting',
+      targetPlayerId: 'p1',
+      breachedOnTurnCount: 0,
+      spawnedOnPlayerId: 'p1',
+    });
     expect(game.log.some((entry) => entry.includes('With Many Voices'))).toBe(true);
   });
 
@@ -1990,10 +1999,23 @@ describe('SCP-939 "With Many Voices"', () => {
     let game = makeGame(['car', 'iron', 'trex']); // p3 is Rogue Anomaly, immune
     game = withPlayer(game, 'p1', { isSpectating: true }); // its current target - really gone
     game = withPlayer(game, 'p2', { position: 20 }); // the only remaining eligible candidate
-    game = withLooseAnomalies(game, [{ anomalyId: 'theVoices', tileId: 15, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'theVoices', tileId: 15, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
     expect(game.looseAnomalies[0].status).toBe('hunting');
+  });
+
+  it('only moves once per round, on whichever turn it happened to breach on - same cadence as SCP-173', () => {
+    let game = makeGame(['dog', 'car', 'iron']);
+    game = withPlayer(game, 'p2', { position: 20 });
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'theVoices', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
+    game = { ...game, currentTurnIndex: 1 }; // p2's turn is ending, not p1's (the round anchor) - shouldn't move at all
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].tileId).toBe(8);
   });
 });
 
@@ -2146,5 +2168,64 @@ describe('SCP-049 "The Plague Doctor"', () => {
       game = useEvasion(game, 'p1', 'recoveredEvasionHat');
       expect(game).toEqual(before);
     });
+  });
+
+  it('moves at a boosted speed while closing in on a target designated from far away, clearing the boost once the chase ends', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 8 }); // distance 6 - DOCTOR_HUNT_SPEED (3) alone wouldn't reach, the boost (6) does
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 2, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = { ...game, doctorSpeedBoostActive: true };
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.hasBeenCuredBy049).toBe(true); // caught this same tick - only possible with the boost
+    expect(game.doctorSpeedBoostActive).toBe(false); // cleared now that the chase actually ended
+  });
+});
+
+describe('SCP-049-2 instances', () => {
+  it('a fatal SCP-049 catch spawns a roaming instance at the tile it happened on', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10, hasBeenCuredBy049: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.scp0492Instances).toHaveLength(1);
+    expect(game.scp0492Instances[0].tileId).toBe(10);
+  });
+
+  it('roams 1 or 2 spaces every turn, a coin flip, regardless of whether SCP-049 itself is still loose', () => {
+    let game = makeGame();
+    game = { ...game, scp0492Instances: [{ id: 'scp0492-0', tileId: 5 }] };
+    game = endTurn(game, () => 0.9); // >= 0.5 -> 2 spaces
+    expect(game.scp0492Instances[0].tileId).toBe(7);
+  });
+
+  it("designates whoever it roams onto as SCP-049's new target, interrupting whatever it was doing, with a speed boost since they're far away", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { position: 7 }); // where the instance will land
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 30, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = { ...game, scp0492Instances: [{ id: 'scp0492-0', tileId: 5 }] };
+    game = endTurn(game, () => 0.9); // 2 spaces: tile 5 -> 7, landing on p1
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p1');
+    expect(game.doctorSpeedBoostActive).toBe(true); // distance from tile 30 to tile 7 is 17 - well past the threshold
+  });
+
+  it('designates a player who lands on one too - the other collision direction', () => {
+    let game = makeGame();
+    game = { ...game, scp0492Instances: [{ id: 'scp0492-0', tileId: 5 }] };
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 30, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = devSetForcedRoll(game, [5, 0]); // p1: tile 0 -> tile 5, landing on the instance
+    game = rollDice(game);
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p1');
+  });
+
+  it("doesn't designate someone immune to being hunted at all (Rogue Anomaly)", () => {
+    let game = makeGame(['trex', 'car']);
+    game = { ...game, scp0492Instances: [{ id: 'scp0492-0', tileId: 5 }] };
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 30, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = devSetForcedRoll(game, [5, 0]); // p1 (Rogue Anomaly): tile 0 -> tile 5
+    game = rollDice(game);
+    expect(game.looseAnomalies[0].status).toBe('dormant');
+    expect(game.looseAnomalies[0].targetPlayerId).toBeNull();
   });
 });

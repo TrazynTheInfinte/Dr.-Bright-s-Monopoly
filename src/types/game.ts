@@ -266,6 +266,18 @@ export interface GameState {
   pocketDimensionOrdeal: PocketDimensionOrdeal | null;
   /** Successful/attempted swings landed with the current Jailbird since it was last freshly drawn - a property of the physical item, not whoever's currently holding it (see useJailbird). Resets to 0 whenever a Jailbird card is pulled back into a hand fresh (pullBackFromDiscard); the 3rd use always breaks it, malfunction or not. */
   jailbirdUses: number;
+  /** Reanimated corpses left behind by a fatal SCP-049 catch (see resolveDoctorAnomalyCatch) - one per such catch, independent of SCP-049's own containment status. Each roams the board slowly and aimlessly; colliding with a player (either direction) hands SCP-049 a forced new target - see designateScp0492Target in game/engine.ts. */
+  scp0492Instances: Scp0492Instance[];
+  /** Counter backing each new SCP-049-2 instance's id - see designateScp0492Target... (spawnScp0492Instance). A GameState field rather than a module-level counter so spawning stays a pure function of state. */
+  scp0492NextId: number;
+  /** True while SCP-049 is closing in on a target it was forcibly handed by an SCP-049-2 collision from far away - grants a temporary hunt-speed boost (see DOCTOR_SPEED_BOOSTED in game/engine.ts) so a distant designation is still actually reachable. Cleared the moment that chase ends, one way or another. */
+  doctorSpeedBoostActive: boolean;
+}
+
+/** One shambling SCP-049-2 instance, left behind by a fatal SCP-049 catch - see GameState.scp0492Instances. */
+export interface Scp0492Instance {
+  id: string;
+  tileId: number;
 }
 
 /** A proposed trade between two players - Wings/Tunnels/utilities and/or Credits, either direction. Neither side's tileIds may have houses on them (must be sold first). Not resolved until the recipient (toPlayerId) accepts or declines, or the proposer (fromPlayerId) withdraws it. */

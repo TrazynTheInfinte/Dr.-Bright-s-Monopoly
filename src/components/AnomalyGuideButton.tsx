@@ -30,12 +30,16 @@ const REDACTED_BRIEFS: Record<AnomalyId, string> = {
   theVoices:
     'Blind. Locates prey by ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ and begins pursuit immediately upon breach - no visual ' +
     'confirmation required or possible. Breach events involving this entity are not to be logged through standard ' +
-    'channels; the first reliable indicator of an active breach is a missing person.',
+    'channels; the first reliable indicator of an active breach is a missing person. Personnel who report an ' +
+    '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ sensation of their own accord, unprompted, should be evacuated immediately rather than ' +
+    'questioned.',
   theDoctor:
     'Cooperative under normal circumstances. Periodically and unpredictably identifies a specific individual as ' +
     '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓, with no observable pattern to the selection. A first identification is non-fatal but ' +
     'debilitating; personnel already once identified are not to be reintroduced to its presence under any ' +
-    'circumstances, as a second identification does not end the same way.',
+    'circumstances, as a second identification does not end the same way. Site-wide notice: any ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ' +
+    'produced by this entity remains mobile and hazardous independent of the entity itself, and should be reported ' +
+    'and avoided on sight, not approached.',
 };
 
 // Same redaction convention as REDACTED_BRIEFS above, applied to Object

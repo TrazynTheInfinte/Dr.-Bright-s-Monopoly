@@ -23,6 +23,7 @@ import PieceIcon from './PieceIcon';
 import { useBoardStamps } from './useBoardStamps';
 import { useRecentTileFlashes, type TileFlashKind } from './useRecentTileFlashes';
 import { usePurgeBursts } from './usePurgeBursts';
+import Scp0492Icon from './Scp0492Icon';
 import './Board.css';
 
 interface BoardProps {
@@ -325,6 +326,7 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
         // regardless of whatever stale tileId it was last at.
         const anomaliesHere = game.looseAnomalies.filter((a) => a.tileId === tile.id && a.status !== 'inPocketDimension');
         const dormantAnomalyHere = anomaliesHere.find((a) => a.status === 'dormant');
+        const scp0492Here = game.scp0492Instances.filter((i) => i.tileId === tile.id);
 
         return (
           <div
@@ -450,6 +452,17 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
                   </span>
                 );
               })}
+
+            {scp0492Here.map((instance, index) => (
+              <span
+                key={instance.id}
+                className="tile-anomaly tile-scp0492"
+                style={{ '--anomaly-index': anomaliesHere.length + index } as CSSProperties}
+                title="SCP-049-2 - shambling, aimless, but designates a new target for SCP-049 on contact"
+              >
+                <Scp0492Icon className="tile-anomaly-icon" />
+              </span>
+            ))}
           </div>
         );
       })}
