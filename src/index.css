@@ -113,6 +113,30 @@ button:hover:not(:disabled) {
   text-shadow: none;
 }
 
+/* Form fields don't inherit color/background from the page the way
+   normal text does - every browser ships its own default (light
+   background, black text) regardless of the page's theme. Without
+   this, typed text renders black-on-near-black wherever a component
+   sets an input's background to --color-paper but doesn't also set its
+   text color - exactly what was happening on the name/Room Code
+   fields. One global base fixes every current and future input/select/
+   textarea in the app, not just the ones already caught. */
+input,
+select,
+textarea {
+  color: var(--color-black);
+  background: var(--color-paper);
+  font-family: var(--font-mono);
+  border: 1px solid var(--color-black);
+  caret-color: var(--color-black);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-grey);
+  opacity: 1;
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
