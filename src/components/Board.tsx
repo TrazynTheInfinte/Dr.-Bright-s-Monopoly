@@ -418,12 +418,16 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
                   anomaly.breachedOnTurnCount === game.turnCount ||
                   viewerSeesConcealedAnomalies,
               )
-              .map((anomaly) => {
+              .map((anomaly, index) => {
                 const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
                 return (
                   <span
                     key={anomaly.anomalyId}
                     className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
+                    // Two anomalies can be loose on the same tile at once now
+                    // that there are three - staggered so a second marker
+                    // doesn't sit exactly on top of (and hide) the first.
+                    style={{ '--anomaly-index': index } as CSSProperties}
                     title={`${definition.name}${
                       anomaly.status === 'hunting'
                         ? ' - hunting someone'

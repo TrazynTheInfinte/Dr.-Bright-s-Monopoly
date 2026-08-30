@@ -27,7 +27,7 @@ function PocketDimensionBoard({ room, game }: PocketDimensionBoardProps) {
 
   return (
     <div className="pocket-dimension-board">
-      <p className="pocket-dimension-title">SCP-106&rsquo;s Pocket Dimension</p>
+      <p className="pocket-dimension-title">SCP-106's Pocket Dimension</p>
       <p className="pocket-dimension-subtitle">
         {trappedName} was dragged in and is being chased down. Escape through a Fracture Point, or run out of
         Credits or road - either way, SCP-106 gets recontained the instant this ends.
@@ -55,10 +55,13 @@ function PocketDimensionBoard({ room, game }: PocketDimensionBoardProps) {
       </div>
 
       <p className="pocket-dimension-legend">
-        <span className="pocket-dimension-legend-swatch pocket-dimension-tile-fracturePoint" /> Fracture Point - free escape
-        &nbsp;&nbsp;
-        <span className="pocket-dimension-legend-swatch pocket-dimension-tile-decayingPassage" /> Decaying Passage - costs
-        Credits (or worse)
+        <span className="pocket-dimension-legend-entry">
+          <span className="pocket-dimension-legend-swatch pocket-dimension-tile-fracturePoint" /> Fracture Point - free escape
+        </span>
+        <span className="pocket-dimension-legend-entry">
+          <span className="pocket-dimension-legend-swatch pocket-dimension-tile-decayingPassage" /> Decaying Passage - costs
+          Credits (or worse)
+        </span>
       </p>
     </div>
   );

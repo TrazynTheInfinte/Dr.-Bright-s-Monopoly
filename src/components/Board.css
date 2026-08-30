@@ -510,7 +510,10 @@
 .tile-anomaly {
   position: absolute;
   top: 2px;
-  left: 2px;
+  /* Staggered by --anomaly-index (set inline per marker) so two anomalies
+     loose on the same tile at once don't render exactly on top of each
+     other - three can coexist now, not just one. */
+  left: calc(2px + var(--anomaly-index, 0) * 15px);
   font-size: 14px;
   line-height: 1;
   z-index: 4;

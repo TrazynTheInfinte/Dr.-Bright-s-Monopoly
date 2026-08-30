@@ -3,6 +3,10 @@
   flex-direction: column;
   gap: 1em;
   width: 100%;
+  /* Matches .board-column .board's max-width (Board.css) - without this,
+     it stretches to fill the whole board grid column instead of reading
+     at the same scale as the normal board it's standing in for. */
+  max-width: 760px;
   margin: 0 auto;
   padding: 1.5em;
   border: 3px solid var(--color-black);
@@ -47,7 +51,7 @@
 }
 
 .pocket-dimension-tile-fracturePoint {
-  background: #3f6b4c;
+  background: var(--group-green);
   color: var(--color-paper);
 }
 
@@ -109,16 +113,22 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.4em;
+  gap: 0.4em 1.2em;
   font-size: 0.75rem;
   color: var(--color-grey);
   text-align: center;
 }
 
+.pocket-dimension-legend-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
 .pocket-dimension-legend-swatch {
   display: inline-block;
+  flex-shrink: 0;
   width: 0.9em;
   height: 0.9em;
   border: 2px solid var(--color-black);
-  vertical-align: middle;
 }

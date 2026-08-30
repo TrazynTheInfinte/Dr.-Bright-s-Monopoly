@@ -110,6 +110,7 @@ function formatLogEntry(entry: string, room: Room): string {
 // just not meant to be pretty, since decisions need to stay legible.
 function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   const [isRolling, setIsRolling] = useState(false);
+  const [isMovingPocketDimension, setIsMovingPocketDimension] = useState(false);
   const [rollTrigger, setRollTrigger] = useState(0);
   // A card visibly flying from the deck pile just clicked (Board.tsx's
   // onDeckClick reports where) to wherever the real reveal panel lands
@@ -204,6 +205,18 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
       await rollDiceAndSync(roomCode, game!);
     } finally {
       setIsRolling(false);
+    }
+  }
+
+  // Mirrors handleRoll's disable-while-in-flight guard - without it, an
+  // impatient double-click could fire two moves before the first
+  // Firestore write (and its pendingDecision) actually lands.
+  async function handleMovePocketDimension() {
+    setIsMovingPocketDimension(true);
+    try {
+      await movePocketDimensionAndSync(roomCode, game!, playerId);
+    } finally {
+      setIsMovingPocketDimension(false);
     }
   }
 
@@ -316,7 +329,9 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
           {isMyTurn && !game.pendingDecision && game.pocketDimensionOrdeal?.trappedPlayerId === playerId && (
             <div className="actions">
               <p className="hint">Roll to advance through the Pocket Dimension - see the board below.</p>
-              <button onClick={() => movePocketDimensionAndSync(roomCode, game, playerId)}>Move</button>
+              <button onClick={handleMovePocketDimension} disabled={isMovingPocketDimension}>
+                {isMovingPocketDimension ? 'Rolling...' : 'Move'}
+              </button>
             </div>
           )}
 
