@@ -11,16 +11,20 @@
   aspect-ratio: 1;
   width: 100%;
   margin: 0 auto;
-  border: 3px solid var(--color-black);
+  border: 1px solid var(--color-black);
   background: var(--color-paper);
   font-family: var(--font-mono);
+  /* Faint phosphor bloom around the whole board, not just individual
+     text - reads as a screen glowing in a dark room rather than a flat
+     rectangle. */
+  box-shadow: 0 0 24px rgba(51, 255, 92, 0.15);
 }
 
 .board-center {
   grid-row: 2 / 11;
   grid-column: 2 / 11;
   background: var(--color-paper);
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   overflow: hidden;
   position: relative;
 }
@@ -33,16 +37,17 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) rotate(-18deg);
-  font-family: var(--font-display);
+  /* No rotation - a real terminal doesn't print at an angle. */
+  transform: translate(-50%, -50%);
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: var(--color-paper);
-  background: var(--color-red);
-  border: 3px solid var(--color-black);
+  color: var(--color-black);
+  background: transparent;
+  border: 1px solid var(--color-black);
   padding: 0.5em 2.5em;
   font-size: clamp(0.8rem, 2.6vw, 1.5rem);
   white-space: nowrap;
+  text-shadow: 0 0 6px currentColor;
   z-index: 1;
 }
 
@@ -54,7 +59,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0.15em;
-  border: 2px dashed var(--color-grey);
+  border: 1px dashed var(--color-grey);
   color: var(--color-grey);
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -110,10 +115,10 @@
 @keyframes deck-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(179, 0, 0, 0.45);
+    box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(179, 0, 0, 0);
+    box-shadow: 0 0 0 6px rgba(255, 59, 59, 0);
   }
 }
 
@@ -290,10 +295,10 @@
 @keyframes tile-flash-buy {
   0% {
     box-shadow: inset 0 0 0 3px var(--color-red);
-    background: rgba(179, 0, 0, 0.18);
+    background: rgba(255, 59, 59, 0.18);
   }
   100% {
-    box-shadow: inset 0 0 0 0 rgba(179, 0, 0, 0);
+    box-shadow: inset 0 0 0 0 rgba(255, 59, 59, 0);
     background: transparent;
   }
 }
@@ -301,10 +306,10 @@
 @keyframes tile-flash-rent {
   0% {
     box-shadow: inset 0 0 0 3px var(--color-black);
-    background: rgba(17, 17, 17, 0.15);
+    background: rgba(51, 255, 92, 0.15);
   }
   100% {
-    box-shadow: inset 0 0 0 0 rgba(17, 17, 17, 0);
+    box-shadow: inset 0 0 0 0 rgba(51, 255, 92, 0);
     background: transparent;
   }
 }
@@ -319,10 +324,10 @@
 @keyframes tile-flash-seize {
   0% {
     box-shadow: inset 0 0 0 4px var(--color-black);
-    background: rgba(17, 17, 17, 0.35);
+    background: rgba(51, 255, 92, 0.35);
   }
   100% {
-    box-shadow: inset 0 0 0 0 rgba(17, 17, 17, 0);
+    box-shadow: inset 0 0 0 0 rgba(51, 255, 92, 0);
     background: transparent;
   }
 }
@@ -334,18 +339,19 @@
    tile's own (quite small) box. */
 .board-stamp {
   position: absolute;
-  transform: translate(-50%, -50%) rotate(-12deg);
+  /* No rotation - reads as a terminal alert printout, not a rubber stamp. */
+  transform: translate(-50%, -50%);
   z-index: 5;
   pointer-events: none;
-  font-family: var(--font-display);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: clamp(0.6rem, 2.2vw, 1rem);
   color: var(--color-red);
-  border: 3px solid var(--color-red);
+  border: 1px solid var(--color-red);
   padding: 0.3em 0.6em;
-  background: rgba(240, 236, 224, 0.9);
+  background: rgba(2, 6, 3, 0.9);
+  text-shadow: 0 0 8px currentColor;
   white-space: nowrap;
   animation: board-stamp-in 1.4s ease-out forwards;
 }
@@ -357,15 +363,15 @@
 
 @keyframes board-stamp-in {
   0% {
-    transform: translate(-50%, -50%) rotate(-12deg) scale(2.4);
+    transform: translate(-50%, -50%) scale(2.4);
     opacity: 0;
   }
   12% {
-    transform: translate(-50%, -50%) rotate(-12deg) scale(0.92);
+    transform: translate(-50%, -50%) scale(0.92);
     opacity: 1;
   }
   20% {
-    transform: translate(-50%, -50%) rotate(-12deg) scale(1);
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
   }
   78% {
@@ -382,85 +388,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 17, 17, 0.55);
-  color: var(--color-paper);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--color-black);
   font-size: 0.32rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   writing-mode: vertical-rl;
   z-index: 2;
-}
-
-/* Permanent marker for a Chernobyl-destroyed tile - never buyable
-   again, so this (unlike the mortgaged overlay) has no "for now"
-   quality to it. Same layered-overlay structure, radioactive instead
-   of grey. */
-.tile-destroyed {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  background: rgba(80, 10, 10, 0.7);
-  color: var(--color-paper);
-  font-size: 0.28rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  text-align: center;
-}
-
-.tile-destroyed-icon {
-  width: 1em;
-  height: 1em;
-  color: var(--color-red);
-}
-
-.board-tile-corner .tile-destroyed {
-  font-size: 0.4rem;
-}
-
-.board-tile-corner .tile-destroyed-icon {
-  width: 1.6em;
-  height: 1.6em;
-}
-
-/* A one-time radial burst the instant a tile is destroyed - see
-   useDestructionBursts. Rendered as a board-level overlay (like
-   PosterStamp), not nested in the tile, for the same clipping reason. */
-.tile-burst {
-  position: absolute;
-  transform: translate(-50%, -50%) scale(0.2);
-  width: 12%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  z-index: 7;
-  pointer-events: none;
-  background: radial-gradient(
-    circle,
-    rgba(255, 200, 90, 0.95) 0%,
-    rgba(179, 0, 0, 0.7) 45%,
-    rgba(17, 17, 17, 0) 75%
-  );
-  animation: tile-burst 0.9s ease-out forwards;
-}
-
-@keyframes tile-burst {
-  0% {
-    transform: translate(-50%, -50%) scale(0.2);
-    opacity: 1;
-  }
-  55% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(2.4);
-    opacity: 0;
-  }
 }
 
 .tile-houses {
@@ -517,7 +452,7 @@
   font-size: 14px;
   line-height: 1;
   z-index: 4;
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 0 3px rgba(255, 59, 59, 0.9));
   cursor: default;
 }
 
@@ -560,33 +495,27 @@
   width: calc(clamp(18px, 6vw, 40px) * var(--occupant-scale, 1));
   height: calc(clamp(18px, 6vw, 40px) * var(--occupant-scale, 1));
   border-radius: 50%;
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   color: var(--color-paper);
   cursor: pointer;
-  /* Fakes a lit dome (light top-left, dark bottom-right) plus a drop
-     shadow underneath, so the token reads as a small raised piece
-     sitting up off the board instead of a flat sticker - no image
-     assets, just gradients/shadows toward the 2.5D look. */
-  background-image: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 55%),
-    radial-gradient(circle at 68% 78%, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 60%);
-  background-blend-mode: overlay;
-  box-shadow:
-    0 3px 0 rgba(17, 17, 17, 0.55),
-    0 5px 5px rgba(17, 17, 17, 0.4);
+  /* Flat by design - a raised-plastic-piece look doesn't fit a screen.
+     Reads as a lit indicator instead: the seat color fills it (set
+     inline per-token in Board.tsx), and a soft glow in that same color
+     sells the "lit" part without needing a fake light source. */
+  box-shadow: 0 0 6px 1px var(--tile-token-glow, transparent);
   animation: tile-token-hop 0.16s ease-out;
 }
 
 .tile-token-icon {
   width: calc(clamp(11px, 3.6vw, 24px) * var(--occupant-scale, 1));
   height: calc(clamp(11px, 3.6vw, 24px) * var(--occupant-scale, 1));
-  filter: drop-shadow(0 1px 0.5px rgba(17, 17, 17, 0.5));
 }
 
 /* Whoever's turn it currently is, glows on the board itself - playtest
    feedback that there was no way to tell at a glance without reading
    the sidebar or the "Your turn" text. Layers a pulsing red ring on
-   top of the token's existing drop-shadow (both animations run at
-   once) rather than replacing it. */
+   top of the token's own seat-color glow (both animations run at once)
+   rather than replacing it. */
 .tile-token.is-current-turn {
   animation:
     tile-token-hop 0.16s ease-out,
@@ -597,17 +526,15 @@
   0%,
   100% {
     box-shadow:
-      0 3px 0 rgba(17, 17, 17, 0.55),
-      0 5px 5px rgba(17, 17, 17, 0.4),
+      0 0 6px 1px var(--tile-token-glow, transparent),
       0 0 0 2px var(--color-red),
-      0 0 10px 4px rgba(179, 0, 0, 0.7);
+      0 0 10px 4px rgba(255, 59, 59, 0.7);
   }
   50% {
     box-shadow:
-      0 3px 0 rgba(17, 17, 17, 0.55),
-      0 5px 5px rgba(17, 17, 17, 0.4),
+      0 0 6px 1px var(--tile-token-glow, transparent),
       0 0 0 2px var(--color-red),
-      0 0 18px 8px rgba(179, 0, 0, 0.9);
+      0 0 18px 8px rgba(255, 59, 59, 0.9);
   }
 }
 
@@ -634,9 +561,9 @@
   white-space: nowrap;
   color: var(--color-black);
   background: var(--color-paper);
-  border: 2px solid var(--color-black);
+  border: 1px solid var(--color-black);
   padding: 0.3em 0.6em;
-  box-shadow: 2px 2px 0 rgba(17, 17, 17, 0.3);
+  box-shadow: 0 0 8px rgba(51, 255, 92, 0.4);
 }
 
 .board-popup-price {

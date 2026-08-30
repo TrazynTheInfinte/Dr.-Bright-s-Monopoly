@@ -32,20 +32,23 @@ interface BoardProps {
 
 // Stable per-seat colors for the plain position tokens - not Piece art
 // (that's a separate, later pass), just enough to tell players apart on
-// the board itself.
+// the board itself. A "multi-phosphor monitor" set (like the board's
+// --group-* colors) - the one deliberate exception to the otherwise
+// strict green/red terminal palette, since telling 12 possible seats
+// apart is functionally load-bearing.
 const TOKEN_COLORS = [
-  '#c9a227',
-  '#3f7ca8',
-  '#4c6b3a',
-  '#b5677f',
-  '#8a5a2b',
-  '#5b3a73',
-  '#2f8f7a',
-  '#a3231f',
-  '#7a7a3a',
-  '#c96a24',
-  '#3a5a7a',
-  '#6b3a5b',
+  '#33ff5c',
+  '#ffb02e',
+  '#4dd8ff',
+  '#ff4dc4',
+  '#f4e04d',
+  '#b366ff',
+  '#4d79ff',
+  '#ff6b4d',
+  '#1f9e5c',
+  '#66ffe0',
+  '#ff99cc',
+  '#a3ffb3',
 ];
 
 type Side = 'bottom' | 'left' | 'top' | 'right' | 'corner';
@@ -384,7 +387,7 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
                   <span
                     key={id}
                     className={`tile-token ${id === currentTurnPlayerId ? 'is-current-turn' : ''}`}
-                    style={{ background: tokenColorFor(id) }}
+                    style={{ background: tokenColorFor(id), '--tile-token-glow': tokenColorFor(id) } as CSSProperties}
                     title={`${room.players[id]?.name} (${pieceName(game.players[id].pieceId)})`}
                     onClick={(event) => {
                       event.stopPropagation();

@@ -6,37 +6,49 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'JetBrains Sans';
-  src: url('/fonts/JetBrainsSans-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  /* Palette pulled straight from the source rules PDF's propaganda-poster
-     cards: red, black, and paper-cream, no soft/pastel colors. */
-  --color-red: #b30000;
-  --color-black: #111111;
-  --color-paper: #f0ece0;
-  --color-grey: #4a4a4a;
-  --color-grey-light: #d9d5c7;
+  /*
+   * Terminal/CRT palette - a Foundation database terminal, not a
+   * propaganda poster. Variable NAMES are kept from the old paper-and-ink
+   * theme (--color-paper, --color-black) even though their VALUES now
+   * mean the opposite (paper is the near-black screen, black is the
+   * bright phosphor ink drawn on it) - a straight rename would mean
+   * touching every component's CSS in one pass, and this visual overhaul
+   * is deliberately staged: this file plus the main Board/tiles/tokens
+   * first, everything else (Lobby, GameBoard's side panels, cards, the
+   * Pocket Dimension board, RuleBookButton) as a follow-up sweep. Every
+   * component reads colors through these variables already, so this
+   * swap alone re-tints the whole app immediately; the follow-up pass is
+   * about border weight/layout/motifs in the not-yet-touched files, not
+   * about color. A real rename (--color-paper -> --color-screen,
+   * --color-black -> --color-phosphor, etc.) belongs in that follow-up
+   * once every usage site is being touched anyway.
+   */
+  --color-red: #ff3b3b;
+  --color-black: #33ff5c;
+  --color-paper: #020603;
+  --color-grey: #2e8f4f;
+  --color-grey-light: #0a140c;
 
-  /* Board color-group swatches - propaganda-poster tones (mustard gold,
-     olive drab, rust, muted rose, steel blue, deep violet) rather than
-     Monopoly's bright pastels, to stay in the same family as the palette
-     above. */
-  --group-purple: #5b3a73;
-  --group-lightBlue: #3f7ca8;
-  --group-pink: #b5677f;
-  --group-orange: #c96a24;
-  --group-red: #a3231f;
-  --group-yellow: #c99a1e;
-  --group-green: #4c6b3a;
-  --group-darkBlue: #1f3a5f;
+  /* Board color-group swatches - a constrained "multi-phosphor monitor"
+     set (amber, cyan, magenta, violet, blue, plus two green/yellow
+     tones), used only where color-coding is functionally load-bearing
+     (telling the 8 Sectors and player tokens apart at a glance).
+     Everything else in the UI stays strictly on the green/red palette
+     above - this is the one deliberate exception. */
+  --group-purple: #b366ff;
+  --group-lightBlue: #4dd8ff;
+  --group-pink: #ff4dc4;
+  --group-orange: #ffb02e;
+  --group-red: #ff6b4d;
+  --group-yellow: #f4e04d;
+  --group-green: #1f9e5c;
+  --group-darkBlue: #4d79ff;
 
-  --font-display: 'JetBrains Sans', system-ui, sans-serif;
+  /* No separate display font - a real terminal only ever has the one
+     typeface. Headers/titles get their hierarchy from size/weight/
+     letter-spacing instead of switching fonts. */
+  --font-display: 'JetBrains Mono', ui-monospace, monospace;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
@@ -56,25 +68,49 @@ body {
   background: var(--color-paper);
   color: var(--color-black);
   font-family: var(--font-mono);
+  position: relative;
 }
 
-/* Brutalist look, applied globally: hard black borders, square corners,
-   no shadows/gradients. Individual components layer their own CSS on top
-   of this. */
+/* A CRT terminal's scanlines and phosphor bloom - fixed and above
+   everything (z-index below only what actually needs interaction, and
+   pointer-events: none so it never blocks a click), kept faint enough
+   that board text stays fully legible rather than fighting the effect. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.15) 0,
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+/* Terminal look, applied globally: thin phosphor-green hairlines, square
+   corners, a soft glow on the ink itself rather than drop shadows.
+   Individual components layer their own CSS on top of this. */
 button {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: var(--color-red);
-  color: var(--color-paper);
-  border: 3px solid var(--color-black);
+  background: transparent;
+  color: var(--color-black);
+  border: 1px solid var(--color-black);
   padding: 0.75em 1.5em;
   cursor: pointer;
+  text-shadow: 0 0 4px currentColor;
 }
 
 button:hover:not(:disabled) {
   background: var(--color-black);
+  color: var(--color-paper);
+  text-shadow: none;
 }
 
 button:disabled {
@@ -115,12 +151,13 @@ button:disabled {
    entirely) - visually distinct from the normal red buttons everywhere
    else, so it doesn't blend in as just another routine action. */
 .danger-button {
-  background: var(--color-black);
+  color: var(--color-red);
   border-color: var(--color-red);
 }
 
 .danger-button:hover:not(:disabled) {
   background: var(--color-red);
+  color: var(--color-paper);
 }
 
 .loading {
