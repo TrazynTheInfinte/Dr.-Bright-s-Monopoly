@@ -1973,14 +1973,16 @@ describe('SCP-939 "With Many Voices"', () => {
     expect(game.log.length).toBe(logLengthBefore); // no announcement, induced or not
   });
 
-  it('catching someone resolves through the standard consequence pipeline, revealing it in the log for the first time', () => {
+  it('catching someone resolves through the standard consequence pipeline (revealed in the log this once), then immediately keeps hunting silently instead of freezing', () => {
     let game = makeGame(); // p1 'dog', p2 'car'
     game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6] });
     game = withLooseAnomalies(game, [{ anomalyId: 'theVoices', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within its hunt speed
     expect(game.players.p2.credits).toBe(0);
     expect(game.players.p2.ownedTileIds).toEqual([]);
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theVoices', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+    // Doesn't go dormant/visible - immediately re-targets p1 (the only
+    // one left) and keeps hunting, still invisible.
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theVoices', tileId: 10, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 });
     expect(game.log.some((entry) => entry.includes('With Many Voices'))).toBe(true);
   });
 
@@ -2014,9 +2016,9 @@ describe('SCP-049 "The Plague Doctor"', () => {
 
   it('moves toward its target in whichever direction is shorter, not just clockwise like every other anomaly', () => {
     let game = makeGame();
-    game = withPlayer(game, 'p2', { position: 38 }); // counterclockwise from tile 2 is only 4 away; clockwise would be 36
+    game = withPlayer(game, 'p2', { position: 39 }); // counterclockwise from tile 2 is only 3 away; clockwise would be 37
     game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 2, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
-    game = endTurn(game, NO_BREACH_RNG); // DOCTOR_HUNT_SPEED (6) easily covers the short way, not the long way
+    game = endTurn(game, NO_BREACH_RNG); // DOCTOR_HUNT_SPEED (3) exactly covers the short way, nowhere near the long way
     // Caught this same tick - only possible if it actually took the
     // counterclockwise shortcut instead of crawling clockwise.
     expect(game.players.p2.hasBeenCuredBy049).toBe(true);
@@ -2036,13 +2038,30 @@ describe('SCP-049 "The Plague Doctor"', () => {
     expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theDoctor', tileId: 10, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 });
   });
 
-  it('goes dormant after curing someone only if nobody else is left eligible to re-diagnose', () => {
-    let game = makeGame(['car', 'trex']); // p2 is Rogue Anomaly - never eligible
+  it('goes dormant after curing someone only if literally nobody at all is left eligible', () => {
+    let game = makeGame(['car', 'trex']); // p2 is Rogue Anomaly - never eligible, and p1 is about to be cured
     game = withPlayer(game, 'p1', { position: 10 });
     game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.players.p1.hasBeenCuredBy049).toBe(true);
-    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theDoctor', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
+    // p1 is the only non-Rogue-Anomaly player left, so it re-diagnoses
+    // them anyway (see the Cured-fallback test below) rather than going
+    // dormant - even though they're now Cured themselves.
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'theDoctor', tileId: 10, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 });
+  });
+
+  it("keeps re-diagnosing even once everyone eligible has already been Cured, instead of going dormant forever with no way to ever swoop for a fatal second catch", () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = withPlayer(game, 'p1', { isSpectating: true }); // its current target - really gone some other way
+    game = withPlayer(game, 'p2', { curedTurnsRemaining: 2, hasBeenCuredBy049: true }); // already Cured once, debuff still active
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 15, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    // The old exclusion would return null here (p2 is the only other
+    // active player, and already Cured) and leave it dormant forever -
+    // the fix falls back to re-diagnosing p2 anyway, so a fatal second
+    // catch actually stays reachable.
+    expect(game.looseAnomalies[0].status).toBe('hunting');
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
   });
 
   it('a second catch, ever, is fatal - reanimated as SCP-049-2 via the standard consequence pipeline', () => {

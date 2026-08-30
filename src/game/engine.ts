@@ -45,8 +45,8 @@ const SCULPTURE_UNWATCHED_SPEED = Math.floor(BOARD_SIZE / 4);
 const OLD_MAN_MAIN_BOARD_SPEED = 3;
 /** SCP-939's hunt speed while loose and (invisibly) closing in - same pace as ANOMALY_HUNT_SPEED, since it's every bit as much of a real threat, just an unannounced one. */
 const VOICES_HUNT_SPEED = ANOMALY_HUNT_SPEED;
-/** SCP-049's hunt speed toward its randomly diagnosed target - same pace as ANOMALY_HUNT_SPEED. */
-const DOCTOR_HUNT_SPEED = ANOMALY_HUNT_SPEED;
+/** SCP-049's hunt speed toward its randomly diagnosed target - half of ANOMALY_HUNT_SPEED, same as SCP-106: it already closes distance more efficiently than anything else (stepTowardEitherWay, the shorter of the two directions around the board), so a full-speed pace on top of that made it far too fast in practice. */
+const DOCTOR_HUNT_SPEED = OLD_MAN_MAIN_BOARD_SPEED;
 /** SCP-049's "Cured" status: how many of the afflicted player's own turns it lasts - rolls one die and can't use Induce a Breach/tunnel travel/Show of Force/any Object Anomaly for that long. Matches the Containment Chamber's own "3 turns" rhythm elsewhere in the game. */
 const CURE_DURATION_TURNS = 3;
 /** The Pocket Dimension track's length, tile 0 (the drag-in point) included - it loops back around from the far end rather than dead-ending. */
@@ -1515,9 +1515,17 @@ function nearestHuntableTarget(state: GameState, fromTileId: number): string | n
 
 /** SCP-049's own target selection - a random pick, completely unrelated to anyone's board position, matching its "diagnosis" rather than a hunt. Also excludes anyone already under its own "Cured" status (see resolveDoctorCatch) - it doesn't re-diagnose a patient it's already treating. */
 function randomHuntableTarget(state: GameState, rng: () => number): string | null {
-  const candidates = huntableCandidates(state).filter((id) => state.players[id].curedTurnsRemaining === 0);
+  const candidates = huntableCandidates(state);
   if (candidates.length === 0) return null;
-  return candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))];
+  // Prefers someone not currently Cured - but if literally everyone
+  // eligible already is (e.g. right after curing the only other
+  // player), falls back to re-diagnosing one of them anyway rather than
+  // going dormant forever with no way to ever wake back up. This is
+  // exactly how a second (fatal) catch is meant to become possible once
+  // everyone's already survived a first one.
+  const notCured = candidates.filter((id) => state.players[id].curedTurnsRemaining === 0);
+  const pool = notCured.length > 0 ? notCured : candidates;
+  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
 }
 
 function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState {
@@ -1569,15 +1577,36 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     // Caught. SCP-106 doesn't resolve like every other anomaly - catching
     // someone on the main board isn't itself a loss, it drags them into
     // the Pocket Dimension instead (see dragIntoPocketDimension). SCP-049
-    // doesn't either - see resolveDoctorAnomalyCatch.
+    // and SCP-939 don't either - see resolveDoctorAnomalyCatch and
+    // resolveVoicesAnomalyCatch.
     next =
       current.anomalyId === 'theOldMan'
         ? dragIntoPocketDimension(next, current.targetPlayerId, rng)
         : current.anomalyId === 'theDoctor'
           ? resolveDoctorAnomalyCatch(next, current.targetPlayerId, newTileId, rng)
-          : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
+          : current.anomalyId === 'theVoices'
+            ? resolveVoicesAnomalyCatch(next, current.targetPlayerId, newTileId, rng)
+            : resolveAnomalyCatch(next, current.anomalyId, current.targetPlayerId, newTileId, rng);
   }
   return next;
+}
+
+/**
+ * SCP-939's version of resolveAnomalyCatch - like SCP-049, catching
+ * someone doesn't end its rounds: it immediately re-targets the nearest
+ * remaining player and keeps hunting (still completely silent and
+ * invisible the whole time - see Board.tsx), rather than going dormant
+ * and visible like every other regular anomaly. Only goes dormant (and,
+ * for the first time, visible) if nobody's left to hunt at all.
+ */
+function resolveVoicesAnomalyCatch(state: GameState, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
+  const next = resolvePlayerCaughtByAnomaly(state, 'theVoices', targetPlayerId, rng);
+  const reacquired = nearestHuntableTarget(next, caughtAtTileId);
+  return updateAnomaly(
+    next,
+    'theVoices',
+    reacquired ? { targetPlayerId: reacquired, tileId: caughtAtTileId } : { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId },
+  );
 }
 
 /**
