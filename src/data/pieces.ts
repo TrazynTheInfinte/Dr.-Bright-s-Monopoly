@@ -90,6 +90,6 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Rogue Anomaly',
     title: 'Uncontained Anomaly',
     powerDescription:
-      "Uncontained: can't be trusted to file a purchase request through normal channels - anything it steps on that's already claimed gets consumed outright, no rent, no receipt. Fellow anomalies don't see it as prey: hostile breaches never target it, any that were already hunting it lose interest the moment it's reassigned here, and it can always tell where every one of them is actually hiding, concealed or not. Induce a Breach: once per game, doesn't wait around for containment to fail on its own - forces a breach right now, unleashing a random anomaly nobody's currently dealing with.",
+      "Uncontained: can't be trusted to file a purchase request through normal channels - anything it steps on that's already claimed gets consumed outright, no rent, no receipt. Fellow anomalies don't see it as prey: hostile breaches never target it, any that were already hunting it lose interest the moment it's reassigned here, and it can always tell where every one of them is actually hiding, concealed or not. Induce a Breach: once per game, doesn't wait around for containment to fail on its own - forces a breach right now, unleashing a random anomaly nobody's currently dealing with. Containment Overhead: none of this comes free - keeping something this dangerous tracked costs the Foundation real resources, billed straight to it at the end of every one of its own turns.",
   },
 ];

@@ -26,6 +26,10 @@ _Avoid_: Bribe
 A steeper, one-time payment a player in the Containment Chamber can make to leave immediately, before even trying for doubles - an alternative to the Holding Fee, not a discount on it. D-Class never pays it; Janitor's master keyring waives it once per game.
 _Avoid_: Bribe, Clearance Fee
 
+**Containment Overhead**:
+Rogue Anomaly's own standing cost, charged at the end of every one of its own turns regardless of anything else, scaling up with how many Wings/Tunnels/utilities it currently holds - the one thing that can put it in debt at all, since nothing else can (it never pays rent, and no Hostile Anomaly can catch it).
+_Avoid_: tax, upkeep
+
 **Terminated**:
 The classic Monopoly "lose" state: a player who can't cover a debt is out for good, their Rooms and Credits return to the Foundation, and they're skipped in turn order for the rest of the match. The match ends the instant only one player is left.
 _Avoid_: Disappear, Bankruptcy, Eliminated, bankrupt, eliminated, die, knocked out

@@ -838,6 +838,40 @@ describe("Janitor's Below the Floor Plan", () => {
   });
 });
 
+describe("Rogue Anomaly's Containment Overhead", () => {
+  it("charges a base fee at the end of its own turn (20, owning nothing yet), and nobody else's", () => {
+    let game = makeGame(['trex', 'car']);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p1.credits).toBe(1500 - 20);
+    game = { ...game, currentTurnIndex: 1 }; // p2's turn ending now, not Rogue Anomaly's
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.credits).toBe(1500); // untouched
+  });
+
+  it('scales up with how many tiles it currently holds', () => {
+    let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3, 6] }); // 3 tiles
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p1.credits).toBe(1500 - (20 + 3 * 8)); // 44
+  });
+
+  it("isn't charged again on a doubles continuation - only once the turn actually ends", () => {
+    let game = makeGame(['trex', 'car']);
+    game = { ...game, lastRoll: [3, 3], lastRollWasDoubles: true };
+    const before = game;
+    game = endTurn(game, NO_BREACH_RNG); // still owes another roll - endTurn is a no-op
+    expect(game).toEqual(before);
+  });
+
+  it("opens a debtSettlement instead of ending the turn if it can't afford the overhead", () => {
+    let game = makeGame(['trex', 'car']);
+    game = withPlayer(game, 'p1', { credits: 10 });
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 20, creditorId: null });
+    expect(game.currentTurnIndex).toBe(0); // never actually advanced
+  });
+});
+
 describe('trading', () => {
   it('accepting a trade exchanges Wings and Credits between both players', () => {
     let game = makeGame();

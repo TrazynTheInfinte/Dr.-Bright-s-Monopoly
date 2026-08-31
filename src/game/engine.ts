@@ -24,6 +24,22 @@ const JAIL_POSITION = 10;
 const HOLDING_FEE = 50;
 /** The Escape Fee - paying to leave the Containment Chamber immediately, before even trying for doubles. Steeper than the Holding Fee since it buys certainty. D-Class never pays it; Janitor gets one free via the master keyring. */
 const ESCAPE_FEE = 200;
+/**
+ * Rogue Anomaly's own downside for never paying rent and fearing no
+ * Hostile Anomaly - a standing Containment Overhead charged at the end
+ * of every one of its own turns, scaling with how much it's actually
+ * holding. The only thing that can put it in debt at all - tuned via a
+ * 100-game bot-simulation harness: a flat fee alone (50/turn) never
+ * once put it in debt across 30 sample games (it was winning literally
+ * every game before any downside existed); a heavier flat-scaling
+ * version (30 base + 25/tile) overcorrected hard, terminating it in
+ * every single sample game, often within ~200 turns. These numbers
+ * landed it a real, non-trivial chance of Termination (roughly 1 in 6-7
+ * games in that same all-bot worst case) without erasing the strength
+ * its two immunities are supposed to represent.
+ */
+const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE = 20;
+const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE = 8;
 const MAX_DOUBLES_BEFORE_JAIL = 3;
 /** After 3 turns stuck without rolling doubles, a player is released for free - they've already paid the Holding Fee each of those turns. */
 const MAX_TURNS_IN_JAIL = 3;
@@ -2019,8 +2035,25 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
     // turns, same rhythm as the Containment Chamber's Holding Fee turns.
     curedTurnsRemaining: Math.max(0, state.players[playerId].curedTurnsRemaining - 1),
   });
+
+  // Rogue Anomaly's Containment Overhead - charged at the end of every
+  // one of its own turns, same rhythm as the Holding Fee. If it can't
+  // afford this, a debtSettlement opens for it right here and the turn
+  // doesn't actually advance yet - same pattern as an unaffordable
+  // Holding Fee in resolveJailRoll.
+  const withOverhead =
+    pieceOf(cleared, playerId) === 'trex'
+      ? chargePlayer(
+          logEvent(cleared, 'Containment Overhead: Foundation resources diverted to keep an Uncontained anomaly tracked.'),
+          playerId,
+          ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE + cleared.players[playerId].ownedTileIds.length * ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE,
+          null,
+        )
+      : cleared;
+  if (withOverhead.pendingDecision) return withOverhead;
+
   const next: GameState = {
-    ...cleared,
+    ...withOverhead,
     currentTurnIndex: nextIndex,
     lastRoll: null,
     lastRollWasDoubles: false,
