@@ -1,0 +1,182 @@
+.snake-game {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.snake-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+}
+
+.snake-exit {
+  padding: 0.2em 0.7em;
+  font-size: 0.75rem;
+}
+
+.snake-grid {
+  margin: 0;
+  padding: 0.4em;
+  border: 1px solid var(--color-black);
+  background: var(--color-paper);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.1;
+  letter-spacing: 0.15em;
+  color: var(--color-black);
+  text-shadow: 0 0 4px currentColor;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.snake-game-over {
+  text-align: center;
+  padding: 0.5em;
+  border: 1px solid var(--color-red);
+  color: var(--color-red);
+}
+
+.snake-game-over p {
+  margin: 0.2em 0;
+}
+
+.snake-game-over button {
+  margin-top: 0.4em;
+}
+
+.snake-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 2.2em);
+  grid-template-rows: repeat(2, 2.2em);
+  gap: 0.3em;
+  justify-content: center;
+}
+
+.snake-dpad button {
+  padding: 0;
+  font-size: 1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snake-dpad-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.snake-dpad-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.snake-dpad-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.snake-dpad-down {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.snake-leaderboard {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  font-size: 0.75rem;
+  color: var(--color-grey);
+}
+
+.snake-leaderboard .is-me {
+  color: var(--color-black);
+  font-weight: bold;
+}
+
+/* --- The log terminal's device-frame reskin (see GameBoard.tsx's
+   layout-log section) - a handheld radio/keycard reader's screen, per
+   log idea/'s reference images. Drawn in CSS rather than shipping those
+   reference images as real assets. --- */
+
+.device-frame {
+  position: relative;
+  border: 2px solid var(--color-black);
+  border-radius: 6px;
+  padding: 0.6rem 0.6rem 0.8rem;
+  background: linear-gradient(var(--color-grey-light), var(--color-paper));
+  box-shadow:
+    inset 0 0 12px rgba(51, 255, 92, 0.15),
+    0 0 6px rgba(51, 255, 92, 0.2);
+}
+
+/* The antenna sticking up off the top of the device casing. */
+.device-frame::before {
+  content: '';
+  position: absolute;
+  top: -0.9rem;
+  left: 0.9rem;
+  width: 2px;
+  height: 0.9rem;
+  background: var(--color-black);
+  box-shadow: 0 0 3px var(--color-black);
+}
+
+.device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.device-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--color-grey);
+  text-transform: uppercase;
+}
+
+.device-inspect {
+  padding: 0.15em 0.6em;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+/* A small physical "button" glowing dot next to the inspect control -
+   the console's real buttons, from the reference art, redrawn as CSS. */
+.device-inspect::before {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--color-red);
+  box-shadow: 0 0 4px var(--color-red);
+}
+
+/* The screen itself: a subtle scanline texture on top of whatever's
+   showing (the real log, or Snake) - same effect as the page-wide CRT
+   overlay in index.css, just local to this one screen. */
+.device-screen {
+  position: relative;
+}
+
+.device-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.2) 0,
+    rgba(0, 0, 0, 0.2) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
+}

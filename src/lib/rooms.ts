@@ -242,6 +242,13 @@ export async function sendHeartbeat(roomCode: string, playerId: string): Promise
   }
 }
 
+/** Records a new Snake personal best (see SnakeGame.tsx) so everyone else currently in the Room can see it on the shared leaderboard - purely a fun side stat, not real game state. The caller already checks this actually beats the player's previous best before calling. */
+export async function recordSnakeHighScore(roomCode: string, playerId: string, score: number): Promise<void> {
+  await updateDoc(doc(db, 'rooms', roomCode), {
+    [`players.${playerId}.snakeHighScore`]: score,
+  });
+}
+
 /**
  * Subscribes to live updates for a Room. Calls `onChange` immediately
  * with the current data, then again every time anyone's browser writes a

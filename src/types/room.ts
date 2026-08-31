@@ -25,6 +25,8 @@ export interface RoomPlayer {
   isBot?: boolean;
   /** Set alongside isBot, chosen when the bot was added - see lib/botAi.ts. */
   botDifficulty?: BotDifficulty;
+  /** This player's best score on the log terminal's Snake easter egg (see SnakeGame.tsx) - purely a fun side stat, unrelated to the actual match. Absent until they've played at least once. */
+  snakeHighScore?: number;
 }
 
 export interface Room {

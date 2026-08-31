@@ -43,6 +43,7 @@ import PieceInfoPanel from './PieceInfoPanel';
 import PocketDimensionBoard from './PocketDimensionBoard';
 import MtfEncounterBanner from './MtfEncounterBanner';
 import RubberDuckEncounterBanner from './RubberDuckEncounterBanner';
+import SnakeGame from './SnakeGame';
 import TradePanel from './TradePanel';
 import YourTurnBanner from './YourTurnBanner';
 import { useAfkSelfCheck } from './useAfkSelfCheck';
@@ -131,6 +132,10 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   // wide screen rather than needing its own "are we on mobile" check.
   const [mobileTab, setMobileTab] = useState<'board' | 'status'>('board');
   const [selectedTunnelId, setSelectedTunnelId] = useState(TUNNEL_TILES[0].id);
+  // Whether the log terminal's screen is currently showing Snake instead
+  // of the actual game log - see SnakeGame.tsx. Purely local: nobody
+  // else's view is affected by one player inspecting their own terminal.
+  const [showSnake, setShowSnake] = useState(false);
   // Drives the desktop-only dice-roller swap below (playtest feedback) -
   // see useIsDesktop for why this needs to be a real JS check rather
   // than pure CSS: only one DiceRoller can ever be mounted at a time,
@@ -620,14 +625,28 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
         </section>
 
         <section className="layout-log">
-          <ul className="event-log">
-            {game.log
-              .slice()
-              .reverse()
-              .map((entry, index) => (
-                <li key={index}>{formatLogEntry(entry, room)}</li>
-              ))}
-          </ul>
+          <div className="device-frame">
+            <div className="device-header">
+              <span className="device-label">Foundation Terminal</span>
+              <button className="device-inspect" onClick={() => setShowSnake((shown) => !shown)}>
+                {showSnake ? 'Log' : 'Inspect'}
+              </button>
+            </div>
+            <div className="device-screen">
+              {showSnake ? (
+                <SnakeGame room={room} roomCode={roomCode} playerId={playerId} isDesktop={isDesktop} onExit={() => setShowSnake(false)} />
+              ) : (
+                <ul className="event-log">
+                  {game.log
+                    .slice()
+                    .reverse()
+                    .map((entry, index) => (
+                      <li key={index}>{formatLogEntry(entry, room)}</li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
 
           {isDesktop && <DiceRoller game={room.game ?? game} rollTrigger={rollTrigger} />}
 
