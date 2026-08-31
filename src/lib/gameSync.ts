@@ -35,11 +35,13 @@ import {
   movePocketDimension,
   payEscapeFee,
   proposeTrade,
+  payRentInsteadOfSeizing,
   purgeAnomalies,
   rejoinFromAfk,
   resolveMtfEncounter,
   resolveRubberDuckEncounter,
   rollDice,
+  seizeRogueAnomalyTile,
   sellHouse,
   settleDebt,
   unmortgageProperty,
@@ -119,6 +121,14 @@ export async function buyTileAndSync(roomCode: string, game: GameState, playerId
 
 export async function declinePurchaseAndSync(roomCode: string, game: GameState) {
   await writeGameState(roomCode, declinePurchase(game));
+}
+
+export async function seizeRogueAnomalyTileAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, seizeRogueAnomalyTile(game, playerId));
+}
+
+export async function payRentInsteadOfSeizingAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, payRentInsteadOfSeizing(game, playerId));
 }
 
 export async function endTurnAndSync(roomCode: string, game: GameState) {

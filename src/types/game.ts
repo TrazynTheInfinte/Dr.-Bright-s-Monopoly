@@ -181,7 +181,8 @@ export type PendingDecision =
   | { type: 'catRedirect'; cardId: string }
   | { type: 'cardDrawn'; cardId: string; forPlayerId: string }
   | { type: 'debtSettlement'; forPlayerId: string; amountOwed: number; creditorId: string | null }
-  | { type: 'pocketDimensionLanded'; forPlayerId: string };
+  | { type: 'pocketDimensionLanded'; forPlayerId: string }
+  | { type: 'rogueSeizure'; tileId: number; ownerId: string };
 
 export interface GameState {
   /** Player IDs in turn order. */
@@ -312,10 +313,12 @@ export interface LooseAnomaly {
 /** One tile of SCP-106's Pocket Dimension track - see game/engine.ts for what each does (a Fracture Point escapes, a Decaying Passage costs Credits). Tile 0 is always 'neutral' (the drag-in point); the rest are reshuffled fresh every time someone's dragged in. */
 export type PocketDimensionTile = 'neutral' | 'fracturePoint' | 'decayingPassage';
 
-/** SCP-106's Pocket Dimension: the trapped player and SCP-106 both have a position on this same track. The player advances it on their own turns (see movePocketDimension); SCP-106 creeps 1 tile closer right after, every time. Ends via escape (a Fracture Point) or Termination (an unaffordable Decaying Passage, or SCP-106 reaching the player's tile) - either way, see GameState.pocketDimensionOrdeal for what "ended" means. */
+/** SCP-106's Pocket Dimension: the trapped player and SCP-106 both have a position on this same track. The player advances it on their own turns (see movePocketDimension); SCP-106 creeps closer right after, every time, at a speed that ramps up (see speedRamp) rather than staying fixed - it can never overshoot the player's tile, just close in faster the longer the ordeal drags on. Ends via escape (a Fracture Point) or Termination (an unaffordable Decaying Passage, or SCP-106 reaching the player's tile) - either way, see GameState.pocketDimensionOrdeal for what "ended" means. */
 export interface PocketDimensionOrdeal {
   trappedPlayerId: string;
   track: PocketDimensionTile[];
   playerTrackPosition: number;
   anomalyTrackPosition: number;
+  /** How many extra tiles/turn SCP-106 has picked up on top of its base pocket-dimension speed, incremented every turn the ordeal continues - starts at 0 on a fresh drag-in and never carries over between ordeals (a new one always starts back at 0). Makes an ordeal that drags on genuinely dangerous instead of a foregone escape via looping the track forever. */
+  speedRamp: number;
 }

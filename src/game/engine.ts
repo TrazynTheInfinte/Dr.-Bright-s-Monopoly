@@ -40,6 +40,8 @@ const ESCAPE_FEE = 200;
  */
 const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE = 20;
 const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE = 8;
+/** Rogue Anomaly landing on someone else's Wing/Tunnel/utility no longer seizes it automatically for free - it's offered a choice (see resolveOwnableLanding's 'rogueSeizure' decision): pay this multiple of the normal purchase price to seize it outright (still no rent to the owner, but not a free lunch anymore), or fall back to paying rent like anyone else, e.g. if it can't afford the premium. */
+export const ROGUE_SEIZE_PREMIUM_MULTIPLIER = 1.5;
 const MAX_DOUBLES_BEFORE_JAIL = 3;
 /** After 3 turns stuck without rolling doubles, a player is released for free - they've already paid the Holding Fee each of those turns. */
 const MAX_TURNS_IN_JAIL = 3;
@@ -75,8 +77,10 @@ const SCP_0492_ROAM_MIN_SPACES = 1;
 const SCP_0492_ROAM_MAX_SPACES = 2;
 /** The Pocket Dimension track's length, tile 0 (the drag-in point) included - it loops back around from the far end rather than dead-ending. */
 const POCKET_DIMENSION_LENGTH = 9;
-/** SCP-106's own crawl inside the Pocket Dimension: 1 tile closer every time the trapped player takes their turn - see movePocketDimension. */
-const OLD_MAN_POCKET_DIMENSION_SPEED = 1;
+/** SCP-106's own crawl inside the Pocket Dimension: 1 tile closer every time the trapped player takes their turn, to start with - see acknowledgePocketDimensionLanding, which adds PocketDimensionOrdeal.speedRamp on top of this base and grows that every turn the ordeal continues. */
+export const OLD_MAN_POCKET_DIMENSION_SPEED = 1;
+/** How much SCP-106's pocket-dimension speed grows every turn the ordeal continues - see PocketDimensionOrdeal.speedRamp. A 9-tile loop plus an average ~3.5-tile roll each turn means a fixed speed-1 crawl could be outrun forever; ramping it means dragging the ordeal out gets more dangerous, not safer. */
+const OLD_MAN_POCKET_DIMENSION_SPEED_RAMP = 1;
 /** Cost of landing on a Decaying Passage inside the Pocket Dimension. Can't afford it and it's a Termination instead - see movePocketDimension. */
 const DECAYING_PASSAGE_COST = 150;
 /** The Site Warhead is tile 12 - see data/board.ts. Only its current owner can trigger a purge. */
@@ -784,8 +788,15 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
 
   if (owner === playerId || state.mortgagedTileIds.includes(tileId)) return state;
 
-  if (piece === 'trex' || (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP)) {
+  if (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP) {
     return logEvent(transferTile(state, tileId, playerId), `Automatically seized ${getTile(tileId).name} - no rent paid.`);
+  }
+
+  // Rogue Anomaly's own landing on someone else's Wing/Tunnel/utility -
+  // no longer an automatic free seizure, see 'rogueSeizure' below and
+  // seizeRogueAnomalyTile/payRentInsteadOfSeizing.
+  if (piece === 'trex') {
+    return { ...state, pendingDecision: { type: 'rogueSeizure', tileId, ownerId: owner } };
   }
 
   // Janitor's "Below the Floor Plan" - never pays toll on a Maintenance Tunnel.
@@ -854,6 +865,34 @@ export function declinePurchase(state: GameState): GameState {
   if (state.pendingDecision?.type !== 'purchase') return state;
   // No auction system - it just stays unowned.
   return { ...state, pendingDecision: null };
+}
+
+/** The premium Rogue Anomaly pays the Foundation to seize someone else's Wing/Tunnel/utility outright - still no rent to the owner, but no longer a free lunch either. */
+function seizurePremiumFor(state: GameState, playerId: string, tileId: number): number {
+  return Math.ceil(purchasePriceFor(state, playerId, tileId) * ROGUE_SEIZE_PREMIUM_MULTIPLIER);
+}
+
+/** Rogue Anomaly choosing to seize rather than pay rent - see resolveOwnableLanding's 'rogueSeizure' decision. A no-op if it can't actually afford the premium; payRentInsteadOfSeizing is the fallback for that case. */
+export function seizeRogueAnomalyTile(state: GameState, playerId: string): GameState {
+  if (state.pendingDecision?.type !== 'rogueSeizure' || currentPlayerId(state) !== playerId) return state;
+  const { tileId } = state.pendingDecision;
+  const premium = seizurePremiumFor(state, playerId, tileId);
+  if (!canAfford(state, playerId, premium)) return state;
+
+  let next = chargePlayer({ ...state, pendingDecision: null }, playerId, premium, null);
+  next = transferTile(next, tileId, playerId);
+  return logEvent(next, `Seized ${getTile(tileId).name} for ${premium} Credits.`);
+}
+
+/** Rogue Anomaly declining to seize - pays the tile's owner normal rent instead, exactly like anyone else landing there, and ownership doesn't change hands. The fallback when the seizure premium isn't affordable (or just isn't worth it). */
+export function payRentInsteadOfSeizing(state: GameState, playerId: string): GameState {
+  if (state.pendingDecision?.type !== 'rogueSeizure' || currentPlayerId(state) !== playerId) return state;
+  const { tileId, ownerId } = state.pendingDecision;
+  const rent = calculateRent(state, tileId, ownerId, playerId);
+  return logEvent(
+    chargePlayer({ ...state, pendingDecision: null }, playerId, rent, ownerId),
+    `Paid ${rent} Credits rent on ${getTile(tileId).name} instead of seizing it.`,
+  );
 }
 
 // --- Cards -------------------------------------------------------------
@@ -1756,28 +1795,42 @@ function resolveVoicesAnomalyCatch(state: GameState, targetPlayerId: string, cau
 
 /**
  * SCP-173's own tick, entirely separate from the dormant/hunting flow
- * above - it never locks onto one target, and it doesn't check every
- * turn either: it only ever acts once per round, specifically when
- * it becomes the turn of whoever's turn it was when it breached (see
- * spawnedOnPlayerId) - endTurn only calls this when endingPlayerId
- * matches. No-op if it's not loose, or someone did keep watch this
- * tick (frozen). Moves clockwise toward whoever's nearest by
+ * above - it doesn't check every turn: it only ever acts once per
+ * round, specifically when it becomes the turn of whoever's turn it
+ * was when it breached (see spawnedOnPlayerId) - endTurn only calls
+ * this when endingPlayerId matches. No-op if it's not loose, or
+ * someone did keep watch this tick (frozen). Once it commits to
+ * closing in on someone (targetPlayerId), it stays on them round after
+ * round rather than re-picking "nearest" fresh every time - re-picking
+ * every round could mean it never actually closes net distance on
+ * anyone if who's nearest keeps changing. Only re-targets if the
+ * current one becomes genuinely ineligible (Terminated some other way,
+ * reassigned into Rogue Anomaly, or temporarily invisible via SCP-268)
+ * - an AFK target just pauses the chase rather than losing it, same
+ * treatment as every other hunter. Moves clockwise by
  * SCULPTURE_UNWATCHED_SPEED spaces - catches them outright if that's
  * far enough, but a target far enough ahead genuinely outruns it this
- * round. Rogue Anomaly is never a valid target (immune, like with Shy
- * Guy); an AFK player is skipped too, same as a benched Shy Guy target.
+ * round.
  */
 function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string, rng: () => number): GameState {
   const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
   if (!sculpture || sculpture.spawnedOnPlayerId !== endingPlayerId || state.scp173Watched) return state;
 
-  const nearestId = nearestHuntableTarget(state, sculpture.tileId);
-  if (!nearestId) return state;
+  const current = sculpture.targetPlayerId ? state.players[sculpture.targetPlayerId] : null;
+  const currentGone = !current || current.isSpectating || current.hasEvasionActive || pieceOf(state, sculpture.targetPlayerId!) === 'trex';
+  let targetId = sculpture.targetPlayerId;
+  if (currentGone) {
+    targetId = nearestHuntableTarget(state, sculpture.tileId);
+    if (!targetId) return updateAnomaly(state, 'theSculpture', { targetPlayerId: null });
+  } else if (current.isAfkSpectating) {
+    return state; // just paused, not lost - waits for them rather than giving up on the chase
+  }
+  if (!targetId) return state; // unreachable - satisfies TS, the branches above already guarantee this
 
-  const newTileId = stepToward(sculpture.tileId, state.players[nearestId].position, SCULPTURE_UNWATCHED_SPEED);
-  return newTileId === state.players[nearestId].position
-    ? resolveAnomalyCatch(state, 'theSculpture', nearestId, newTileId, rng)
-    : updateAnomaly(state, 'theSculpture', { tileId: newTileId });
+  const newTileId = stepToward(sculpture.tileId, state.players[targetId].position, SCULPTURE_UNWATCHED_SPEED);
+  return newTileId === state.players[targetId].position
+    ? resolveAnomalyCatch(state, 'theSculpture', targetId, newTileId, rng)
+    : updateAnomaly(state, 'theSculpture', { tileId: newTileId, targetPlayerId: targetId });
 }
 
 // --- SCP-106's Pocket Dimension --------------------------------------------
@@ -1802,7 +1855,7 @@ function dragIntoPocketDimension(state: GameState, playerId: string, rng: () => 
   const track = generatePocketDimensionTrack(rng);
   const next: GameState = {
     ...updateAnomaly(state, 'theOldMan', { status: 'inPocketDimension', targetPlayerId: null }),
-    pocketDimensionOrdeal: { trappedPlayerId: playerId, track, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+    pocketDimensionOrdeal: { trappedPlayerId: playerId, track, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
   };
   return logEvent(next, 'SCP-106 caught up with someone and dragged them into its Pocket Dimension.');
 }
@@ -1891,13 +1944,17 @@ export function acknowledgePocketDimensionLanding(state: GameState, rng: () => n
 
   const stillTrapped = next.pocketDimensionOrdeal;
   if (stillTrapped) {
+    const speed = OLD_MAN_POCKET_DIMENSION_SPEED + stillTrapped.speedRamp;
     const gapToAnomaly =
       (stillTrapped.playerTrackPosition - stillTrapped.anomalyTrackPosition + POCKET_DIMENSION_LENGTH) % POCKET_DIMENSION_LENGTH;
-    if (gapToAnomaly <= OLD_MAN_POCKET_DIMENSION_SPEED) {
+    if (gapToAnomaly <= speed) {
       next = terminateInsidePocketDimension(next, playerId, rng);
     } else {
-      const newAnomalyPos = (stillTrapped.anomalyTrackPosition + OLD_MAN_POCKET_DIMENSION_SPEED) % POCKET_DIMENSION_LENGTH;
-      next = { ...next, pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos } };
+      const newAnomalyPos = (stillTrapped.anomalyTrackPosition + speed) % POCKET_DIMENSION_LENGTH;
+      next = {
+        ...next,
+        pocketDimensionOrdeal: { ...stillTrapped, anomalyTrackPosition: newAnomalyPos, speedRamp: stillTrapped.speedRamp + OLD_MAN_POCKET_DIMENSION_SPEED_RAMP },
+      };
     }
   }
 
@@ -2040,9 +2097,15 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // one of its own turns, same rhythm as the Holding Fee. If it can't
   // afford this, a debtSettlement opens for it right here and the turn
   // doesn't actually advance yet - same pattern as an unaffordable
-  // Holding Fee in resolveJailRoll.
+  // Holding Fee in resolveJailRoll. Skipped entirely once this player is
+  // already spectating - otherwise, in any game with more than 2
+  // players (where the match doesn't end the instant Rogue Anomaly is
+  // eliminated), a Terminated-via-Overhead trex would sit stuck at this
+  // exact currentTurnIndex forever: this same unaffordable charge would
+  // reopen on every subsequent attempt to finish advancing their turn,
+  // since it never actually needed them to still be playing.
   const withOverhead =
-    pieceOf(cleared, playerId) === 'trex'
+    pieceOf(cleared, playerId) === 'trex' && !cleared.players[playerId].isSpectating
       ? chargePlayer(
           logEvent(cleared, 'Containment Overhead: Foundation resources diverted to keep an Uncontained anomaly tracked.'),
           playerId,

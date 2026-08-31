@@ -27,7 +27,7 @@ A steeper, one-time payment a player in the Containment Chamber can make to leav
 _Avoid_: Bribe, Clearance Fee
 
 **Containment Overhead**:
-Rogue Anomaly's own standing cost, charged at the end of every one of its own turns regardless of anything else, scaling up with how many Wings/Tunnels/utilities it currently holds - the one thing that can put it in debt at all, since nothing else can (it never pays rent, and no Hostile Anomaly can catch it).
+Rogue Anomaly's own standing cost, charged at the end of every one of its own turns regardless of anything else, scaling up with how many Wings/Tunnels/utilities it currently holds - one of the only two things that can cost it Credits at all, alongside choosing to seize a Wing/Tunnel/utility outright instead of just paying rent on it (no Hostile Anomaly can ever catch it).
 _Avoid_: tax, upkeep
 
 **Terminated**:
@@ -104,7 +104,7 @@ A loose Hostile Anomaly's default, non-threatening state. SCP-096 stays dormant 
 _Avoid_: idle, sleeping
 
 **Hunting**:
-SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-106 and SCP-939 are always in this state from the moment they breach — neither ever needs to be viewed, and both automatically re-target whoever's closest if they ever lose their current target (SCP-939's marker stays hidden the entire time it's hunting - see Containment Breach). Catching someone doesn't end SCP-939's turn in this state either, unlike SCP-096/SCP-173/SCP-106 (whose catches all Go Dormant right where it happened) - it immediately re-targets whoever's next and keeps going, staying invisible the entire time; only once literally nobody is left to hunt does it finally go dormant, and visible for the first time. Unlike every other anomaly here, SCP-939 only actually closes distance once per round (same cadence as Keep Watch below) rather than every turn - it's silent and automatic, not slow, so this keeps it a real threat without being unbeatable. SCP-173 has no equivalent locked-on state — see Keep Watch. SCP-049 has its own separate targeting state instead — see Diagnosed.
+SCP-096's state once someone views it: it locks onto that one player and steadily closes the distance every turn until it catches them. SCP-106 and SCP-939 are always in this state from the moment they breach — neither ever needs to be viewed, and both automatically re-target whoever's closest if they ever lose their current target (SCP-939's marker stays hidden the entire time it's hunting - see Containment Breach). Catching someone doesn't end SCP-939's turn in this state either, unlike SCP-096/SCP-173/SCP-106 (whose catches all Go Dormant right where it happened) - it immediately re-targets whoever's next and keeps going, staying invisible the entire time; only once literally nobody is left to hunt does it finally go dormant, and visible for the first time. Unlike every other anomaly here, SCP-939 only actually closes distance once per round (same cadence as Keep Watch below) rather than every turn - it's silent and automatic, not slow, so this keeps it a real threat without being unbeatable. SCP-173 also locks onto whoever it commits to closing in on and stays on them round after round (re-targeting only if they become genuinely ineligible), rather than re-picking whoever's nearest fresh every round - see Keep Watch. SCP-049 has its own separate targeting state instead — see Diagnosed.
 _Avoid_: chasing, aggro
 
 **Diagnosed**:
@@ -124,7 +124,7 @@ What a fatal SCP-049 catch leaves behind on the board - an independent, physical
 _Avoid_: zombie (as a mechanic name - fine as flavor), corpse
 
 **Pocket Dimension**:
-SCP-106's own Hostile Anomaly mechanic: a separate 9-tile track that the player it caught, and SCP-106 itself, both enter together. The player advances along it each of their own turns instead of acting on the main board; SCP-106 creeps after them a little each time. Landing on a Fracture Point escapes back to the main board; running out of Credits on a Decaying Passage, or SCP-106 actually reaching the player's tile, both Get the player Caught for real. Either way the ordeal ending recontains SCP-106. Its tile order (past the fixed neutral entry tile) is reshuffled fresh every time someone's dragged in.
+SCP-106's own Hostile Anomaly mechanic: a separate 9-tile track that the player it caught, and SCP-106 itself, both enter together. The player advances along it each of their own turns instead of acting on the main board; SCP-106 creeps after them a little each time, faster the longer the ordeal drags on (starting slow enough to plausibly loop the track forever, so dragging it out is a real risk, not a safe stall) but never capable of overshooting past the player's own tile. Landing on a Fracture Point escapes back to the main board; running out of Credits on a Decaying Passage, or SCP-106 actually reaching the player's tile, both Get the player Caught for real. Either way the ordeal ending recontains SCP-106 and resets its pace back to the start for next time. Its tile order (past the fixed neutral entry tile) is reshuffled fresh every time someone's dragged in.
 _Avoid_: sub-board, mini-game, side-board
 
 **Fracture Point**:

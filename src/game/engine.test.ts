@@ -31,12 +31,14 @@ import {
   mortgageProperty,
   movePocketDimension,
   payEscapeFee,
+  payRentInsteadOfSeizing,
   proposeTrade,
   purgeAnomalies,
   rejoinFromAfk,
   resolveMtfEncounter,
   resolveRubberDuckEncounter,
   rollDice,
+  seizeRogueAnomalyTile,
   sellHouse,
   settleDebt,
   unmortgageProperty,
@@ -432,15 +434,15 @@ describe('special powers', () => {
     expect(game.players.p1.credits).toBe(1500); // free
   });
 
-  it("Rogue Anomaly (T-Rex) can't buy but auto-seizes an owned Wing with no rent paid", () => {
+  it("Rogue Anomaly (T-Rex) can't buy, and landing on an owned Wing opens a seize-or-pay-rent choice instead of an automatic seizure", () => {
     let game = makeGame(['trex', 'boot']);
     game = withPlayer(game, 'p2', { ownedTileIds: [6] });
     game = withPlayer(game, 'p1', { position: 0 });
     game = devSetForcedRoll(game, [6, 0]);
     game = rollDice(game);
-    expect(game.players.p1.ownedTileIds).toEqual([6]);
-    expect(game.players.p2.ownedTileIds).toEqual([]);
-    expect(game.players.p1.credits).toBe(1500);
+    expect(game.pendingDecision).toEqual({ type: 'rogueSeizure', tileId: 6, ownerId: 'p2' });
+    expect(game.players.p1.ownedTileIds).toEqual([]); // not seized yet
+    expect(game.players.p2.ownedTileIds).toEqual([6]);
   });
 
   it("Security Officer (Rubber Duck) can send an occupant to the Containment Chamber", () => {
@@ -462,6 +464,58 @@ describe('special powers', () => {
     game = buyTile(game, 'p1');
     expect(game.houses[1] ?? game.houses[3]).toBe(1);
     expect(game.hatFreeHouseSectors).toContain('purple');
+  });
+});
+
+describe("Rogue Anomaly's seize-or-pay-rent choice", () => {
+  it('seizing charges the 1.5x premium to the bank (not the owner) and transfers the tile', () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [6] }); // Communications Room, price 100
+    game = { ...game, pendingDecision: { type: 'rogueSeizure', tileId: 6, ownerId: 'p2' } };
+    game = seizeRogueAnomalyTile(game, 'p1');
+    expect(game.players.p1.ownedTileIds).toEqual([6]);
+    expect(game.players.p2.ownedTileIds).toEqual([]);
+    expect(game.players.p1.credits).toBe(1500 - 150); // ceil(100 * 1.5)
+    expect(game.players.p2.credits).toBe(1500); // the owner never sees any of it
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it("refuses to seize if the premium isn't affordable", () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withPlayer(game, 'p1', { credits: 100 });
+    game = withPlayer(game, 'p2', { ownedTileIds: [6] });
+    game = { ...game, pendingDecision: { type: 'rogueSeizure', tileId: 6, ownerId: 'p2' } };
+    const before = game;
+    game = seizeRogueAnomalyTile(game, 'p1');
+    expect(game).toEqual(before);
+  });
+
+  it('paying rent instead leaves ownership untouched and pays the owner directly', () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withPlayer(game, 'p2', { ownedTileIds: [6] });
+    game = { ...game, pendingDecision: { type: 'rogueSeizure', tileId: 6, ownerId: 'p2' } };
+    game = payRentInsteadOfSeizing(game, 'p1');
+    expect(game.players.p1.ownedTileIds).toEqual([]);
+    expect(game.players.p2.ownedTileIds).toEqual([6]);
+    expect(game.players.p1.credits).toBe(1500 - 6); // base rent, 1 Wing owned, not a full Sector
+    expect(game.players.p2.credits).toBe(1500 + 6);
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it("paying rent it can't afford opens a debtSettlement, same as any other rent payment", () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withPlayer(game, 'p1', { credits: 5 });
+    game = withPlayer(game, 'p2', { ownedTileIds: [6] });
+    game = { ...game, pendingDecision: { type: 'rogueSeizure', tileId: 6, ownerId: 'p2' } };
+    game = payRentInsteadOfSeizing(game, 'p1');
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 6, creditorId: 'p2' });
+  });
+
+  it('neither resolver does anything without an actual rogueSeizure decision pending', () => {
+    let game = makeGame(['trex', 'boot']);
+    const before = game;
+    expect(seizeRogueAnomalyTile(game, 'p1')).toEqual(before);
+    expect(payRentInsteadOfSeizing(game, 'p1')).toEqual(before);
   });
 });
 
@@ -869,6 +923,27 @@ describe("Rogue Anomaly's Containment Overhead", () => {
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 20, creditorId: null });
     expect(game.currentTurnIndex).toBe(0); // never actually advanced
+  });
+
+  it("stops being charged once Terminated, and the stuck turn actually advances - doesn't loop forever in a game with more than 2 players", () => {
+    // In a 2-player game, going bankrupt here would immediately end the
+    // match (checkWinCondition) before this could ever be re-triggered -
+    // this specifically needs a 3rd player still around to expose it.
+    let game = makeGame(['trex', 'car', 'iron']);
+    game = withPlayer(game, 'p1', { credits: 10 });
+    game = endTurn(game, NO_BREACH_RNG); // can't afford it - debtSettlement opens, stuck at p1
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.isSpectating).toBe(true);
+    expect(game.currentTurnIndex).toBe(0); // still stuck here - endTurn bailed out before ever advancing it
+    expect(game.winnerId).toBeNull(); // p2 and p3 are still playing
+
+    // Retrying endTurn to actually finish advancing the turn used to
+    // re-open the exact same unaffordable Overhead charge on the
+    // now-Terminated p1, forever, since nothing checked isSpectating.
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.pendingDecision).toBeNull();
+    expect(game.currentTurnIndex).toBe(1); // actually moved on to p2
+    expect(game.players.p1.credits).toBe(0); // untouched by another charge attempt
   });
 });
 
@@ -1391,6 +1466,35 @@ describe('hostile anomalies', () => {
     expect(game.looseAnomalies[0].tileId).toBe(10); // capped step toward p2 (distance 20), not p1
   });
 
+  it('commits to whoever it first closes in on and keeps chasing them even if someone else becomes nearer next round', () => {
+    let game = makeGame(['iron', 'dog', 'cat']);
+    game = withPlayer(game, 'p1', { position: 35 }); // out of the running the whole time
+    game = withPlayer(game, 'p2', { position: 20 }); // nearest at the first tick - distance 20
+    game = withPlayer(game, 'p3', { position: 25 }); // farther at the first tick - distance 25
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
+    game = endTurn(game, NO_BREACH_RNG); // p1 ends - first tick: locks onto p2, moves 0 -> 10 (distance 20 > speed 10)
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
+    expect(game.looseAnomalies[0].tileId).toBe(10);
+    game = endTurn(game, NO_BREACH_RNG); // p2 ends - not spawnedOnPlayerId, no tick
+    game = endTurn(game, NO_BREACH_RNG); // p3 ends - not spawnedOnPlayerId, no tick
+    // Now much nearer to the sculpture's current tile (10) than p2 still is (distance 10) -
+    // if it re-picked "nearest" fresh this round, it would switch to p3 instead.
+    game = withPlayer(game, 'p3', { position: 11 });
+    game = endTurn(game, NO_BREACH_RNG); // p1 ends again - second tick
+    // Stayed locked onto p2 - closes the remaining exact-speed gap (10) and catches them,
+    // rather than switching to the now-much-closer p3.
+    expect(game.pendingPieceChoice?.playerId).toBe('p2');
+  });
+
+  it('re-targets once the currently locked-on target becomes ineligible, instead of continuing to chase them', () => {
+    let game = makeGame(['trex', 'dog', 'cat']);
+    game = withPlayer(game, 'p2', { isSpectating: true, position: 5 }); // the locked target - already gone some other way
+    game = withPlayer(game, 'p3', { position: 30 }); // the only remaining eligible candidate (p1 is Rogue Anomaly, immune)
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.looseAnomalies[0].targetPlayerId).toBe('p3');
+  });
+
   it("doesn't move on the very turn it breaches, even if someone's right next to its spawn tile", () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { lapsCompleted: 1 });
@@ -1542,7 +1646,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.2); // rolls a 2 -> tile 2, a Fracture Point
     expect(game.pendingDecision).toEqual({ type: 'pocketDimensionLanded', forPlayerId: 'p1' }); // not resolved yet
@@ -1561,14 +1665,51 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> tile 4, a Decaying Passage
     expect(game.players.p1.credits).toBe(1500); // not deducted yet - still just landed
     game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
     expect(game.players.p1.credits).toBe(1500 - 150);
-    expect(game.pocketDimensionOrdeal).toEqual({ trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 4, anomalyTrackPosition: 1 });
+    expect(game.pocketDimensionOrdeal).toEqual({ trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 4, anomalyTrackPosition: 1, speedRamp: 1 });
     expect(game.looseAnomalies[0].status).toBe('inPocketDimension'); // still loose, still trapped
+  });
+
+  it("SCP-106's pocket-dimension speed ramps up every turn the ordeal continues, and resets to 0 on a fresh drag-in", () => {
+    let game = makeGame();
+    game = {
+      ...game,
+      looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
+      // Far enough away (gap 8) that neither turn's base-speed-plus-ramp catches it outright - isolates the ramp itself.
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 1, speedRamp: 0 },
+    };
+    // Turn 1: speed is 1 (base + 0 ramp) - creeps from 1 to 2, ramp becomes 1.
+    game = movePocketDimension(game, 'p1', () => 0.9); // rolls a 6 -> tile 6, neutral
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pocketDimensionOrdeal?.anomalyTrackPosition).toBe(2);
+    expect(game.pocketDimensionOrdeal?.speedRamp).toBe(1);
+
+    // Turn 2: speed is now 2 (base 1 + ramp 1) - creeps from 2 to 4, ramp becomes 2.
+    // acknowledgePocketDimensionLanding ends the turn each time, so hand it back to p1.
+    game = { ...game, pendingDecision: null, currentTurnIndex: 0 };
+    game = movePocketDimension(game, 'p1', () => 0.6); // rolls a 4 -> (6 + 4) % 9 = 1... wraps, still far from SCP-106
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pocketDimensionOrdeal?.anomalyTrackPosition).toBe(4);
+    expect(game.pocketDimensionOrdeal?.speedRamp).toBe(2);
+  });
+
+  it('the ramped speed can never overshoot past the trapped player\'s own tile - it catches instead', () => {
+    let game = makeGame();
+    game = {
+      ...game,
+      looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
+      // A ramped speed of 5 against a gap of only 3 - would overshoot if it moved the full amount instead of catching.
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 3, anomalyTrackPosition: 0, speedRamp: 4 },
+    };
+    game = { ...game, pendingDecision: { type: 'pocketDimensionLanded', forPlayerId: 'p1' } };
+    game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
+    expect(game.pocketDimensionOrdeal).toBeNull(); // caught, not moved past
+    expect(game.pendingPieceChoice?.playerId).toBe('p1');
   });
 
   it("an unaffordable Decaying Passage Terminates the trapped player through the same pipeline as any other catch", () => {
@@ -1577,7 +1718,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> tile 4, an unaffordable Decaying Passage
     game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
@@ -1593,7 +1734,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
       // Already 1 tile behind, as if it crept closer on a prior turn.
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 1 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 1, speedRamp: 0 },
     };
     // Rolls a 1 -> player lands on tile 1 (neutral, no effect of its own).
     // SCP-106 then creeps from tile 1 to tile 2, which reaches/passes the
@@ -1610,7 +1751,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.9); // rolls a 6; 7 + 6 = 13, wraps to 4 on a 9-tile loop
     expect(game.pocketDimensionOrdeal?.playerTrackPosition).toBe(4);
@@ -1622,7 +1763,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 2 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 7, anomalyTrackPosition: 2, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.5); // rolls a 4 -> (7 + 4) % 9 = 2, same tile as SCP-106 - and a Fracture Point
     game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
@@ -1638,7 +1779,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
       // Tile 5 is neutral in TEST_TRACK - nothing to preempt a catch with.
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 5 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 5, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.7); // rolls a 5 -> (0 + 5) % 9 = 5, same tile as SCP-106, neutral
     game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
@@ -1653,7 +1794,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
       ...game,
       pendingDecision: { type: 'pocketDimensionLanded', forPlayerId: 'p1' },
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 5, anomalyTrackPosition: 8 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 5, anomalyTrackPosition: 8, speedRamp: 0 },
     };
     // gap = (5 - 8 + 9) % 9 = 6, well outside SCP-106's speed (1) - no catch. Tile 5 is neutral, so the ordeal just continues.
     game = acknowledgePocketDimensionLanding(game, NO_BREACH_RNG);
@@ -1665,7 +1806,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     expect(movePocketDimension(game, 'p2')).toEqual(game);
   });
@@ -1680,7 +1821,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = movePocketDimension(game, 'p1', () => 0.2);
     const before = game;
@@ -1708,7 +1849,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
         { anomalyId: 'shyGuy', tileId: 31, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 },
         { anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 },
       ],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = purgeAnomalies(game, 'p1');
     expect(game.looseAnomalies).toEqual([{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }]);
@@ -1722,7 +1863,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     const before = game;
     game = purgeAnomalies(game, 'p1');
@@ -1734,7 +1875,7 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = {
       ...game,
       looseAnomalies: [{ anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 }],
-      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0 },
+      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
     };
     game = devKickPlayer(game, 'p2');
     expect(game.pocketDimensionOrdeal).toBeNull();

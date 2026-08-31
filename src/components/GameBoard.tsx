@@ -3,6 +3,7 @@ import { ANOMALIES } from '../data/anomalies';
 import { BOARD, getTile } from '../data/board';
 import { STARTING_PIECES } from '../data/pieces';
 import { findCard } from '../data/cards';
+import { OLD_MAN_POCKET_DIMENSION_SPEED, ROGUE_SEIZE_PREMIUM_MULTIPLIER } from '../game/engine';
 import type { CardDeck, GameState } from '../types/game';
 import {
   acknowledgeCardAndSync,
@@ -15,9 +16,11 @@ import {
   mortgageTileAndSync,
   movePocketDimensionAndSync,
   payEscapeFeeAndSync,
+  payRentInsteadOfSeizingAndSync,
   purgeAnomaliesAndSync,
   rejoinFromAfkAndSync,
   rollDiceAndSync,
+  seizeRogueAnomalyTileAndSync,
   useJanitorTunnelTravelAndSync,
 } from '../lib/gameSync';
 import { isPlayerAway } from '../lib/presence';
@@ -191,6 +194,9 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   const currentTurnPlayerId = game.turnOrder[game.currentTurnIndex];
   const isMyTurn = currentTurnPlayerId === playerId;
   const pendingTile = game.pendingDecision?.type === 'purchase' ? getTile(game.pendingDecision.tileId) : null;
+  const pendingSeizureTile = game.pendingDecision?.type === 'rogueSeizure' ? getTile(game.pendingDecision.tileId) : null;
+  const seizurePremium =
+    pendingSeizureTile && 'price' in pendingSeizureTile ? Math.ceil(pendingSeizureTile.price * ROGUE_SEIZE_PREMIUM_MULTIPLIER) : 0;
   // Shown to EVERY viewer, not just whoever's resolving it - a drawn
   // card used to only render for pendingDecision.forPlayerId, so
   // everyone else just saw nothing happen until the drawer clicked
@@ -490,6 +496,22 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             </ActionModal>
           )}
 
+          {isMyTurn && pendingSeizureTile && game.pendingDecision?.type === 'rogueSeizure' && (
+            <ActionModal>
+              <div className="purchase-prompt">
+                <p>
+                  Seize {pendingSeizureTile.name} for ₡{seizurePremium}, or pay rent instead?
+                </p>
+                <div className="purchase-prompt-actions">
+                  <button onClick={() => seizeRogueAnomalyTileAndSync(roomCode, game, playerId)} disabled={!me || me.credits < seizurePremium}>
+                    Seize (₡{seizurePremium})
+                  </button>
+                  <button onClick={() => payRentInsteadOfSeizingAndSync(roomCode, game, playerId)}>Pay Rent Instead</button>
+                </div>
+              </div>
+            </ActionModal>
+          )}
+
           {pendingCard && game.pendingDecision?.type === 'cardDrawn' && (
             <ActionModal>
               <div key={game.pendingDecision.cardId} className="purchase-prompt card-prompt card-reveal">
@@ -553,8 +575,9 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
               <p>
                 {room.players[game.pocketDimensionOrdeal.trappedPlayerId]?.name ?? 'Someone'} is trapped in SCP-106's Pocket
                 Dimension (tile {game.pocketDimensionOrdeal.playerTrackPosition} of {game.pocketDimensionOrdeal.track.length - 1},
-                SCP-106 at tile {game.pocketDimensionOrdeal.anomalyTrackPosition}) - out of the Site Warhead's reach until the
-                ordeal ends.
+                SCP-106 at tile {game.pocketDimensionOrdeal.anomalyTrackPosition}, closing in at{' '}
+                {OLD_MAN_POCKET_DIMENSION_SPEED + game.pocketDimensionOrdeal.speedRamp} tiles/turn and rising) - out of the Site
+                Warhead's reach until the ordeal ends.
               </p>
               {game.pendingDecision?.type === 'pocketDimensionLanded' && <p className="hint">Landed - finding out what that tile does...</p>}
             </div>
