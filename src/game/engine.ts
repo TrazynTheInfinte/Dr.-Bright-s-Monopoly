@@ -28,18 +28,27 @@ const ESCAPE_FEE = 200;
  * Rogue Anomaly's own downside for never paying rent and fearing no
  * Hostile Anomaly - a standing Containment Overhead charged at the end
  * of every one of its own turns, scaling with how much it's actually
- * holding. The only thing that can put it in debt at all - tuned via a
- * 100-game bot-simulation harness: a flat fee alone (50/turn) never
- * once put it in debt across 30 sample games (it was winning literally
- * every game before any downside existed); a heavier flat-scaling
- * version (30 base + 25/tile) overcorrected hard, terminating it in
- * every single sample game, often within ~200 turns. These numbers
- * landed it a real, non-trivial chance of Termination (roughly 1 in 6-7
- * games in that same all-bot worst case) without erasing the strength
- * its two immunities are supposed to represent.
+ * holding. The only thing that can put it in debt at all.
+ *
+ * Originally tuned (20 base + 8/tile) against 2-player calibration
+ * games running only ~200 turns total - the same mistake later caught
+ * with Intern's tuning. At a realistic ~400-turn session length with
+ * 4-6 players, Rogue Anomaly's own bots seize almost everything they
+ * land on (free or at a premium, never declining), so its owned-tile
+ * count climbs far higher over a real game than those short
+ * calibration runs ever exercised - at the old rate that meant a 96%
+ * death rate (204/212 in a 500-game bot-simulation balance pass). The
+ * relationship turned out highly non-linear rather than a clean
+ * bisection: halving it (10 + 4/tile) overcorrected hard the other way
+ * (58.9% "did well", the single strongest piece, 38.3% death); splitting
+ * the difference (15 + 6/tile) swung most of the way back (84.5%
+ * death, 13.6% "did well") rather than landing in the middle - a debt
+ * spiral compounds quickly once tile count is high enough to tip it
+ * into one. Nudged back down toward the 10/4 end rather than a naive
+ * midpoint, pending another bot-simulation pass.
  */
-const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE = 20;
-const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE = 8;
+const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE = 11;
+const ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE = 5;
 /** Rogue Anomaly landing on someone else's Wing/Tunnel/utility no longer seizes it automatically for free - it's offered a choice (see resolveOwnableLanding's 'rogueSeizure' decision): pay this multiple of the normal purchase price to seize it outright (still no rent to the owner, but not a free lunch anymore), or fall back to paying rent like anyone else, e.g. if it can't afford the premium. */
 export const ROGUE_SEIZE_PREMIUM_MULTIPLIER = 1.5;
 const MAX_DOUBLES_BEFORE_JAIL = 3;

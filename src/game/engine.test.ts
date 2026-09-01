@@ -1028,10 +1028,10 @@ describe("Janitor's Below the Floor Plan", () => {
 });
 
 describe("Rogue Anomaly's Containment Overhead", () => {
-  it("charges a base fee at the end of its own turn (20, owning nothing yet), and nobody else's", () => {
+  it("charges a base fee at the end of its own turn (11, owning nothing yet), and nobody else's", () => {
     let game = makeGame(['trex', 'car']);
     game = endTurn(game, NO_BREACH_RNG);
-    expect(game.players.p1.credits).toBe(1500 - 20);
+    expect(game.players.p1.credits).toBe(1500 - 11);
     game = { ...game, currentTurnIndex: 1 }; // p2's turn ending now, not Rogue Anomaly's
     game = endTurn(game, NO_BREACH_RNG);
     expect(game.players.p2.credits).toBe(1500); // untouched
@@ -1041,7 +1041,7 @@ describe("Rogue Anomaly's Containment Overhead", () => {
     let game = makeGame(['trex', 'car']);
     game = withPlayer(game, 'p1', { ownedTileIds: [1, 3, 6] }); // 3 tiles
     game = endTurn(game, NO_BREACH_RNG);
-    expect(game.players.p1.credits).toBe(1500 - (20 + 3 * 8)); // 44
+    expect(game.players.p1.credits).toBe(1500 - (11 + 3 * 5)); // 26
   });
 
   it("isn't charged again on a doubles continuation - only once the turn actually ends", () => {
@@ -1054,9 +1054,9 @@ describe("Rogue Anomaly's Containment Overhead", () => {
 
   it("opens a debtSettlement instead of ending the turn if it can't afford the overhead", () => {
     let game = makeGame(['trex', 'car']);
-    game = withPlayer(game, 'p1', { credits: 10 });
+    game = withPlayer(game, 'p1', { credits: 5 });
     game = endTurn(game, NO_BREACH_RNG);
-    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 20, creditorId: null });
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 11, creditorId: null });
     expect(game.currentTurnIndex).toBe(0); // never actually advanced
   });
 
@@ -1065,7 +1065,7 @@ describe("Rogue Anomaly's Containment Overhead", () => {
     // match (checkWinCondition) before this could ever be re-triggered -
     // this specifically needs a 3rd player still around to expose it.
     let game = makeGame(['trex', 'car', 'iron']);
-    game = withPlayer(game, 'p1', { credits: 10 });
+    game = withPlayer(game, 'p1', { credits: 5 });
     game = endTurn(game, NO_BREACH_RNG); // can't afford it - debtSettlement opens, stuck at p1
     game = declareBankruptcy(game, 'p1');
     expect(game.players.p1.isSpectating).toBe(true);
