@@ -41,49 +41,49 @@ export const STARTING_PIECES: PieceDefinition[] = [
     name: 'Intern',
     title: 'Foundation Intern',
     powerDescription:
-      "On a Learning Curve: hasn't been cleared to handle both dice unsupervised yet - rolls only 1, until three full laps past the Site Entrance earn them clearance to roll normally for the rest of the game. Unpaid Overtime: the Foundation works interns hardest and reimburses them least - collects an extra 50 Credits every time they pass the Site Entrance, graduated or not.",
+      "On a Learning Curve: hasn't been cleared to handle both dice unsupervised yet - rolls only 1, until a full lap past the Site Entrance earns them clearance to roll normally for the rest of the game. Unpaid Overtime: the Foundation works interns hardest and reimburses them least - collects an extra 100 Credits every time they pass the Site Entrance, graduated or not.",
   },
   {
     id: 'dog',
     name: 'Field Researcher',
     title: 'Field Researcher',
     powerDescription:
-      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile. Grant Funding: cleared for a research stipend (100 Credits) any time fieldwork puts them on a card tile, Directive or Event alike, whatever the card turns out to say.",
+      "Peer Review: reads every Foundation Directive before it's filed - gets to pick which one actually goes through when landing on that tile. Grant Funding: cleared for a research stipend (200 Credits) any time fieldwork puts them on a card tile, Directive or Event alike, whatever the card turns out to say.",
   },
   {
     id: 'wheelBarrel',
     name: 'Logistics Officer',
     title: 'Logistics & Requisitions Officer',
     powerDescription:
-      "Requisition Priority: the cheapest Wings on Site fall under Logistics' jurisdiction by default - automatically claims any purple-Sector Wing landed on, free if it's unclaimed, repossessed without payment if someone else already holds it. Bulk Requisition: orders houses and hotels in bulk, at a standing 25% discount. Overstock: keeps a private stockpile off the books - builds are never blocked by, or counted against, the Foundation's shared house/hotel supply.",
+      "Requisition Priority: the two cheapest Sectors on Site fall under Logistics' jurisdiction by default - automatically claims any purple- or light-blue-Sector Wing landed on, free if it's unclaimed, repossessed without payment if someone else already holds it. Bulk Requisition: orders houses and hotels in bulk, at a standing 35% discount. Overstock: keeps a private stockpile off the books - builds are never blocked by, or counted against, the Foundation's shared house/hotel supply.",
   },
   {
     id: 'hat',
     name: 'Administrator',
     title: 'Site Administrator',
     powerDescription:
-      "Fast-Tracked Permits: completing a Sector under their signature means the paperwork for its first house clears same-day, free of charge. Zoning Authority: doesn't need to own a whole Sector to start building there - a variance is granted for one house per Wing already held (two Wings owned means two houses total across the Sector, and so on), until the Sector's fully theirs, at which point construction proceeds without limit, hotels included.",
+      "Fast-Tracked Permits: completing a Sector under their signature means the paperwork for its first house clears same-day, free of charge. Zoning Authority: doesn't need to own a whole Sector to start building there - a variance is granted for one house per Wing already held (two Wings owned means two houses total across the Sector, and so on), until the Sector's fully theirs, at which point construction proceeds without limit, hotels included. Site Inspection: collects a flat inspection stipend landing on any Wing at all, owned or not, theirs or not.",
   },
   {
     id: 'penguin',
     name: 'Specialist',
     title: 'Containment Specialist',
     powerDescription:
-      "Standard Containment Procedure: trained to minimize collateral damage - pays 25% less rent on any Wing or Tunnel. Redundant Safeguards: once per game, if a forced payment would otherwise be unaffordable, an emergency grant arrives from Foundation contingency funds first - not a guaranteed save, just a cushion.",
+      "Standard Containment Procedure: trained to minimize collateral damage - pays 25% less rent on any Wing or Tunnel. Hazard Surcharge: anyone else risking contamination on ground they've secured pays for the privilege - 50% more rent collected on any Wing or Tunnel they own. Redundant Safeguards: up to three times a game, if a forced payment would otherwise be unaffordable, an emergency grant arrives from Foundation contingency funds first - not a guaranteed save, just a cushion, as many times as redundancy actually requires.",
   },
   {
     id: 'cat',
     name: 'Spy',
     title: 'Chaos Insurgency Spy',
     powerDescription:
-      "Plausible Deniability: after reading a drawn card, decides whether to act on it personally or make sure it lands on someone else's file instead.",
+      "Plausible Deniability: after reading a drawn card, decides whether to act on it personally or make sure it lands on someone else's file instead. Field Expenses: fieldwork isn't free - skims a flat amount of Credits off anyone actually found sharing a tile with them.",
   },
   {
     id: 'rubberDuck',
     name: 'Security Officer',
     title: 'Internal Security Officer',
     powerDescription:
-      "Standard Patrol: if their rounds happen to put them on the same square as someone else, can have that person hauled off to the Containment Chamber on the spot.",
+      "Standard Patrol: if their rounds happen to put them on the same square as someone else, can have that person hauled off to the Containment Chamber on the spot. Apprehension Bounty: an actual jailing pays out a flat Credit reward, straight from Foundation coffers.",
   },
   {
     id: 'trex',

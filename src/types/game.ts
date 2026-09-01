@@ -131,8 +131,8 @@ export interface GamePlayerState {
   usedShowOfForce: boolean;
   /** Site Director's Special Power ("Redirect Without Exposure"): handing a drawn card's effect to another player only works once per game - this flags that it's already happened. Only set when they actually redirect, not when they keep the card themselves. */
   usedRedirect: boolean;
-  /** Specialist's Special Power ("Redundant Safeguards"): the emergency Credit grant only fires once per game - this flags that it's already happened, whether or not it was actually enough to cover the debt that triggered it. */
-  usedSafeguard: boolean;
+  /** Specialist's Special Power ("Redundant Safeguards"): how many times the emergency Credit grant has already fired this game (capped - see REDUNDANT_SAFEGUARDS_MAX_USES), whether or not a given grant was actually enough to cover the debt that triggered it. */
+  safeguardsUsed: number;
   /** Rogue Anomaly's Special Power ("Induce a Breach"): the on-demand containment breach only fires once per game - this flags that it's already happened. */
   usedInduceBreach: boolean;
   /** Times this player has passed the Site Entrance. Tracked for everyone, but only meaningful for Intern's "On a Learning Curve": once it reaches the graduation threshold, they roll both dice like everyone else for the rest of the game. */

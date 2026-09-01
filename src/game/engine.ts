@@ -45,15 +45,67 @@ export const ROGUE_SEIZE_PREMIUM_MULTIPLIER = 1.5;
 const MAX_DOUBLES_BEFORE_JAIL = 3;
 /** After 3 turns stuck without rolling doubles, a player is released for free - they've already paid the Holding Fee each of those turns. */
 const MAX_TURNS_IN_JAIL = 3;
-const PURPLE_SEIZE_GROUP: ColorGroup = 'purple';
-/** Field Researcher's "Grant Funding": a flat stipend for landing on either card tile. */
-const GRANT_FUNDING_AMOUNT = 100;
-/** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds. */
-const BULK_REQUISITION_MULTIPLIER = 0.75;
+/**
+ * Logistics Officer's "Requisition Priority": which Sectors "fall under
+ * Logistics' jurisdiction" - originally purple alone (the cheapest
+ * Sector on the board, 2 Wings at 50-60 Credits each), which capped this
+ * power's real value far below what any of it looked like on paper (a
+ * free, no-payment seizure is stronger than even Rogue Anomaly's own
+ * seizure). A bot-simulation balance pass at a realistic session length
+ * found Logistics Officer still clearly underperforming (a "did well"
+ * rate of 3.3%, barely above the flat-zero pieces) - widened to the two
+ * cheapest Sectors (purple and light blue, 5 Wings total instead of 2)
+ * rather than raising the multiplier on Bulk Requisition alone, since
+ * that only ever paid off once a full Sector was already secured.
+ */
+const LOGISTICS_SEIZE_GROUPS: ColorGroup[] = ['purple', 'lightBlue'];
+/** Field Researcher's "Grant Funding": a flat stipend for landing on either card tile - raised from 100 since Peer Review (Foundation Directive only) is a strict subset of Site Director's Executive Authority (either deck), and a 100-game bot-simulation balance pass found Field Researcher never won a single simulated game. This stipend is meant to be its actual differentiator now, not the deck control. */
+const GRANT_FUNDING_AMOUNT = 200;
+/**
+ * Administrator's "Site Inspection" - a flat stipend for landing on any
+ * Wing at all, owned or not. Kept modest relative to Grant Funding
+ * above since Wings are landed on far more often than card tiles (22 of
+ * 40 tiles vs. only a handful) - a bot-simulation balance pass found
+ * Administrator never winning/leading a single simulated game even at a
+ * realistic session length, since both its existing powers only ever
+ * pay off once a Sector's actually coming together.
+ */
+const ADMINISTRATOR_INSPECTION_STIPEND = 60;
+/** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds - deepened from 25% off to 35% alongside widening Requisition Priority (see LOGISTICS_SEIZE_GROUPS), so the payoff once it does start building is bigger too, not just the odds of getting there. */
+const BULK_REQUISITION_MULTIPLIER = 0.65;
 /** Specialist's "Standard Containment Procedure": the rent discount multiplier on Wings/Tunnels they pay. */
 const CONTAINMENT_PROCEDURE_MULTIPLIER = 0.75;
-/** Specialist's "Redundant Safeguards": the one-time emergency grant when a forced payment would otherwise be unaffordable. */
+/**
+ * Specialist's "Hazard Surcharge" - a test case, not (yet) a real
+ * balance decision: every other pure cost-reduction/safety-net power
+ * tried on a zero-win-rate piece (Intern, three rounds - income twice,
+ * then a purchase discount) failed to move its win rate at all in
+ * bot-simulation. The working theory is that pieces which only reduce
+ * their OWN costs can never actually catch up to ones that extract
+ * wealth FROM other players (MTF's toll doubling/seizure, Rogue
+ * Anomaly's total rent immunity, etc.) - this charges anyone landing on
+ * a Specialist-owned Wing or Tunnel extra rent, on top of the existing
+ * discount Specialist itself pays, specifically to test that theory on
+ * a different already-zero-win piece before touching Intern again.
+ */
+const SPECIALIST_SURCHARGE_MULTIPLIER = 1.5;
+/** Spy's "Field Expenses" - see resolveLanding. */
+const SPY_SKIM_AMOUNT = 150;
+/** Security Officer's "Apprehension Bounty" - see resolveRubberDuckEncounter. */
+const SECURITY_OFFICER_BOUNTY = 300;
+/** Specialist's "Redundant Safeguards": the emergency grant when a forced payment would otherwise be unaffordable. */
 const REDUNDANT_SAFEGUARDS_AMOUNT = 300;
+/**
+ * How many times Redundant Safeguards can fire per game - "redundant"
+ * implies more than one backup, and a bot-simulation balance pass found
+ * Specialist winning/leading 0 games even after Hazard Surcharge (see
+ * that constant) gave it a genuine wealth-extraction power: a single
+ * one-time safety net contingent on already being in trouble isn't a
+ * recurring, guaranteed benefit the way the strongest pieces' powers
+ * are. Multiple uses turns this into that same kind of guaranteed,
+ * board-independent value instead of a rare fluke.
+ */
+const REDUNDANT_SAFEGUARDS_MAX_USES = 3;
 /** Chance, checked once per completed turn, that a new hostile anomaly breaches containment. */
 const BREACH_CHANCE = 0.08;
 /** How many spaces a hunting anomaly closes the gap by per turn tick - fast enough that being hunted is genuinely urgent. */
@@ -86,10 +138,24 @@ const DECAYING_PASSAGE_COST = 150;
 /** The Site Warhead is tile 12 - see data/board.ts. Only its current owner can trigger a purge. */
 const SITE_WARHEAD_TILE_ID = 12;
 const SITE_WARHEAD_PURGE_COST = 500;
-/** Intern's "On a Learning Curve": laps of the board needed before they're cleared to roll both dice unsupervised. */
-const INTERN_GRADUATION_LAPS = 3;
-/** Intern's "Unpaid Overtime": extra Credits collected on top of the standard Go bonus every time they pass the Site Entrance. */
-const INTERN_OVERTIME_BONUS = 50;
+/** Intern's "On a Learning Curve": laps of the board needed before they're cleared to roll both dice unsupervised - a real handicap (half the movement, half the chances to land on anything) for as long as it lasts, so kept short rather than dragging across a big chunk of the game. */
+const INTERN_GRADUATION_LAPS = 1;
+/**
+ * Intern's "Unpaid Overtime": extra Credits collected on top of the
+ * standard Go bonus every time they pass the Site Entrance. Raised from
+ * 50 to 100, then 200, plus a since-removed "Introductory Rate"
+ * purchase discount, chasing a win rate that turned out to be measured
+ * wrong: those bot-simulation passes ran games out to tens of thousands
+ * of turns, an artificial regime where the whole economy grinds to a
+ * cash-starved standstill (see engine's git history around this
+ * constant for the full story) - Intern's real problem there was never
+ * actually a weak power, and stacking three separate buffs on top of a
+ * bad measurement made it the single strongest piece in the roster once
+ * re-tested at a realistic ~400-turn session length. Settled back to
+ * 100 - a real, modest improvement over the original 50, without the
+ * purchase discount this constant used to sit next to.
+ */
+const INTERN_OVERTIME_BONUS = 100;
 /** SCP-207's Credits cost per extra space traveled - the strain of the boost, charged regardless of whether the resulting move was worth it. */
 const GAMERS_FUEL_CREDITS_PER_SPACE = 5;
 /** SCP-012's odds of finishing itself (badly) on any single use. */
@@ -164,7 +230,7 @@ export function createInitialGameState(
       usedTunnelTravelThisTurn: false,
       usedShowOfForce: false,
       usedRedirect: false,
-      usedSafeguard: false,
+      safeguardsUsed: 0,
       usedInduceBreach: false,
       lapsCompleted: 0,
       hasCountermeasureArmed: false,
@@ -284,11 +350,15 @@ function canAfford(state: GameState, playerId: string, amount: number): boolean 
 function chargePlayer(state: GameState, playerId: string, amount: number, creditorId: string | null): GameState {
   if (amount <= 0) return state;
   let working = state;
-  if (!canAfford(working, playerId, amount) && pieceOf(working, playerId) === 'penguin' && !working.players[playerId].usedSafeguard) {
+  if (
+    !canAfford(working, playerId, amount) &&
+    pieceOf(working, playerId) === 'penguin' &&
+    working.players[playerId].safeguardsUsed < REDUNDANT_SAFEGUARDS_MAX_USES
+  ) {
     working = logEvent(
       updatePlayer(working, playerId, {
         credits: working.players[playerId].credits + REDUNDANT_SAFEGUARDS_AMOUNT,
-        usedSafeguard: true,
+        safeguardsUsed: working.players[playerId].safeguardsUsed + 1,
       }),
       'Redundant Safeguards: an emergency grant arrives just in time.',
     );
@@ -743,6 +813,25 @@ function resolveLanding(state: GameState, playerId: string, position: number): G
     if (occupant) next = { ...next, rubberDuckEncounter: { rubberDuckPlayerId: playerId, targetPlayerId: occupant } };
   }
 
+  // Spy's "Field Expenses" - a second power (it was the only Personnel
+  // with just one), lifted straight from the tile-collision check
+  // above: skims a flat amount off anyone actually found on the same
+  // tile, capped at whatever they're currently holding. A bot-
+  // simulation balance pass found Spy never won/led a single simulated
+  // game at a realistic session length with only Plausible Deniability.
+  if (pieceOf(next, playerId) === 'cat') {
+    const occupant = findOccupant(next, position, playerId);
+    if (occupant) {
+      const skimmed = Math.min(SPY_SKIM_AMOUNT, next.players[occupant].credits);
+      if (skimmed > 0) {
+        next = logEvent(
+          giveCredits(updatePlayer(next, occupant, { credits: next.players[occupant].credits - skimmed }), playerId, skimmed),
+          `Field Expenses: skimmed ${skimmed} Credits off whoever was standing here.`,
+        );
+      }
+    }
+  }
+
   // Landing on an SCP-049-2 instance (the other collision direction -
   // one roaming onto a player - is checked in advanceScp0492Instances)
   // designates this player as SCP-049's new target, regardless of the
@@ -767,11 +856,27 @@ function resolveLanding(state: GameState, playerId: string, position: number): G
           : next;
       return { ...funded, pendingDecision: { type: 'awaitingCardDraw', deck: tile.deck } };
     }
-    case 'wing':
+    case 'wing': {
+      // Administrator's "Site Inspection" - a flat stipend for landing
+      // on any Wing at all, owned or not, theirs or not - a guaranteed,
+      // board-development-independent income stream to go with Zoning
+      // Authority/Fast-Tracked Permits, both of which only ever pay off
+      // once a Sector's actually coming together.
+      const inspected =
+        pieceOf(next, playerId) === 'hat'
+          ? logEvent(giveCredits(next, playerId, ADMINISTRATOR_INSPECTION_STIPEND), 'Site Inspection: collected an inspection stipend.')
+          : next;
+      return resolveOwnableLanding(inspected, playerId, tile.id);
+    }
     case 'tunnel':
     case 'utility':
       return resolveOwnableLanding(next, playerId, tile.id);
   }
+}
+
+function isLogisticsSeizeSector(tileId: number): boolean {
+  const group = sectorOf(tileId);
+  return group !== null && LOGISTICS_SEIZE_GROUPS.includes(group);
 }
 
 function resolveOwnableLanding(state: GameState, playerId: string, tileId: number): GameState {
@@ -780,7 +885,7 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
 
   if (!owner) {
     if (piece === 'trex') return state; // T-Rex can't buy - just sits there unowned
-    if (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP) {
+    if (piece === 'wheelBarrel' && isLogisticsSeizeSector(tileId)) {
       return logEvent(transferTile(state, tileId, playerId), `Logistics Officer automatically requisitioned ${getTile(tileId).name}.`);
     }
     return { ...state, pendingDecision: { type: 'purchase', tileId } };
@@ -788,7 +893,7 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
 
   if (owner === playerId || state.mortgagedTileIds.includes(tileId)) return state;
 
-  if (piece === 'wheelBarrel' && sectorOf(tileId) === PURPLE_SEIZE_GROUP) {
+  if (piece === 'wheelBarrel' && isLogisticsSeizeSector(tileId)) {
     return logEvent(transferTile(state, tileId, playerId), `Automatically seized ${getTile(tileId).name} - no rent paid.`);
   }
 
@@ -834,8 +939,10 @@ function calculateRent(state: GameState, tileId: number, owner: string, payerId:
     return utilitiesOwnedBy(state, owner) >= 2 ? roll * 10 : roll * 4;
   }
 
-  // Specialist's "Standard Containment Procedure" - 25% less rent on any Wing or Tunnel.
-  return pieceOf(state, payerId) === 'penguin' ? Math.floor(rent * CONTAINMENT_PROCEDURE_MULTIPLIER) : rent;
+  // Specialist's "Hazard Surcharge" - 25% more rent collected on any Wing or Tunnel it owns.
+  const withSurcharge = pieceOf(state, owner) === 'penguin' ? Math.ceil(rent * SPECIALIST_SURCHARGE_MULTIPLIER) : rent;
+  // Specialist's "Standard Containment Procedure" - 25% less rent on any Wing or Tunnel it pays.
+  return pieceOf(state, payerId) === 'penguin' ? Math.floor(withSurcharge * CONTAINMENT_PROCEDURE_MULTIPLIER) : withSurcharge;
 }
 
 // --- Buying ----------------------------------------------------------------
@@ -1114,9 +1221,20 @@ function nearestAhead(from: number, candidateTileIds: number[]): number {
 
 export function resolveRubberDuckEncounter(state: GameState, sendToJailChoice: boolean): GameState {
   if (!state.rubberDuckEncounter) return state;
-  const { targetPlayerId } = state.rubberDuckEncounter;
+  const { rubberDuckPlayerId, targetPlayerId } = state.rubberDuckEncounter;
   let next: GameState = { ...state, rubberDuckEncounter: null };
-  if (sendToJailChoice) next = logEvent(sendToJail(next, targetPlayerId), 'Security Officer sent a player to the Containment Chamber.');
+  if (sendToJailChoice) {
+    next = logEvent(sendToJail(next, targetPlayerId), 'Security Officer sent a player to the Containment Chamber.');
+    // "Apprehension Bounty" - a flat reward for an actual jailing, so
+    // Standard Patrol pays Security Officer directly instead of only
+    // ever inconveniencing someone else. A bot-simulation balance pass
+    // found it never won/led a single simulated game at a realistic
+    // session length with the disruption-only version of this power.
+    next = logEvent(
+      giveCredits(next, rubberDuckPlayerId, SECURITY_OFFICER_BOUNTY),
+      `Apprehension Bounty: collected ${SECURITY_OFFICER_BOUNTY} Credits for the catch.`,
+    );
+  }
   return next;
 }
 
