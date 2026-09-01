@@ -6,6 +6,7 @@ import { STARTING_PIECES } from '../data/pieces';
 import type {
   CardDeck,
   ColorGroup,
+  EliminationRecord,
   GameState,
   GamePlayerState,
   LooseAnomaly,
@@ -252,7 +253,40 @@ export function createInitialGameState(
     scp0492Instances: [],
     scp0492NextId: 0,
     doctorSpeedBoostActive: false,
+    peakNetWorth: Object.fromEntries(playerAssignments.map(({ playerId }) => [playerId, STARTING_CREDITS])),
+    eliminations: [],
   };
+}
+
+/** Credits plus the value of everything a player owns - mortgaged tiles at half price, houses/hotels at half their build cost (a rough liquidation value, mirroring what mortgageProperty/sellHouse would actually pay out). Used for peakNetWorth tracking, not for anything that affects gameplay. */
+export function netWorthOf(state: GameState, playerId: string): number {
+  const player = state.players[playerId];
+  let worth = player.credits;
+  for (const tileId of player.ownedTileIds) {
+    const tile = getTile(tileId);
+    const price = tile.kind === 'wing' || tile.kind === 'tunnel' || tile.kind === 'utility' ? tile.price : 0;
+    worth += state.mortgagedTileIds.includes(tileId) ? price / 2 : price;
+    if (tile.kind === 'wing') worth += (state.houses[tileId] ?? 0) * (tile.houseCost / 2);
+  }
+  return worth;
+}
+
+/** Updates every still-active player's peakNetWorth if they've just reached a new high - called once per completed turn (see endTurn), not on every single state change, since it's only ever displayed at match end. */
+function updatePeakNetWorth(state: GameState): GameState {
+  let next = state;
+  for (const playerId of activePlayerIds(state)) {
+    const worth = netWorthOf(next, playerId);
+    if (worth > next.peakNetWorth[playerId]) {
+      next = { ...next, peakNetWorth: { ...next.peakNetWorth, [playerId]: worth } };
+    }
+  }
+  return next;
+}
+
+/** Records a permanent Termination for the post-game summary's elimination timeline - see GameState.eliminations. Called at both real-Termination sites (applyCatchConsequence, declareBankruptcy), right where isSpectating is actually set. */
+function recordElimination(state: GameState, playerId: string, cause: string): GameState {
+  const record: EliminationRecord = { playerId, pieceId: pieceOf(state, playerId), turnCount: state.turnCount, cause };
+  return { ...state, eliminations: [...state.eliminations, record] };
 }
 
 /** Player IDs still actually in the game - excludes anyone permanently isSpectating (Terminated) or benched for being AFK. Used anywhere a random pick or completion count must never land on someone who's already out. */
@@ -1482,6 +1516,7 @@ export function declareBankruptcy(state: GameState, playerId: string): GameState
   }
 
   next = updatePlayer(next, playerId, { credits: 0, isSpectating: true, ownedTileIds: [], heldCardIds: [] });
+  next = recordElimination(next, playerId, creditorId ? 'Bankrupted paying rent' : 'Bankrupted');
   next = logEvent(next, `${creditorId ? 'Terminated' : 'Terminated - assets returned to the Foundation'}.`);
 
   return checkWinCondition(next);
@@ -1652,6 +1687,7 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
       // 0 Credits is correct here (isSpectating means it never matters
       // functionally anyway).
       next = updatePlayer(next, targetPlayerId, { credits: 0, isSpectating: true });
+      next = recordElimination(next, targetPlayerId, openingMessage.replace(/\.$/, ''));
       next = checkWinCondition(logEvent(next, 'Terminated - no unclaimed Personnel left to reassign.'));
     } else {
       // Still actively playing as a freshly requisitioned Personnel -
@@ -2341,7 +2377,9 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
   // it was when it breached), so it's only cleared then - any other
   // turn's end must leave it exactly as it was, or an early Keep Watch
   // earlier in the round would get wiped before it ever mattered.
-  return sculptureBefore?.spawnedOnPlayerId === playerId ? { ...afterAnomalies, scp173Watched: false } : afterAnomalies;
+  const settled =
+    sculptureBefore?.spawnedOnPlayerId === playerId ? { ...afterAnomalies, scp173Watched: false } : afterAnomalies;
+  return updatePeakNetWorth(settled);
 }
 
 /** Everyone's a potential target once SCP-173 is loose, so anyone can spend their turn keeping watch on it instead of rolling: no movement happens, but it freezes SCP-173 for the round's move check (whoever's turn it breached on - see endTurn). Only available to the current player, before they've rolled at all this turn, and only while SCP-173 is actually loose. */
@@ -2412,6 +2450,7 @@ export function devKickPlayer(state: GameState, playerId: string): GameState {
     // to ever take the trapped player's turn again - a permanent softlock.
     next = { ...next, looseAnomalies: next.looseAnomalies.filter((a) => a.anomalyId !== 'theOldMan'), pocketDimensionOrdeal: null };
   }
+  next = recordElimination(next, playerId, 'Kicked by the host');
   return checkWinCondition(logEvent(next, 'Kicked by the host.'));
 }
 

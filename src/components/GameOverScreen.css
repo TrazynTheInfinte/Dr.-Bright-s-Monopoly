@@ -1,0 +1,57 @@
+.game-over-screen {
+  max-width: 32rem;
+  width: 100%;
+}
+
+.game-over-section {
+  width: 100%;
+  text-align: left;
+}
+
+.game-over-section h3 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.9rem;
+  color: var(--color-black);
+}
+
+.game-over-timeline,
+.game-over-standings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.game-over-timeline li,
+.game-over-standings li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  border-bottom: 1px dashed var(--color-grey);
+  padding-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.game-over-winner-row {
+  color: var(--color-red);
+  font-weight: 700;
+}
+
+.game-over-turn,
+.game-over-rank {
+  flex-shrink: 0;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-over-cause,
+.game-over-peak {
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+}

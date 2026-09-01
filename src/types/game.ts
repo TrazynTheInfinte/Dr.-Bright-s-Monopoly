@@ -284,6 +284,38 @@ export interface GameState {
   scp0492NextId: number;
   /** True while SCP-049 is closing in on a target it was forcibly handed by an SCP-049-2 collision from far away - grants a temporary hunt-speed boost (see DOCTOR_SPEED_BOOSTED in game/engine.ts) so a distant designation is still actually reachable. Cleared the moment that chase ends, one way or another. */
   doctorSpeedBoostActive: boolean;
+  /**
+   * Every player's peak net worth (Credits plus the value of everything
+   * they own, mortgages and houses included - see netWorthOf in
+   * game/engine.ts), sampled at the end of every completed turn. A
+   * player's final net worth at the moment the match ends is nearly
+   * always 0 (a real Termination zeroes everything out - see
+   * applyCatchConsequence/declareBankruptcy), so it's not a useful
+   * number for a post-game summary; the best they ever had is. A single
+   * running max per player is far cheaper to keep synced than storing a
+   * full history.
+   */
+  peakNetWorth: Record<string, number>;
+  /**
+   * One entry the instant a player is actually, permanently Terminated
+   * (not reassigned to a new unclaimed Personnel - see
+   * applyCatchConsequence/declareBankruptcy) - bounded at one entry per
+   * player, so unlike the log (capped at the last 20 events) it never
+   * loses earlier eliminations over a long game. Powers the post-game
+   * summary's elimination timeline.
+   */
+  eliminations: EliminationRecord[];
+}
+
+/** One player's permanent Termination - see GameState.eliminations. */
+export interface EliminationRecord {
+  playerId: string;
+  /** Which Personnel they were playing at the moment they were Terminated. */
+  pieceId: PieceId;
+  /** GameState.turnCount at the moment of Termination. */
+  turnCount: number;
+  /** Human-readable cause, e.g. "Terminated by SCP-106" or "Bankrupted paying rent". */
+  cause: string;
 }
 
 /** One shambling SCP-049-2 instance, left behind by a fatal SCP-049 catch - see GameState.scp0492Instances. */

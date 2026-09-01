@@ -33,6 +33,7 @@ import {
   keepWatchOnSculpture,
   mortgageProperty,
   movePocketDimension,
+  netWorthOf,
   payEscapeFee,
   payRentInsteadOfSeizing,
   payToRecontain,
@@ -1221,6 +1222,7 @@ describe('debt and bankruptcy', () => {
     expect(game.houses[1]).toBe(0);
     expect(game.housesRemaining).toBe(16);
     expect(game.winnerId).toBe('p2'); // only one player left standing
+    expect(game.eliminations).toEqual([{ playerId: 'p1', pieceId: 'dog', turnCount: 0, cause: 'Bankrupted' }]);
   });
 
   it('declareBankruptcy to a player hands over the debtor Credits and Wings', () => {
@@ -1231,6 +1233,37 @@ describe('debt and bankruptcy', () => {
     expect(game.players.p2.ownedTileIds).toEqual([1]);
     expect(game.players.p2.credits).toBe(1525);
     expect(game.players.p1.isSpectating).toBe(true);
+    expect(game.eliminations).toEqual([{ playerId: 'p1', pieceId: 'dog', turnCount: 0, cause: 'Bankrupted paying rent' }]);
+  });
+});
+
+describe('post-game summary tracking', () => {
+  it('netWorthOf counts Credits, tile prices, mortgage discounts, and house value', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { credits: 100, ownedTileIds: [1, 3] }); // purple Sector, 50 + 60 price
+    game = { ...game, houses: { 1: 2 }, mortgagedTileIds: [3] };
+    // 100 credits + tile 1 full price (50) + tile 1's 2 houses (half of houseCost each) + tile 3 at half price (mortgaged)
+    const tile1HouseCost = getTile(1).kind === 'wing' ? (getTile(1) as { houseCost: number }).houseCost : 0;
+    const tile3Price = getTile(3).kind === 'wing' ? (getTile(3) as { price: number }).price : 0;
+    expect(netWorthOf(game, 'p1')).toBe(100 + 50 + 2 * (tile1HouseCost / 2) + tile3Price / 2);
+  });
+
+  it('peakNetWorth starts at the starting Credits and only ever rises, sampled once per completed turn', () => {
+    let game = makeGame();
+    expect(game.peakNetWorth).toEqual({ p1: 1500, p2: 1500 });
+    game = withPlayer(game, 'p1', { credits: 2000 });
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.peakNetWorth.p1).toBe(2000);
+    game = withPlayer(game, 'p1', { credits: 500 }); // dropping back down doesn't lower the recorded peak
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.peakNetWorth.p1).toBe(2000);
+  });
+
+  it('does not update peakNetWorth for a spectating (Terminated) player', () => {
+    let game = makeGame(['boot', 'battleship', 'car']);
+    game = withPlayer(game, 'p1', { isSpectating: true, credits: 0 });
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.peakNetWorth.p1).toBe(1500); // untouched, not zeroed
   });
 });
 
@@ -1285,6 +1318,7 @@ describe('dev panel helpers', () => {
     expect(game.players.p1.isSpectating).toBe(true);
     expect(getTile(1)).toBeDefined(); // tile itself is unaffected, just unowned now
     expect(game.winnerId).toBe('p2');
+    expect(game.eliminations).toEqual([{ playerId: 'p1', pieceId: 'dog', turnCount: 0, cause: 'Kicked by the host' }]);
   });
 
   it('devRevivePlayer clears spectating flags', () => {
@@ -1473,6 +1507,7 @@ describe('hostile anomalies', () => {
     expect(game.players[caughtId].position).toBe(0); // sent back to the Site Entrance regardless
     expect(game.pendingPieceChoice).toBeNull();
     expect(game.winnerId).toBeNull(); // 11 players still active
+    expect(game.eliminations).toEqual([{ playerId: caughtId, pieceId: 'battleship', turnCount: game.turnCount, cause: 'SCP-096 "The Shy Guy" caught up with someone' }]);
   });
 
   it('chooseNewPersonnel reassigns to any available Personnel and clears the choice', () => {
