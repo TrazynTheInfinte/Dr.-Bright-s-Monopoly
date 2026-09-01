@@ -131,8 +131,6 @@ export interface GamePlayerState {
   usedShowOfForce: boolean;
   /** Site Director's Special Power ("Redirect Without Exposure"): handing a drawn card's effect to another player only works once per game - this flags that it's already happened. Only set when they actually redirect, not when they keep the card themselves. */
   usedRedirect: boolean;
-  /** Specialist's Special Power ("Redundant Safeguards"): how many times the emergency Credit grant has already fired this game (capped - see REDUNDANT_SAFEGUARDS_MAX_USES), whether or not a given grant was actually enough to cover the debt that triggered it. */
-  safeguardsUsed: number;
   /** Rogue Anomaly's Special Power ("Induce a Breach"): the on-demand containment breach only fires once per game - this flags that it's already happened. */
   usedInduceBreach: boolean;
   /** Times this player has passed the Site Entrance. Tracked for everyone, but only meaningful for Intern's "On a Learning Curve": once it reaches the graduation threshold, they roll both dice like everyone else for the rest of the game. */
@@ -182,7 +180,8 @@ export type PendingDecision =
   | { type: 'cardDrawn'; cardId: string; forPlayerId: string }
   | { type: 'debtSettlement'; forPlayerId: string; amountOwed: number; creditorId: string | null }
   | { type: 'pocketDimensionLanded'; forPlayerId: string }
-  | { type: 'rogueSeizure'; tileId: number; ownerId: string };
+  | { type: 'rogueSeizure'; tileId: number; ownerId: string }
+  | { type: 'administratorRemoteBuy'; sectorTileIds: number[] };
 
 export interface GameState {
   /** Player IDs in turn order. */
@@ -248,6 +247,18 @@ export interface GameState {
    * reasoning as rubberDuckEncounter above.
    */
   mtfEncounter: { mtfPlayerId: string; targetPlayerId: string; tileId: number } | null;
+  /**
+   * Specialist's (Penguin's) "Recontainment": set the instant a Hostile
+   * Anomaly catch (the standard dormant-on-the-spot kind - Shy Guy,
+   * SCP-173, SCP-939) actually lands on Specialist, offering the choice
+   * to pay a fee and immediately purge that specific anomaly rather
+   * than leave it loose for someone else to deal with. Runs
+   * independently of pendingDecision/pendingPieceChoice, same reasoning
+   * as rubberDuckEncounter above - a catch can already be opening a
+   * pendingPieceChoice of its own (a fresh Personnel reassignment) at
+   * the very same moment.
+   */
+  specialistRecontainOffer: { anomalyId: string; fee: number } | null;
   /** Hostile anomalies currently loose on the board - see data/anomalies.ts and game/engine.ts's breach/hunt/catch handling. Each anomalyId can only appear once in this list at a time; different anomalies can be loose simultaneously. */
   looseAnomalies: LooseAnomaly[];
   /**

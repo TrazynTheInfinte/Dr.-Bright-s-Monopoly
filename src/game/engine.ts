@@ -65,56 +65,26 @@ const MAX_TURNS_IN_JAIL = 3;
  * rate of 3.3%, barely above the flat-zero pieces) - widened to the two
  * cheapest Sectors (purple and light blue, 5 Wings total instead of 2)
  * rather than raising the multiplier on Bulk Requisition alone, since
- * that only ever paid off once a full Sector was already secured.
+ * that only ever paid off once a full Sector was already secured. Still
+ * underperforming after that (5.3% "did well"), widened one more step
+ * to "Universal Requisition" - see isLogisticsSeizeSector, which no
+ * longer gates on a Sector allow-list at all.
  */
-const LOGISTICS_SEIZE_GROUPS: ColorGroup[] = ['purple', 'lightBlue'];
 /** Field Researcher's "Grant Funding": a flat stipend for landing on either card tile - raised from 100 since Peer Review (Foundation Directive only) is a strict subset of Site Director's Executive Authority (either deck), and a 100-game bot-simulation balance pass found Field Researcher never won a single simulated game. This stipend is meant to be its actual differentiator now, not the deck control. */
 const GRANT_FUNDING_AMOUNT = 200;
-/**
- * Administrator's "Site Inspection" - a flat stipend for landing on any
- * Wing at all, owned or not. Kept modest relative to Grant Funding
- * above since Wings are landed on far more often than card tiles (22 of
- * 40 tiles vs. only a handful) - a bot-simulation balance pass found
- * Administrator never winning/leading a single simulated game even at a
- * realistic session length, since both its existing powers only ever
- * pay off once a Sector's actually coming together.
- */
-const ADMINISTRATOR_INSPECTION_STIPEND = 60;
 /** Logistics Officer's "Bulk Requisition": the discount multiplier on their own house/hotel builds - deepened from 25% off to 35% alongside widening Requisition Priority (see LOGISTICS_SEIZE_GROUPS), so the payoff once it does start building is bigger too, not just the odds of getting there. */
 const BULK_REQUISITION_MULTIPLIER = 0.65;
-/** Specialist's "Standard Containment Procedure": the rent discount multiplier on Wings/Tunnels they pay. */
-const CONTAINMENT_PROCEDURE_MULTIPLIER = 0.75;
-/**
- * Specialist's "Hazard Surcharge" - a test case, not (yet) a real
- * balance decision: every other pure cost-reduction/safety-net power
- * tried on a zero-win-rate piece (Intern, three rounds - income twice,
- * then a purchase discount) failed to move its win rate at all in
- * bot-simulation. The working theory is that pieces which only reduce
- * their OWN costs can never actually catch up to ones that extract
- * wealth FROM other players (MTF's toll doubling/seizure, Rogue
- * Anomaly's total rent immunity, etc.) - this charges anyone landing on
- * a Specialist-owned Wing or Tunnel extra rent, on top of the existing
- * discount Specialist itself pays, specifically to test that theory on
- * a different already-zero-win piece before touching Intern again.
- */
-const SPECIALIST_SURCHARGE_MULTIPLIER = 1.5;
 /** Spy's "Field Expenses" - see resolveLanding. */
 const SPY_SKIM_AMOUNT = 150;
+/** Spy's "Sabotage" - a flat cut skimmed off anyone else (never Spy itself) the instant they finish building a house or hotel anywhere on the board - see buildHouse. Added alongside keeping both of Spy's original powers, since a bot-simulation balance pass found it never won/led a single simulated game with only Plausible Deniability and Field Expenses. */
+const SPY_SABOTAGE_AMOUNT = 50;
 /** Security Officer's "Apprehension Bounty" - see resolveRubberDuckEncounter. */
 const SECURITY_OFFICER_BOUNTY = 300;
-/** Specialist's "Redundant Safeguards": the emergency grant when a forced payment would otherwise be unaffordable. */
-const REDUNDANT_SAFEGUARDS_AMOUNT = 300;
-/**
- * How many times Redundant Safeguards can fire per game - "redundant"
- * implies more than one backup, and a bot-simulation balance pass found
- * Specialist winning/leading 0 games even after Hazard Surcharge (see
- * that constant) gave it a genuine wealth-extraction power: a single
- * one-time safety net contingent on already being in trouble isn't a
- * recurring, guaranteed benefit the way the strongest pieces' powers
- * are. Multiple uses turns this into that same kind of guaranteed,
- * board-independent value instead of a rare fluke.
- */
-const REDUNDANT_SAFEGUARDS_MAX_USES = 3;
+/** Administrator's "Remote Acquisition": landing on a Wing they already own, in a Sector they don't yet fully own, opens the option to buy any other still-unowned Wing in that same Sector at its listed price - see the 'administratorRemoteBuy' pendingDecision. Replaces "Site Inspection" (a flat stipend for landing on any Wing at all), which a bot-simulation balance pass found never moved Administrator off a 0.4% "did well" rate - a flat, situational stipend independent of actually building a Sector wasn't the fix; letting them reach for a Sector faster is. */
+/** Specialist's "Recontainment" fee: the price of immediately purging the specific Hostile Anomaly that just caught them, offered right after the standard catch consequence resolves - see 'specialistRecontain' and payToRecontain. Same order of magnitude as the Site Warhead purge (500) but single-target and personal, so priced well below it. */
+const SPECIALIST_RECONTAIN_FEE = 250;
+/** Specialist's "Containment Insurance": a flat payout collected (from the Foundation, not the caught player) any time anyone else at all is caught by a Hostile Anomaly - see applyCatchConsequence. Replaces Standard Containment Procedure/Hazard Surcharge/Redundant Safeguards, all pure cost-reduction or self-directed powers that a bot-simulation balance pass found never moved Specialist off a 0% win/"did well" rate. */
+const CONTAINMENT_INSURANCE_PAYOUT = 150;
 /** Chance, checked once per completed turn, that a new hostile anomaly breaches containment. */
 const BREACH_CHANCE = 0.08;
 /** How many spaces a hunting anomaly closes the gap by per turn tick - fast enough that being hunted is genuinely urgent. */
@@ -239,7 +209,6 @@ export function createInitialGameState(
       usedTunnelTravelThisTurn: false,
       usedShowOfForce: false,
       usedRedirect: false,
-      safeguardsUsed: 0,
       usedInduceBreach: false,
       lapsCompleted: 0,
       hasCountermeasureArmed: false,
@@ -274,6 +243,7 @@ export function createInitialGameState(
     activeTrades: [],
     rubberDuckEncounter: null,
     mtfEncounter: null,
+    specialistRecontainOffer: null,
     looseAnomalies: [],
     pendingPieceChoice: null,
     scp173Watched: false,
@@ -348,30 +318,10 @@ function canAfford(state: GameState, playerId: string, amount: number): boolean 
  * deducting anything - the player must sell houses/mortgage properties
  * to raise the difference (see settleDebt) or give up (declareBankruptcy).
  *
- * Specialist's "Redundant Safeguards" steps in right here, once per
- * game: if they can't afford a forced payment, an emergency grant
- * arrives first - not a guaranteed save (a big enough debt can still
- * exceed it and open debtSettlement anyway), just a cushion. Doesn't
- * apply to voluntary spending (buying, building, mortgage payoff),
- * since those callers already check canAfford themselves before ever
- * reaching chargePlayer.
  */
 function chargePlayer(state: GameState, playerId: string, amount: number, creditorId: string | null): GameState {
   if (amount <= 0) return state;
   let working = state;
-  if (
-    !canAfford(working, playerId, amount) &&
-    pieceOf(working, playerId) === 'penguin' &&
-    working.players[playerId].safeguardsUsed < REDUNDANT_SAFEGUARDS_MAX_USES
-  ) {
-    working = logEvent(
-      updatePlayer(working, playerId, {
-        credits: working.players[playerId].credits + REDUNDANT_SAFEGUARDS_AMOUNT,
-        safeguardsUsed: working.players[playerId].safeguardsUsed + 1,
-      }),
-      'Redundant Safeguards: an emergency grant arrives just in time.',
-    );
-  }
   if (!canAfford(working, playerId, amount)) {
     return { ...working, pendingDecision: { type: 'debtSettlement', forPlayerId: playerId, amountOwed: amount, creditorId } };
   }
@@ -396,30 +346,29 @@ function sendToJail(state: GameState, playerId: string): GameState {
 }
 
 /**
- * Awards Administrator's (Hat's) Special Power the instant a Sector is
- * completed, if it hasn't already been rewarded for that Sector - one
- * free house on the first Wing found there with room to build. No-op
- * if this player isn't playing Administrator, the Sector isn't
- * actually complete, it's already been rewarded, or the bank is out of
- * houses.
+ * Awards Administrator's (Hat's) "Fast-Tracked Permits" the instant a
+ * Sector is completed, if it hasn't already been rewarded for that
+ * Sector - a free house on every Wing in it with room to build (not
+ * just the first one found), bank supply permitting. No-op if this
+ * player isn't playing Administrator, the Sector isn't actually
+ * complete, or it's already been rewarded.
  */
 function checkHatFreeHouse(state: GameState, playerId: string, group: ColorGroup): GameState {
   if (pieceOf(state, playerId) !== 'hat') return state;
   if (state.hatFreeHouseSectors.includes(group)) return state;
   if (!ownsFullSector(state, playerId, group)) return state;
-  if (state.housesRemaining <= 0) return state;
 
-  const tileIds = tileIdsInSector(group);
-  const targetTileId = tileIds.find((id) => (state.houses[id] ?? 0) < 4);
-  if (targetTileId === undefined) return state;
-
-  const next: GameState = {
-    ...state,
-    houses: { ...state.houses, [targetTileId]: (state.houses[targetTileId] ?? 0) + 1 },
-    housesRemaining: state.housesRemaining - 1,
-    hatFreeHouseSectors: [...state.hatFreeHouseSectors, group],
-  };
-  return logEvent(next, 'Administrator completed a Sector - a free house was granted.');
+  let next: GameState = { ...state, hatFreeHouseSectors: [...state.hatFreeHouseSectors, group] };
+  let granted = 0;
+  for (const tileId of tileIdsInSector(group)) {
+    if (next.housesRemaining <= 0) break;
+    const houses = next.houses[tileId] ?? 0;
+    if (houses >= 4) continue;
+    next = { ...next, houses: { ...next.houses, [tileId]: houses + 1 }, housesRemaining: next.housesRemaining - 1 };
+    granted++;
+  }
+  if (granted === 0) return next;
+  return logEvent(next, `Fast-Tracked Permits: completed a Sector - ${granted} free house${granted === 1 ? '' : 's'} granted.`);
 }
 
 function transferTile(state: GameState, tileId: number, toPlayerId: string | null): GameState {
@@ -496,6 +445,12 @@ function chargeEscapeFee(state: GameState, playerId: string): GameState {
   if (piece === 'boot') {
     return logEvent(state, "No questions asked - D-Class isn't billed the Escape Fee.");
   }
+  // Security Officer's "Security Clearance" - standing exemption from
+  // both Containment Chamber fees, same as D-Class's own exemption
+  // above, just for a very different reason (the paperwork, not pity).
+  if (piece === 'rubberDuck') {
+    return logEvent(state, "Security Clearance - Security Officer isn't billed the Escape Fee.");
+  }
   if (piece === 'iron' && !state.players[playerId].usedMasterKey) {
     return updatePlayer(
       logEvent(state, 'Used the master keyring - no Escape Fee.'),
@@ -506,10 +461,14 @@ function chargeEscapeFee(state: GameState, playerId: string): GameState {
   return chargePlayer(state, playerId, ESCAPE_FEE, null);
 }
 
-/** Charges the Holding Fee (50 Credits) for another turn stuck in the Containment Chamber - D-Class is exempt. */
+/** Charges the Holding Fee (50 Credits) for another turn stuck in the Containment Chamber - D-Class and Security Officer (Security Clearance) are exempt. */
 function chargeHoldingFee(state: GameState, playerId: string): GameState {
-  if (pieceOf(state, playerId) === 'boot') {
+  const piece = pieceOf(state, playerId);
+  if (piece === 'boot') {
     return logEvent(state, "No questions asked - D-Class isn't billed the Holding Fee.");
+  }
+  if (piece === 'rubberDuck') {
+    return logEvent(state, "Security Clearance - Security Officer isn't billed the Holding Fee.");
   }
   return chargePlayer(state, playerId, HOLDING_FEE, null);
 }
@@ -695,6 +654,24 @@ export function useMicroHid(
   );
 }
 
+/** Specialist's "Recontainment": pays the offered fee to immediately purge the specific Hostile Anomaly that just caught them - see resolveAnomalyCatch/specialistRecontainOffer. A no-op if they can't afford it; declineRecontainment is the only way to clear the offer (and unblock endTurn) without paying. */
+export function payToRecontain(state: GameState, playerId: string): GameState {
+  const offer = state.specialistRecontainOffer;
+  if (!offer || pieceOf(state, playerId) !== 'penguin') return state;
+  if (!canAfford(state, playerId, offer.fee)) return state;
+
+  const charged = chargePlayer({ ...state, specialistRecontainOffer: null }, playerId, offer.fee, null);
+  return logEvent(
+    { ...charged, looseAnomalies: charged.looseAnomalies.filter((a) => a.anomalyId !== offer.anomalyId) },
+    `Recontainment: paid ${offer.fee} Credits to immediately recontain ${findAnomaly(offer.anomalyId as AnomalyId).name}.`,
+  );
+}
+
+export function declineRecontainment(state: GameState): GameState {
+  if (!state.specialistRecontainOffer) return state;
+  return { ...state, specialistRecontainOffer: null };
+}
+
 /** What useJailbird is being swung at - a loose Hostile Anomaly, a roaming SCP-049-2 instance, or another player entirely (see the "for fun" player-vs-player option it supports). */
 export type JailbirdTarget =
   | { type: 'anomaly'; anomalyId: string }
@@ -865,27 +842,17 @@ function resolveLanding(state: GameState, playerId: string, position: number): G
           : next;
       return { ...funded, pendingDecision: { type: 'awaitingCardDraw', deck: tile.deck } };
     }
-    case 'wing': {
-      // Administrator's "Site Inspection" - a flat stipend for landing
-      // on any Wing at all, owned or not, theirs or not - a guaranteed,
-      // board-development-independent income stream to go with Zoning
-      // Authority/Fast-Tracked Permits, both of which only ever pay off
-      // once a Sector's actually coming together.
-      const inspected =
-        pieceOf(next, playerId) === 'hat'
-          ? logEvent(giveCredits(next, playerId, ADMINISTRATOR_INSPECTION_STIPEND), 'Site Inspection: collected an inspection stipend.')
-          : next;
-      return resolveOwnableLanding(inspected, playerId, tile.id);
-    }
+    case 'wing':
+      return resolveOwnableLanding(next, playerId, tile.id);
     case 'tunnel':
     case 'utility':
       return resolveOwnableLanding(next, playerId, tile.id);
   }
 }
 
+/** "Universal Requisition": every Sector on Site now falls under Logistics' jurisdiction, not just the two cheapest (see LOGISTICS_SEIZE_GROUPS, kept around only for its explanatory comment/history). Any Wing, anywhere, is automatically claimed if unclaimed or repossessed without payment if already held. */
 function isLogisticsSeizeSector(tileId: number): boolean {
-  const group = sectorOf(tileId);
-  return group !== null && LOGISTICS_SEIZE_GROUPS.includes(group);
+  return sectorOf(tileId) !== null;
 }
 
 function resolveOwnableLanding(state: GameState, playerId: string, tileId: number): GameState {
@@ -900,7 +867,23 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
     return { ...state, pendingDecision: { type: 'purchase', tileId } };
   }
 
-  if (owner === playerId || state.mortgagedTileIds.includes(tileId)) return state;
+  if (state.mortgagedTileIds.includes(tileId)) return state;
+
+  if (owner === playerId) {
+    // Administrator's "Remote Acquisition": re-landing on a Wing they
+    // already own opens the option to buy any other still-unowned Wing
+    // in that same Sector, at its listed price, straight from here -
+    // reaching for the rest of a Sector without needing to physically
+    // land on every last tile in it first.
+    if (piece === 'hat') {
+      const group = sectorOf(tileId);
+      const unownedInSector = group ? tileIdsInSector(group).filter((id) => !findOwner(state, id)) : [];
+      if (unownedInSector.length > 0) {
+        return { ...state, pendingDecision: { type: 'administratorRemoteBuy', sectorTileIds: unownedInSector } };
+      }
+    }
+    return state;
+  }
 
   if (piece === 'wheelBarrel' && isLogisticsSeizeSector(tileId)) {
     return logEvent(transferTile(state, tileId, playerId), `Automatically seized ${getTile(tileId).name} - no rent paid.`);
@@ -925,11 +908,11 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
     return { ...state, mtfEncounter: { mtfPlayerId: owner, targetPlayerId: playerId, tileId } };
   }
 
-  const rent = calculateRent(state, tileId, owner, playerId);
+  const rent = calculateRent(state, tileId, owner);
   return logEvent(chargePlayer(state, playerId, rent, owner), `Paid ${rent} Credits rent on ${getTile(tileId).name}.`);
 }
 
-function calculateRent(state: GameState, tileId: number, owner: string, payerId: string): number {
+function calculateRent(state: GameState, tileId: number, owner: string): number {
   const tile = getTile(tileId);
   let rent: number;
   if (tile.kind === 'wing') {
@@ -941,17 +924,12 @@ function calculateRent(state: GameState, tileId: number, owner: string, payerId:
     // MTF Operative's "Rapid Deployment": rent collected on an owned Tunnel is doubled.
     rent = pieceOf(state, owner) === 'battleship' ? baseRent * 2 : baseRent;
   } else {
-    // utility: 4x the roll if the owner has one, 10x if both - no
-    // Standard Containment Procedure discount here, it only covers
-    // Wings and Tunnels.
+    // utility: 4x the roll if the owner has one, 10x if both.
     const roll = state.lastRoll ? state.lastRoll[0] + state.lastRoll[1] : 0;
     return utilitiesOwnedBy(state, owner) >= 2 ? roll * 10 : roll * 4;
   }
 
-  // Specialist's "Hazard Surcharge" - 25% more rent collected on any Wing or Tunnel it owns.
-  const withSurcharge = pieceOf(state, owner) === 'penguin' ? Math.ceil(rent * SPECIALIST_SURCHARGE_MULTIPLIER) : rent;
-  // Specialist's "Standard Containment Procedure" - 25% less rent on any Wing or Tunnel it pays.
-  return pieceOf(state, payerId) === 'penguin' ? Math.floor(withSurcharge * CONTAINMENT_PROCEDURE_MULTIPLIER) : withSurcharge;
+  return rent;
 }
 
 // --- Buying ----------------------------------------------------------------
@@ -983,6 +961,23 @@ export function declinePurchase(state: GameState): GameState {
   return { ...state, pendingDecision: null };
 }
 
+/** Administrator's "Remote Acquisition" - buys one of the still-unowned Wings offered by an 'administratorRemoteBuy' decision, at its listed price. */
+export function buyAdministratorRemoteTile(state: GameState, playerId: string, tileId: number): GameState {
+  if (state.pendingDecision?.type !== 'administratorRemoteBuy' || currentPlayerId(state) !== playerId) return state;
+  if (!state.pendingDecision.sectorTileIds.includes(tileId) || findOwner(state, tileId)) return state;
+  const price = purchasePriceFor(state, playerId, tileId);
+  if (!canAfford(state, playerId, price)) return state;
+
+  let next = chargePlayer({ ...state, pendingDecision: null }, playerId, price, null);
+  next = transferTile(next, tileId, playerId);
+  return logEvent(next, `Remote Acquisition: bought ${getTile(tileId).name} for ${price} Credits.`);
+}
+
+export function declineAdministratorRemoteBuy(state: GameState): GameState {
+  if (state.pendingDecision?.type !== 'administratorRemoteBuy') return state;
+  return { ...state, pendingDecision: null };
+}
+
 /** The premium Rogue Anomaly pays the Foundation to seize someone else's Wing/Tunnel/utility outright - still no rent to the owner, but no longer a free lunch either. */
 function seizurePremiumFor(state: GameState, playerId: string, tileId: number): number {
   return Math.ceil(purchasePriceFor(state, playerId, tileId) * ROGUE_SEIZE_PREMIUM_MULTIPLIER);
@@ -1004,7 +999,7 @@ export function seizeRogueAnomalyTile(state: GameState, playerId: string): GameS
 export function payRentInsteadOfSeizing(state: GameState, playerId: string): GameState {
   if (state.pendingDecision?.type !== 'rogueSeizure' || currentPlayerId(state) !== playerId) return state;
   const { tileId, ownerId } = state.pendingDecision;
-  const rent = calculateRent(state, tileId, ownerId, playerId);
+  const rent = calculateRent(state, tileId, ownerId);
   return logEvent(
     chargePlayer({ ...state, pendingDecision: null }, playerId, rent, ownerId),
     `Paid ${rent} Credits rent on ${getTile(tileId).name} instead of seizing it.`,
@@ -1265,7 +1260,7 @@ export function resolveMtfEncounter(state: GameState, seize: boolean): GameState
   // SCP-049's "Cured" status blocks Show of Force same as every other
   // actively-used Special Power - falls back to collecting normal rent.
   if (!seize || state.players[mtfPlayerId].curedTurnsRemaining > 0) {
-    const rent = calculateRent(next, tileId, mtfPlayerId, targetPlayerId);
+    const rent = calculateRent(next, tileId, mtfPlayerId);
     return logEvent(chargePlayer(next, targetPlayerId, rent, mtfPlayerId), `Paid ${rent} Credits rent on ${getTile(tileId).name}.`);
   }
 
@@ -1351,7 +1346,21 @@ export function buildHouse(state: GameState, playerId: string, tileId: number): 
     housesRemaining: isHotel || isLogisticsOfficer ? next.housesRemaining : next.housesRemaining - 1,
     hotelsRemaining: !isHotel || isLogisticsOfficer ? next.hotelsRemaining : next.hotelsRemaining - 1,
   };
-  return logEvent(next, `Built ${isHotel ? 'a hotel' : 'a house'} on ${tile.name}.`);
+  next = logEvent(next, `Built ${isHotel ? 'a hotel' : 'a house'} on ${tile.name}.`);
+  return applySpySabotage(next, playerId);
+}
+
+/** Spy's "Sabotage": a flat cut skimmed off anyone else at all the moment they finish building a house or hotel, straight from their own funds - not the bank's. Never skims off Spy's own builds. No-op if Spy isn't in the game, or the builder can't cover it (a shakedown, not a forced debt - never opens debtSettlement). */
+function applySpySabotage(state: GameState, builderId: string): GameState {
+  if (pieceOf(state, builderId) === 'cat') return state;
+  const spy = activePlayerIds(state).find((id) => pieceOf(state, id) === 'cat');
+  if (!spy) return state;
+  const skimmed = Math.min(SPY_SABOTAGE_AMOUNT, state.players[builderId].credits);
+  if (skimmed <= 0) return state;
+  return logEvent(
+    giveCredits(updatePlayer(state, builderId, { credits: state.players[builderId].credits - skimmed }), spy, skimmed),
+    `Sabotage: Spy skimmed ${skimmed} Credits off that build.`,
+  );
 }
 
 export function sellHouse(state: GameState, playerId: string, tileId: number): GameState {
@@ -1654,7 +1663,14 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
     }
   }
 
-  return next;
+  return applyContainmentInsurance(next, targetPlayerId);
+}
+
+/** Specialist's "Containment Insurance": a flat payout collected any time anyone else at all is caught (whatever the cause - Hostile Anomaly or Jailbird) - not the caught player themselves, and only if Specialist is actually still in the game. */
+function applyContainmentInsurance(state: GameState, caughtPlayerId: string): GameState {
+  const insurer = activePlayerIds(state).find((id) => id !== caughtPlayerId && pieceOf(state, id) === 'penguin');
+  if (!insurer) return state;
+  return logEvent(giveCredits(state, insurer, CONTAINMENT_INSURANCE_PAYOUT), 'Containment Insurance: a payout arrives after someone else was caught.');
 }
 
 /** applyCatchConsequence, specifically for a Hostile Anomaly catch - names the anomaly in the opening log line. */
@@ -1663,10 +1679,34 @@ function resolvePlayerCaughtByAnomaly(state: GameState, anomalyId: string, targe
   return applyCatchConsequence(state, targetPlayerId, rng, `${anomaly.name} caught up with someone.`);
 }
 
-/** Shy Guy's, SCP-173's, and SCP-939's shared catch effect on the main board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly itself goes back to dormant right where it caught them - still loose (and, for every one of these except SCP-939, still visible) until someone purges it. SCP-106 never calls this - see dragIntoPocketDimension instead, since a main-board catch isn't a loss for it. SCP-049 has its own version below instead, since its consequence isn't the standard seizure. */
+/**
+ * Shy Guy's, SCP-173's, and SCP-939's shared catch effect on the main
+ * board: resolvePlayerCaughtByAnomaly's consequence, then the anomaly
+ * itself goes back to dormant right where it caught them - still loose
+ * (and, for every one of these except SCP-939, still visible) until
+ * someone purges it. SCP-106 never calls this - see
+ * dragIntoPocketDimension instead, since a main-board catch isn't a
+ * loss for it. SCP-049 has its own version below instead, since its
+ * consequence isn't the standard seizure.
+ *
+ * Specialist's "Recontainment" is offered right here, once the actual
+ * (post-Countermeasure-redirect) target is known: since it's still the
+ * exact anomaly that just caught them, sitting dormant at this same
+ * tile, they get first crack at paying to purge it themselves rather
+ * than leaving it loose for someone else. Resolved via
+ * specialistRecontainOffer, independent of any pendingPieceChoice this
+ * same catch may have just opened.
+ */
 function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId: string, caughtAtTileId: number, rng: () => number): GameState {
-  const next = resolvePlayerCaughtByAnomaly(state, anomalyId, targetPlayerId, rng);
-  return updateAnomaly(next, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+  const redirected = checkCountermeasureRedirect(state, targetPlayerId, rng);
+  const finalTargetId = redirected.targetPlayerId;
+  const caught = resolvePlayerCaughtByAnomaly(redirected.state, anomalyId, finalTargetId, rng);
+  const next = updateAnomaly(caught, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
+
+  if (pieceOf(next, finalTargetId) === 'penguin' && !next.players[finalTargetId].isSpectating) {
+    return { ...next, specialistRecontainOffer: { anomalyId, fee: SPECIALIST_RECONTAIN_FEE } };
+  }
+  return next;
 }
 
 /**
@@ -2213,7 +2253,7 @@ export function acceptTrade(state: GameState, tradeId: string): GameState {
 
 /** Ends the current turn, unless the current player still owes another doubles-earned roll. Advances to the next non-spectating player. */
 export function endTurn(state: GameState, rng: () => number = Math.random): GameState {
-  if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter) return state;
+  if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter || state.specialistRecontainOffer) return state;
   const playerId = currentPlayerId(state);
   if (state.lastRollWasDoubles && !state.players[playerId].inJail) return state; // they go again
 
@@ -2306,7 +2346,7 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
 
 /** Everyone's a potential target once SCP-173 is loose, so anyone can spend their turn keeping watch on it instead of rolling: no movement happens, but it freezes SCP-173 for the round's move check (whoever's turn it breached on - see endTurn). Only available to the current player, before they've rolled at all this turn, and only while SCP-173 is actually loose. */
 export function keepWatchOnSculpture(state: GameState, playerId: string, rng: () => number = Math.random): GameState {
-  if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter) return state;
+  if (state.pendingDecision || state.winnerId || state.rubberDuckEncounter || state.mtfEncounter || state.specialistRecontainOffer) return state;
   if (currentPlayerId(state) !== playerId || state.lastRoll) return state;
   if (state.players[playerId].inJail) return state; // resolve the Containment Chamber the normal way first
   if (!state.looseAnomalies.some((a) => a.anomalyId === 'theSculpture')) return state;

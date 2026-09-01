@@ -6,6 +6,7 @@ import {
   acknowledgePocketDimensionLanding,
   afkSkipTurn,
   buildHouse,
+  buyAdministratorRemoteTile,
   buyTile,
   catRedirectCard,
   chooseCardFromChoices,
@@ -13,7 +14,9 @@ import {
   confirmStillHere,
   createInitialGameState,
   declareBankruptcy,
+  declineAdministratorRemoteBuy,
   declinePurchase,
+  declineRecontainment,
   declineTrade,
   devForceSkipTurn,
   devJumpToTile,
@@ -32,6 +35,7 @@ import {
   movePocketDimension,
   payEscapeFee,
   payRentInsteadOfSeizing,
+  payToRecontain,
   proposeTrade,
   purgeAnomalies,
   rejoinFromAfk,
@@ -455,12 +459,14 @@ describe('special powers', () => {
     expect(game.players.p1.credits).toBe(1500);
   });
 
-  it("doesn't touch other Sectors - a normal purchase decision opens there", () => {
+  it("Universal Requisition reaches every Sector, not just purple/light blue", () => {
     let game = makeGame(['wheelBarrel', 'boot']);
     game = withPlayer(game, 'p1', { position: 0 });
-    game = devSetForcedRoll(game, [6, 5]); // 11 total -> tile 11 is pink, not purple or light blue
+    game = devSetForcedRoll(game, [6, 5]); // 11 total -> tile 11 is pink
     game = rollDice(game);
-    expect(game.pendingDecision).toEqual({ type: 'purchase', tileId: 11 });
+    expect(game.players.p1.ownedTileIds).toEqual([11]);
+    expect(game.players.p1.credits).toBe(1500); // free
+    expect(game.pendingDecision).toBeNull();
   });
 
   it("Rogue Anomaly (T-Rex) can't buy, and landing on an owned Wing opens a seize-or-pay-rent choice instead of an automatic seizure", () => {
@@ -486,12 +492,13 @@ describe('special powers', () => {
     expect(game.rubberDuckEncounter).toBeNull();
   });
 
-  it('Site Administrator (Hat) gets a free house on completing a Sector', () => {
+  it('Fast-Tracked Permits grants a free house on every Wing in the completed Sector', () => {
     let game = makeGame(['hat', 'boot']);
     game = withPlayer(game, 'p1', { position: 1, ownedTileIds: [3] });
     game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
-    game = buyTile(game, 'p1');
-    expect(game.houses[1] ?? game.houses[3]).toBe(1);
+    game = buyTile(game, 'p1'); // purple Sector (tiles 1, 3) just completed
+    expect(game.houses[1]).toBe(1);
+    expect(game.houses[3]).toBe(1);
     expect(game.hatFreeHouseSectors).toContain('purple');
   });
 });
@@ -587,29 +594,57 @@ describe("Administrator's Zoning Authority", () => {
     expect(game).toEqual(before);
   });
 
-  it('Site Inspection collects a flat stipend for landing on any Wing, owned or not', () => {
+  it('re-landing on an already-owned Wing offers to buy any other unowned Wing in the Sector', () => {
     let game = makeGame(['hat', 'boot']);
-    game = withPlayer(game, 'p1', { position: 0 });
-    game = devSetForcedRoll(game, [6, 0]);
-    game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 + 60); // collected even though tile 6 is still unowned
-    expect(game.pendingDecision).toEqual({ type: 'purchase', tileId: 6 });
-  });
-
-  it('collects Site Inspection even landing on a Wing they already own', () => {
-    let game = makeGame(['hat', 'boot']);
+    // lightBlue Sector has 3 Wings: 6, 8, 9
     game = withPlayer(game, 'p1', { position: 0, ownedTileIds: [6] });
     game = devSetForcedRoll(game, [6, 0]);
     game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 + 60);
+    expect(game.pendingDecision).toEqual({ type: 'administratorRemoteBuy', sectorTileIds: [8, 9] });
   });
 
-  it('is not collected by anyone else, and not for a Tunnel or utility landing', () => {
+  it('buyAdministratorRemoteTile buys the chosen Wing at its listed price and clears the offer', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [6] });
+    game = { ...game, pendingDecision: { type: 'administratorRemoteBuy', sectorTileIds: [8, 9] } };
+    game = buyAdministratorRemoteTile(game, 'p1', 8);
+    expect(game.players.p1.ownedTileIds).toEqual([6, 8]);
+    expect(game.players.p1.credits).toBe(1500 - 100); // tile 8 (Server Room) is 100
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it("refuses to buy a tile the offer didn't include, or one already owned", () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [6] });
+    game = withPlayer(game, 'p2', { ownedTileIds: [9] });
+    game = { ...game, pendingDecision: { type: 'administratorRemoteBuy', sectorTileIds: [8] } };
+    const before = game;
+    expect(buyAdministratorRemoteTile(game, 'p1', 9)).toEqual(before); // not in the offer
+    expect(buyAdministratorRemoteTile(game, 'p1', 1)).toEqual(before); // not even in this Sector
+  });
+
+  it('declineAdministratorRemoteBuy just clears the offer without charging anything', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = { ...game, pendingDecision: { type: 'administratorRemoteBuy', sectorTileIds: [8, 9] } };
+    game = declineAdministratorRemoteBuy(game);
+    expect(game.pendingDecision).toBeNull();
+    expect(game.players.p1.credits).toBe(1500);
+  });
+
+  it('does not offer anything re-landing on an owned Wing once the whole Sector is already theirs', () => {
+    let game = makeGame(['hat', 'boot']);
+    game = withPlayer(game, 'p1', { position: 0, ownedTileIds: [1, 3] }); // purple, fully owned
+    game = devSetForcedRoll(game, [1, 0]);
+    game = rollDice(game);
+    expect(game.pendingDecision).toBeNull();
+  });
+
+  it("does not affect anyone else re-landing on their own Wing", () => {
     let game = makeGame(['boot', 'hat']);
-    game = withPlayer(game, 'p1', { position: 0 });
+    game = withPlayer(game, 'p1', { position: 0, ownedTileIds: [6] });
     game = devSetForcedRoll(game, [6, 0]);
     game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500); // p1 is D-Class, not Administrator
+    expect(game.pendingDecision).toBeNull(); // p1 is D-Class, not Administrator
   });
 });
 
@@ -643,6 +678,30 @@ describe("Spy's Field Expenses", () => {
   });
 });
 
+describe("Spy's Sabotage", () => {
+  it('skims a flat cut off anyone else the instant they build a house', () => {
+    let game = makeGame(['boot', 'cat']); // p2 is Spy
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.players.p1.credits).toBe(1500 - 50 - 50);
+    expect(game.players.p2.credits).toBe(1500 + 50);
+  });
+
+  it("never skims off Spy's own builds", () => {
+    let game = makeGame(['cat', 'boot']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.players.p1.credits).toBe(1500 - 50);
+  });
+
+  it("does nothing if Spy isn't in the game", () => {
+    let game = makeGame(['boot', 'car']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1, 3] });
+    game = buildHouse(game, 'p1', 1);
+    expect(game.players.p1.credits).toBe(1500 - 50);
+  });
+});
+
 describe("Security Officer's Apprehension Bounty", () => {
   it('pays out a flat reward for an actual jailing', () => {
     let game = makeGame(['rubberDuck', 'boot']);
@@ -664,6 +723,25 @@ describe("Security Officer's Apprehension Bounty", () => {
     game = resolveRubberDuckEncounter(game, false);
     expect(game.players.p2.inJail).toBe(false);
     expect(game.players.p1.credits).toBe(1500);
+  });
+});
+
+describe("Security Officer's Security Clearance", () => {
+  it('is never billed the Escape Fee', () => {
+    let game = makeGame(['rubberDuck', 'boot']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = payEscapeFee(game, 'p1');
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.players.p1.inJail).toBe(false);
+  });
+
+  it('is never billed the Holding Fee', () => {
+    let game = makeGame(['rubberDuck', 'boot']);
+    game = withPlayer(game, 'p1', { inJail: true, position: 10 });
+    game = devSetForcedRoll(game, [1, 2]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1500);
+    expect(game.players.p1.inJail).toBe(true);
   });
 });
 
@@ -824,94 +902,69 @@ describe("Logistics Officer's Bulk Requisition and Overstock", () => {
   });
 });
 
-describe("Specialist's Standard Containment Procedure and Redundant Safeguards", () => {
-  it('pays 25% less rent on an owned Wing', () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p2', { ownedTileIds: [6] });
-    game = withPlayer(game, 'p1', { position: 0 });
-    game = devSetForcedRoll(game, [6, 0]);
-    game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 - Math.floor(6 * 0.75));
+describe("Specialist's Recontainment and Containment Insurance", () => {
+  it('being caught offers a recontainment fee for the exact anomaly that caught them', () => {
+    let game = makeGame(['boot', 'penguin']); // p2 is Specialist, the one who'll get caught
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG); // distance 2, well within the 6-space hunt speed - catches this tick
+    expect(game.specialistRecontainOffer).toEqual({ anomalyId: 'shyGuy', fee: 250 });
+    expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
   });
 
-  it('pays 25% less rent on a Maintenance Tunnel', () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p2', { ownedTileIds: [5] });
-    game = withPlayer(game, 'p1', { position: 0 });
-    game = devSetForcedRoll(game, [5, 0]);
-    game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 - Math.floor(25 * 0.75));
-  });
-
-  it('does not discount utility rent', () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p2', { ownedTileIds: [12] });
-    game = withPlayer(game, 'p1', { position: 8 });
-    game = devSetForcedRoll(game, [2, 2]);
-    game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 - 16); // full 4x the roll, no discount
-  });
-
-  it("Hazard Surcharge collects 50% more rent from anyone else landing on their Wing", () => {
+  it('payToRecontain pays the fee and removes the anomaly entirely', () => {
     let game = makeGame(['boot', 'penguin']);
-    game = withPlayer(game, 'p2', { ownedTileIds: [6] }); // p2 is Specialist, the owner this time
-    game = withPlayer(game, 'p1', { position: 0 });
-    game = devSetForcedRoll(game, [6, 0]);
-    game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 - Math.ceil(6 * 1.5)); // base rent 6 -> 9, no discount since p1 isn't Specialist
-    expect(game.players.p2.credits).toBe(1500 + Math.ceil(6 * 1.5));
+    game = withPlayer(game, 'p2', { credits: 1000 });
+    game = { ...game, specialistRecontainOffer: { anomalyId: 'shyGuy', fee: 250 } };
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    game = payToRecontain(game, 'p2');
+    expect(game.players.p2.credits).toBe(1000 - 250);
+    expect(game.looseAnomalies).toEqual([]);
+    expect(game.specialistRecontainOffer).toBeNull();
   });
 
-  it("doesn't surcharge utility rent either", () => {
+  it("refuses to recontain if they can't afford the fee", () => {
     let game = makeGame(['boot', 'penguin']);
-    game = withPlayer(game, 'p2', { ownedTileIds: [12] });
-    game = withPlayer(game, 'p1', { position: 8 });
-    game = devSetForcedRoll(game, [2, 2]);
-    game = rollDice(game);
-    expect(game.players.p1.credits).toBe(1500 - 16); // full 4x the roll, no surcharge
+    game = withPlayer(game, 'p2', { credits: 100 });
+    game = { ...game, specialistRecontainOffer: { anomalyId: 'shyGuy', fee: 250 } };
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    const before = game;
+    expect(payToRecontain(game, 'p2')).toEqual(before);
   });
 
-  it('an emergency grant covers a forced payment that would otherwise be unaffordable', () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p1', { inJail: true, position: 10, credits: 10 });
-    game = payEscapeFee(game, 'p1');
-    expect(game.players.p1.safeguardsUsed).toBe(1);
-    expect(game.players.p1.credits).toBe(10 + 300 - 200);
-    expect(game.players.p1.inJail).toBe(false);
-    expect(game.pendingDecision).toBeNull();
+  it('declineRecontainment clears the offer, leaving the anomaly loose, and unblocks endTurn', () => {
+    let game = makeGame(['boot', 'penguin']);
+    game = { ...game, specialistRecontainOffer: { anomalyId: 'shyGuy', fee: 250 } };
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    const stalled = endTurn(game, NO_BREACH_RNG);
+    expect(stalled.currentTurnIndex).toBe(game.currentTurnIndex); // blocked while the offer is open
+    game = declineRecontainment(game);
+    expect(game.specialistRecontainOffer).toBeNull();
+    expect(game.looseAnomalies).toHaveLength(1);
   });
 
-  it('grants the emergency safeguard up to 3 times per game, then stops', () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p1', { inJail: true, position: 10, credits: 10, safeguardsUsed: 3 });
-    game = payEscapeFee(game, 'p1');
-    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 200, creditorId: null });
-    expect(game.players.p1.credits).toBe(10);
+  it("isn't offered to anyone else caught the same way", () => {
+    let game = makeGame(); // neither p1 (dog) nor p2 (car) is Specialist
+    game = withPlayer(game, 'p2', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.specialistRecontainOffer).toBeNull();
   });
 
-  it("still opens a debtSettlement if the emergency grant isn't enough", () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p1', {
-      credits: 0,
-      ownedTileIds: [1, 3, 6, 8, 9],
-      position: 0,
-    });
-    game = { ...game, houses: { 1: 5, 3: 5, 6: 5, 8: 5, 9: 5 } }; // 5 hotels, 500 owed
-    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
-    game = devSetForcedCard(game, 'structuralDamageAssessment');
-    game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
-    expect(game.players.p1.safeguardsUsed).toBe(1);
-    expect(game.players.p1.credits).toBe(300); // the grant landed, just wasn't enough
-    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 500, creditorId: null });
+  it('Containment Insurance pays Specialist a flat stipend when anyone else is caught', () => {
+    let game = makeGame(['car', 'penguin']); // p1 gets caught, p2 is Specialist
+    game = withPlayer(game, 'p1', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.credits).toBe(1500 + 150);
   });
 
-  it('can fire multiple times across separate debt crises, up to the cap', () => {
-    let game = makeGame(['penguin', 'boot']);
-    game = withPlayer(game, 'p1', { inJail: true, position: 10, credits: 10, safeguardsUsed: 2 });
-    game = payEscapeFee(game, 'p1'); // 3rd and final use
-    expect(game.players.p1.safeguardsUsed).toBe(3);
-    expect(game.players.p1.credits).toBe(10 + 300 - 200);
+  it('does not pay Specialist for their own catch', () => {
+    let game = makeGame(['penguin', 'car']);
+    game = withPlayer(game, 'p1', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p1', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p1.credits).toBe(750); // reassigned with RESPAWN_CREDITS, same as the base catch test - no self-payout on top
   });
 });
 
