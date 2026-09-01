@@ -1630,6 +1630,28 @@ describe('hostile anomalies', () => {
     expect(game.looseAnomalies[0].targetPlayerId).toBe('p3');
   });
 
+  it("doesn't freeze forever once its anchor player (spawnedOnPlayerId) is Terminated - rebinds to whoever's turn is actually ending", () => {
+    // A player who's Terminated (isSpectating) never becomes
+    // currentPlayerId again, so if the once-per-round tick stayed
+    // pinned to that exact identity forever, this would never move
+    // again for the rest of the match despite still being loose.
+    let game = makeGame(['iron', 'dog', 'cat']);
+    game = withPlayer(game, 'p1', { isSpectating: true }); // already eliminated - the sculpture's original anchor
+    game = withPlayer(game, 'p2', { position: 20 }); // nearest of the two remaining active players
+    game = withPlayer(game, 'p3', { position: 35 });
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
+    game = { ...game, currentTurnIndex: 1 }; // p2's turn active
+    game = endTurn(game, NO_BREACH_RNG); // p2 ends turn - anchor rebinds to p2, ticks immediately
+    expect(game.looseAnomalies[0].spawnedOnPlayerId).toBe('p2');
+    expect(game.looseAnomalies[0].tileId).toBe(10); // closed the capped distance toward p2 (nearest, distance 20)
+
+    // Cadence now follows p2 normally - p3 ending their turn shouldn't tick it again.
+    game = endTurn(game, NO_BREACH_RNG); // p3 ends turn
+    expect(game.looseAnomalies[0].tileId).toBe(10);
+  });
+
   it("doesn't move on the very turn it breaches, even if someone's right next to its spawn tile", () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { lapsCompleted: 1 });
@@ -2304,6 +2326,23 @@ describe('SCP-939 "With Many Voices"', () => {
       spawnedOnPlayerId: 'p1',
     });
     expect(game.log.some((entry) => entry.includes('With Many Voices'))).toBe(true);
+  });
+
+  it("doesn't freeze forever once its anchor player (spawnedOnPlayerId) is Terminated - rebinds to whoever's turn is actually ending", () => {
+    // Same bug/fix as SCP-173's - a Terminated (isSpectating) player
+    // never becomes currentPlayerId again, so pinning the once-per-
+    // round tick to that exact identity forever would mean this stops
+    // moving for the rest of the match despite still being loose.
+    let game = makeGame(['iron', 'dog', 'cat']);
+    game = withPlayer(game, 'p1', { isSpectating: true }); // already eliminated - the original anchor
+    game = withPlayer(game, 'p2', { position: 20 });
+    game = withLooseAnomalies(game, [
+      { anomalyId: 'theVoices', tileId: 0, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0, spawnedOnPlayerId: 'p1' },
+    ]);
+    game = { ...game, currentTurnIndex: 1 }; // p2's turn active
+    game = endTurn(game, NO_BREACH_RNG); // p2 ends turn - anchor rebinds to p2, ticks immediately
+    expect(game.looseAnomalies[0].spawnedOnPlayerId).toBe('p2');
+    expect(game.looseAnomalies[0].tileId).toBe(6); // closed VOICES_HUNT_SPEED (6) toward p2 at distance 20
   });
 
   it('re-acquires the nearest player instead of going dormant if its target is lost mid-hunt, same as SCP-106', () => {

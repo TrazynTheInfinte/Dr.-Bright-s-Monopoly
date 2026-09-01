@@ -1871,26 +1871,34 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
  * SCP-939's own tick, entirely separate from advanceHuntingAnomalies
  * above - it only ever moves once per round, specifically on whichever
  * player's turn it happened to breach on (spawnedOnPlayerId), same
- * cadence as SCP-173's Keep Watch check (see advanceUnwatchedSculpture),
- * so it isn't excessively fast despite hunting automatically. No-op if
- * it's not loose, isn't this round's move check, or already went
- * dormant (nobody left - see resolveVoicesAnomalyCatch).
+ * cadence as SCP-173's Keep Watch check (see advanceUnwatchedSculpture)
+ * - including that same fix: once that anchor player is gone
+ * (Terminated some other way), a spectating player never becomes
+ * currentPlayerId again, so this rebinds the anchor to whoever's turn
+ * is actually ending instead of freezing dead - still shown loose (or,
+ * for this one, not shown at all) but never moving again - for the
+ * rest of the match. No-op if it's not loose, isn't this round's move
+ * check, or already went dormant (nobody left - see
+ * resolveVoicesAnomalyCatch).
  */
 function advanceVoices(state: GameState, endingPlayerId: string, rng: () => number): GameState {
   const voices = state.looseAnomalies.find((a) => a.anomalyId === 'theVoices');
-  if (!voices || voices.spawnedOnPlayerId !== endingPlayerId || voices.status !== 'hunting' || !voices.targetPlayerId) return state;
+  if (!voices || voices.status !== 'hunting' || !voices.targetPlayerId) return state;
+  const anchorGone = !voices.spawnedOnPlayerId || state.players[voices.spawnedOnPlayerId]?.isSpectating;
+  if (!anchorGone && voices.spawnedOnPlayerId !== endingPlayerId) return state;
 
-  const target = state.players[voices.targetPlayerId];
-  if (!target || target.isSpectating || target.hasEvasionActive || pieceOf(state, voices.targetPlayerId) === 'trex') {
-    const reacquired = nearestHuntableTarget(state, voices.tileId);
-    return updateAnomaly(state, 'theVoices', reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
+  let next = anchorGone ? updateAnomaly(state, 'theVoices', { spawnedOnPlayerId: endingPlayerId }) : state;
+  const target = next.players[voices.targetPlayerId];
+  if (!target || target.isSpectating || target.hasEvasionActive || pieceOf(next, voices.targetPlayerId) === 'trex') {
+    const reacquired = nearestHuntableTarget(next, voices.tileId);
+    return updateAnomaly(next, 'theVoices', reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
   }
-  if (target.isAfkSpectating) return state; // just paused, not lost - waits for them rather than giving up
+  if (target.isAfkSpectating) return next; // just paused, not lost - waits for them rather than giving up
 
   const newTileId = stepToward(voices.tileId, target.position, VOICES_HUNT_SPEED);
   return newTileId === target.position
-    ? resolveVoicesAnomalyCatch(state, voices.targetPlayerId, newTileId, rng)
-    : updateAnomaly(state, 'theVoices', { tileId: newTileId });
+    ? resolveVoicesAnomalyCatch(next, voices.targetPlayerId, newTileId, rng)
+    : updateAnomaly(next, 'theVoices', { tileId: newTileId });
 }
 
 /**
@@ -1916,39 +1924,50 @@ function resolveVoicesAnomalyCatch(state: GameState, targetPlayerId: string, cau
  * above - it doesn't check every turn: it only ever acts once per
  * round, specifically when it becomes the turn of whoever's turn it
  * was when it breached (see spawnedOnPlayerId) - endTurn only calls
- * this when endingPlayerId matches. No-op if it's not loose, or
- * someone did keep watch this tick (frozen). Once it commits to
- * closing in on someone (targetPlayerId), it stays on them round after
- * round rather than re-picking "nearest" fresh every time - re-picking
- * every round could mean it never actually closes net distance on
- * anyone if who's nearest keeps changing. Only re-targets if the
- * current one becomes genuinely ineligible (Terminated some other way,
- * reassigned into Rogue Anomaly, or temporarily invisible via SCP-268)
- * - an AFK target just pauses the chase rather than losing it, same
- * treatment as every other hunter. Moves clockwise by
- * SCULPTURE_UNWATCHED_SPEED spaces - catches them outright if that's
- * far enough, but a target far enough ahead genuinely outruns it this
- * round.
+ * this when endingPlayerId matches, EXCEPT once that anchor player is
+ * gone (Terminated some other way): a spectating player never becomes
+ * currentPlayerId again, so if the tick stayed pinned to their exact
+ * identity it would freeze this anomaly dead - still shown as loose,
+ * never actually moving again - for the rest of the match the instant
+ * they were eliminated. Rebinds the anchor to whoever's turn is
+ * actually ending in that case instead, so the once-per-round cadence
+ * keeps going on a still-valid player rather than silently dying.
+ * No-op if it's not loose, or someone did keep watch this tick
+ * (frozen). Once it commits to closing in on someone (targetPlayerId),
+ * it stays on them round after round rather than re-picking "nearest"
+ * fresh every time - re-picking every round could mean it never
+ * actually closes net distance on anyone if who's nearest keeps
+ * changing. Only re-targets if the current one becomes genuinely
+ * ineligible (Terminated some other way, reassigned into Rogue
+ * Anomaly, or temporarily invisible via SCP-268) - an AFK target just
+ * pauses the chase rather than losing it, same treatment as every
+ * other hunter. Moves clockwise by SCULPTURE_UNWATCHED_SPEED spaces -
+ * catches them outright if that's far enough, but a target far enough
+ * ahead genuinely outruns it this round.
  */
 function advanceUnwatchedSculpture(state: GameState, endingPlayerId: string, rng: () => number): GameState {
   const sculpture = state.looseAnomalies.find((a) => a.anomalyId === 'theSculpture');
-  if (!sculpture || sculpture.spawnedOnPlayerId !== endingPlayerId || state.scp173Watched) return state;
+  if (!sculpture) return state;
+  const anchorGone = !sculpture.spawnedOnPlayerId || state.players[sculpture.spawnedOnPlayerId]?.isSpectating;
+  if (!anchorGone && sculpture.spawnedOnPlayerId !== endingPlayerId) return state;
+  if (state.scp173Watched) return state;
 
-  const current = sculpture.targetPlayerId ? state.players[sculpture.targetPlayerId] : null;
-  const currentGone = !current || current.isSpectating || current.hasEvasionActive || pieceOf(state, sculpture.targetPlayerId!) === 'trex';
+  let next = anchorGone ? updateAnomaly(state, 'theSculpture', { spawnedOnPlayerId: endingPlayerId }) : state;
+  const current = sculpture.targetPlayerId ? next.players[sculpture.targetPlayerId] : null;
+  const currentGone = !current || current.isSpectating || current.hasEvasionActive || pieceOf(next, sculpture.targetPlayerId!) === 'trex';
   let targetId = sculpture.targetPlayerId;
   if (currentGone) {
-    targetId = nearestHuntableTarget(state, sculpture.tileId);
-    if (!targetId) return updateAnomaly(state, 'theSculpture', { targetPlayerId: null });
+    targetId = nearestHuntableTarget(next, sculpture.tileId);
+    if (!targetId) return updateAnomaly(next, 'theSculpture', { targetPlayerId: null });
   } else if (current.isAfkSpectating) {
-    return state; // just paused, not lost - waits for them rather than giving up on the chase
+    return next; // just paused, not lost - waits for them rather than giving up on the chase
   }
-  if (!targetId) return state; // unreachable - satisfies TS, the branches above already guarantee this
+  if (!targetId) return next; // unreachable - satisfies TS, the branches above already guarantee this
 
-  const newTileId = stepToward(sculpture.tileId, state.players[targetId].position, SCULPTURE_UNWATCHED_SPEED);
-  return newTileId === state.players[targetId].position
-    ? resolveAnomalyCatch(state, 'theSculpture', targetId, newTileId, rng)
-    : updateAnomaly(state, 'theSculpture', { tileId: newTileId, targetPlayerId: targetId });
+  const newTileId = stepToward(sculpture.tileId, next.players[targetId].position, SCULPTURE_UNWATCHED_SPEED);
+  return newTileId === next.players[targetId].position
+    ? resolveAnomalyCatch(next, 'theSculpture', targetId, newTileId, rng)
+    : updateAnomaly(next, 'theSculpture', { tileId: newTileId, targetPlayerId: targetId });
 }
 
 // --- SCP-106's Pocket Dimension --------------------------------------------
