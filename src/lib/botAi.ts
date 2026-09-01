@@ -18,6 +18,7 @@ import {
   drawFromPileAndSync,
   endTurnAndSync,
   mortgageTileAndSync,
+  movePocketDimensionAndSync,
   payRentInsteadOfSeizingAndSync,
   payToRecontainAndSync,
   resolveMtfEncounterAndSync,
@@ -260,6 +261,15 @@ export async function runBotStep(
 
   if (!isBotTurn) return;
 
+  // The trapped player's own turn is entirely replaced by the Pocket
+  // Dimension mini-game (see movePocketDimension in game/engine.ts) -
+  // rollDice itself now refuses to act for them, so this has to be
+  // checked before the normal inJail/roll logic below, not folded into it.
+  if (game.pocketDimensionOrdeal?.trappedPlayerId === botId) {
+    await movePocketDimensionAndSync(roomCode, game, botId);
+    return;
+  }
+
   if (player.inJail) {
     await rollDiceAndSync(roomCode, game);
     return;
@@ -289,6 +299,7 @@ export function botDecisionFingerprint(game: GameState, botId: string): string {
   if (game.pendingPieceChoice?.playerId === botId) return 'pendingPieceChoice';
   if (game.specialistRecontainOffer?.playerId === botId) return 'specialistRecontainOffer';
   if (game.turnOrder[game.currentTurnIndex] === botId) {
+    if (game.pocketDimensionOrdeal?.trappedPlayerId === botId) return 'pocketDimension';
     return !game.lastRoll || game.lastRollWasDoubles ? 'roll' : 'endTurn';
   }
   return 'idle';

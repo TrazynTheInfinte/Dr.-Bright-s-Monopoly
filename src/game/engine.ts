@@ -428,12 +428,13 @@ function transferTile(state: GameState, tileId: number, toPlayerId: string | nul
 
 // --- Rolling & movement --------------------------------------------------
 
-/** Rolls the dice for the current player (or the forced dev-panel roll, if set) and resolves whatever happens next: leaving/staying in the Containment Chamber, or moving and resolving the landed tile. No-op if there's already a pending decision blocking play. */
+/** Rolls the dice for the current player (or the forced dev-panel roll, if set) and resolves whatever happens next: leaving/staying in the Containment Chamber, or moving and resolving the landed tile. No-op if there's already a pending decision blocking play, or if it's actually the trapped player's turn - see movePocketDimension, which replaces their roll-and-move entirely for as long as SCP-106's ordeal lasts. */
 export function rollDice(state: GameState, rng: () => number = Math.random): GameState {
   if (state.pendingDecision || state.winnerId) return state;
   const playerId = currentPlayerId(state);
   const player = state.players[playerId];
   if (player.isSpectating || player.isAfkSpectating) return state;
+  if (state.pocketDimensionOrdeal?.trappedPlayerId === playerId) return state;
 
   const rollingOneDie =
     (pieceOf(state, playerId) === 'thimble' && player.lapsCompleted < INTERN_GRADUATION_LAPS) || player.curedTurnsRemaining > 0;

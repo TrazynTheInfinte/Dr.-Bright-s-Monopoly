@@ -1911,6 +1911,17 @@ describe('SCP-106 and the Pocket Dimension', () => {
     expect(game.players.p1.ownedTileIds).toEqual([1]);
   });
 
+  it("rollDice refuses to act for the trapped player - their turn is movePocketDimension's alone", () => {
+    let game = makeGame();
+    game = {
+      ...game,
+      pocketDimensionOrdeal: { trappedPlayerId: 'p1', track: TEST_TRACK, playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
+    };
+    const before = game;
+    game = rollDice(game, NO_BREACH_RNG);
+    expect(game).toEqual(before); // no-op - they never actually moved on the main board or claimed anything
+  });
+
   it('landing on a Fracture Point escapes back to the main board unharmed and recontains SCP-106', () => {
     let game = makeGame();
     game = {
