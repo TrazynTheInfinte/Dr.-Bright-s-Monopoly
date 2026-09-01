@@ -356,7 +356,12 @@ function canAfford(state: GameState, playerId: string, amount: number): boolean 
 function chargePlayer(state: GameState, playerId: string, amount: number, creditorId: string | null): GameState {
   if (amount <= 0) return state;
   let working = state;
-  if (!canAfford(working, playerId, amount)) {
+  // A forced payment that would leave the payer with exactly 0 Credits
+  // counts the same as one they can't afford outright - 0 isn't a
+  // stable "still playing, just broke" balance to land on from a forced
+  // charge, it's bankruptcy (same debtSettlement/declareBankruptcy
+  // pipeline as actually coming up short).
+  if (working.players[playerId].credits <= amount) {
     return { ...working, pendingDecision: { type: 'debtSettlement', forPlayerId: playerId, amountOwed: amount, creditorId } };
   }
   let next = updatePlayer(working, playerId, { credits: working.players[playerId].credits - amount });

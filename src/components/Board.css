@@ -464,15 +464,32 @@
   }
 }
 
-.tile-anomaly {
+/*
+ * Wraps every marker on a tile (up to three Hostile Anomalies plus any
+ * SCP-049-2 instances) in one compact flex row instead of each marker
+ * absolutely positioning itself at a growing offset - the old
+ * ever-growing offset could push a later marker (SCP-106 sharing a
+ * tile with something else, most often) past a narrow tile's own
+ * overflow: hidden edge on small screens, silently clipping it
+ * invisible while it was still perfectly loose and reachable
+ * (confirmed via the Site Warhead/Micro H.I.D./Jailbird target lists,
+ * which read the same game state). flex-wrap lets a tile that's
+ * genuinely too narrow for every marker wrap them onto a second row
+ * instead of clipping one outright.
+ */
+.tile-anomaly-stack {
   position: absolute;
   top: 2px;
-  /* Staggered by --anomaly-index (set inline per marker) so two anomalies
-     loose on the same tile at once don't render exactly on top of each
-     other - three can coexist now, not just one. */
-  left: calc(2px + var(--anomaly-index, 0) * 15px);
-  color: var(--color-red);
+  left: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: calc(100% - 4px);
   z-index: 4;
+}
+
+.tile-anomaly {
+  color: var(--color-red);
   filter: drop-shadow(0 0 3px rgba(255, 59, 59, 0.9));
   cursor: default;
 }

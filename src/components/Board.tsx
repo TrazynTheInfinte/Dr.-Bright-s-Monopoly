@@ -409,60 +409,59 @@ function Board({ room, roomCode, playerId, game }: BoardProps) {
               </div>
             )}
 
-            {anomaliesHere
-              // Shy Guy's marker only shows on the exact turn it breaches -
-              // after that it's still there (and still reacts to being
-              // hovered), just with no visible warning, so a table that
-              // isn't tracking it can genuinely forget. SCP-939 goes
-              // further: no marker at all while it's actually hunting (its
-              // whole "never announced" gimmick - see maybeBreachContainment/
-              // induceBreach's matching silence), only reappearing once it's
-              // caught someone and gone dormant, same as every other
-              // anomaly's post-catch visibility. SCP-173, SCP-106, and
-              // SCP-049 are never concealed like this at all - 173's whole
-              // mechanic depends on everyone knowing it's loose every turn
-              // so Keep Watch is an actual choice, and 106/049 are visible
-              // threats whose danger is in what they do, not that they
-              // exist. Rogue Anomaly sees every concealed one regardless.
-              .filter((anomaly) => {
-                if (viewerSeesConcealedAnomalies) return true;
-                if (anomaly.anomalyId === 'theVoices') return anomaly.status !== 'hunting';
-                if (anomaly.anomalyId === 'shyGuy') return anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount;
-                return true;
-              })
-              .map((anomaly, index) => {
-                const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
-                return (
-                  <span
-                    key={anomaly.anomalyId}
-                    className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
-                    // Two anomalies can be loose on the same tile at once now
-                    // that there are three - staggered so a second marker
-                    // doesn't sit exactly on top of (and hide) the first.
-                    style={{ '--anomaly-index': index } as CSSProperties}
-                    title={`${definition.name}${
-                      anomaly.status === 'hunting'
-                        ? ' - hunting someone'
-                        : anomaly.anomalyId === 'theSculpture'
-                          ? ' - Keep Watch on your turn or it moves'
-                          : ' - hover to view'
-                    }`}
-                  >
-                    <AnomalyIcon anomalyId={anomaly.anomalyId as AnomalyId} className="tile-anomaly-icon" />
-                  </span>
-                );
-              })}
+            {(anomaliesHere.length > 0 || scp0492Here.length > 0) && (
+              <div className="tile-anomaly-stack">
+                {anomaliesHere
+                  // Shy Guy's marker only shows on the exact turn it breaches -
+                  // after that it's still there (and still reacts to being
+                  // hovered), just with no visible warning, so a table that
+                  // isn't tracking it can genuinely forget. SCP-939 goes
+                  // further: no marker at all while it's actually hunting (its
+                  // whole "never announced" gimmick - see maybeBreachContainment/
+                  // induceBreach's matching silence), only reappearing once it's
+                  // caught someone and gone dormant, same as every other
+                  // anomaly's post-catch visibility. SCP-173, SCP-106, and
+                  // SCP-049 are never concealed like this at all - 173's whole
+                  // mechanic depends on everyone knowing it's loose every turn
+                  // so Keep Watch is an actual choice, and 106/049 are visible
+                  // threats whose danger is in what they do, not that they
+                  // exist. Rogue Anomaly sees every concealed one regardless.
+                  .filter((anomaly) => {
+                    if (viewerSeesConcealedAnomalies) return true;
+                    if (anomaly.anomalyId === 'theVoices') return anomaly.status !== 'hunting';
+                    if (anomaly.anomalyId === 'shyGuy') return anomaly.status === 'hunting' || anomaly.breachedOnTurnCount === game.turnCount;
+                    return true;
+                  })
+                  .map((anomaly) => {
+                    const definition = findAnomaly(anomaly.anomalyId as AnomalyId);
+                    return (
+                      <span
+                        key={anomaly.anomalyId}
+                        className={`tile-anomaly ${anomaly.status === 'hunting' ? 'is-hunting' : ''}`}
+                        title={`${definition.name}${
+                          anomaly.status === 'hunting'
+                            ? ' - hunting someone'
+                            : anomaly.anomalyId === 'theSculpture'
+                              ? ' - Keep Watch on your turn or it moves'
+                              : ' - hover to view'
+                        }`}
+                      >
+                        <AnomalyIcon anomalyId={anomaly.anomalyId as AnomalyId} className="tile-anomaly-icon" />
+                      </span>
+                    );
+                  })}
 
-            {scp0492Here.map((instance, index) => (
-              <span
-                key={instance.id}
-                className="tile-anomaly tile-scp0492"
-                style={{ '--anomaly-index': anomaliesHere.length + index } as CSSProperties}
-                title="SCP-049-2 - shambling, aimless, but designates a new target for SCP-049 on contact"
-              >
-                <Scp0492Icon className="tile-anomaly-icon" />
-              </span>
-            ))}
+                {scp0492Here.map((instance) => (
+                  <span
+                    key={instance.id}
+                    className="tile-anomaly tile-scp0492"
+                    title="SCP-049-2 - shambling, aimless, but designates a new target for SCP-049 on contact"
+                  >
+                    <Scp0492Icon className="tile-anomaly-icon" />
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

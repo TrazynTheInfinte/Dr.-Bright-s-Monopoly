@@ -15,6 +15,13 @@
   overflow-x: auto;
   background: var(--color-paper);
   border-top: 1px solid var(--color-black);
+  /* .hand is a flex item inside .game-board's own column layout, and a
+     flex item's default min-width is auto (its content size), not 0 -
+     it refuses to shrink below that. With enough owned tiles, the row
+     of cards is wider than the viewport, so without this the whole
+     page overflows sideways instead of this element's own
+     overflow-x: auto ever getting a chance to kick in. */
+  min-width: 0;
 }
 
 .hand-card {

@@ -1202,6 +1202,14 @@ describe('debt and bankruptcy', () => {
     expect(game.players.p1.credits).toBe(10);
   });
 
+  it('a forced charge that would leave exactly 0 Credits opens debtSettlement instead - 0 counts as bankrupt, not "still playing, just broke"', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { credits: 200, position: 10, inJail: true });
+    game = payEscapeFee(game, 'p1'); // exactly 200 owed, has exactly 200
+    expect(game.pendingDecision).toEqual({ type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 200, creditorId: null });
+    expect(game.players.p1.credits).toBe(200); // untouched - nothing was actually deducted
+  });
+
   it('settleDebt pays off the debt once the player can afford it', () => {
     let game = makeGame();
     game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 50, creditorId: null } };
