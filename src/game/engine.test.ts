@@ -909,14 +909,14 @@ describe("Specialist's Recontainment and Containment Insurance", () => {
     game = withPlayer(game, 'p2', { position: 10, credits: 1000 });
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
     game = endTurn(game, NO_BREACH_RNG); // distance 2, well within the 6-space hunt speed - catches this tick
-    expect(game.specialistRecontainOffer).toEqual({ anomalyId: 'shyGuy', fee: 250 });
+    expect(game.specialistRecontainOffer).toEqual({ playerId: 'p2', anomalyId: 'shyGuy', fee: 250 });
     expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
   });
 
   it('payToRecontain pays the fee and removes the anomaly entirely', () => {
     let game = makeGame(['boot', 'penguin']);
     game = withPlayer(game, 'p2', { credits: 1000 });
-    game = { ...game, specialistRecontainOffer: { anomalyId: 'shyGuy', fee: 250 } };
+    game = { ...game, specialistRecontainOffer: { playerId: 'p2', anomalyId: 'shyGuy', fee: 250 } };
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     game = payToRecontain(game, 'p2');
     expect(game.players.p2.credits).toBe(1000 - 250);
@@ -927,7 +927,7 @@ describe("Specialist's Recontainment and Containment Insurance", () => {
   it("refuses to recontain if they can't afford the fee", () => {
     let game = makeGame(['boot', 'penguin']);
     game = withPlayer(game, 'p2', { credits: 100 });
-    game = { ...game, specialistRecontainOffer: { anomalyId: 'shyGuy', fee: 250 } };
+    game = { ...game, specialistRecontainOffer: { playerId: 'p2', anomalyId: 'shyGuy', fee: 250 } };
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     const before = game;
     expect(payToRecontain(game, 'p2')).toEqual(before);
@@ -935,7 +935,7 @@ describe("Specialist's Recontainment and Containment Insurance", () => {
 
   it('declineRecontainment clears the offer, leaving the anomaly loose, and unblocks endTurn', () => {
     let game = makeGame(['boot', 'penguin']);
-    game = { ...game, specialistRecontainOffer: { anomalyId: 'shyGuy', fee: 250 } };
+    game = { ...game, specialistRecontainOffer: { playerId: 'p2', anomalyId: 'shyGuy', fee: 250 } };
     game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
     const stalled = endTurn(game, NO_BREACH_RNG);
     expect(stalled.currentTurnIndex).toBe(game.currentTurnIndex); // blocked while the offer is open
@@ -1353,6 +1353,23 @@ describe('dev panel helpers', () => {
     game = { ...game, pendingDecision: { type: 'purchase', tileId: 1 } };
     game = devForceSkipTurn(game, NO_BREACH_RNG);
     expect(game.pendingDecision).toBeNull();
+    expect(game.currentTurnIndex).toBe(1);
+  });
+
+  it('devForceSkipTurn also clears encounters/piece choices that block endTurn independently of pendingDecision', () => {
+    let game = makeGame();
+    game = {
+      ...game,
+      mtfEncounter: { mtfPlayerId: 'p1', targetPlayerId: 'p2', tileId: 6 },
+      rubberDuckEncounter: { rubberDuckPlayerId: 'p1', targetPlayerId: 'p2' },
+      specialistRecontainOffer: { playerId: 'p1', anomalyId: 'shyGuy', fee: 250 },
+      pendingPieceChoice: { playerId: 'p1', availablePieceIds: ['boot'] },
+    };
+    game = devForceSkipTurn(game, NO_BREACH_RNG);
+    expect(game.mtfEncounter).toBeNull();
+    expect(game.rubberDuckEncounter).toBeNull();
+    expect(game.specialistRecontainOffer).toBeNull();
+    expect(game.pendingPieceChoice).toBeNull();
     expect(game.currentTurnIndex).toBe(1);
   });
 });

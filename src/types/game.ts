@@ -258,7 +258,7 @@ export interface GameState {
    * pendingPieceChoice of its own (a fresh Personnel reassignment) at
    * the very same moment.
    */
-  specialistRecontainOffer: { anomalyId: string; fee: number } | null;
+  specialistRecontainOffer: { playerId: string; anomalyId: string; fee: number } | null;
   /** Hostile anomalies currently loose on the board - see data/anomalies.ts and game/engine.ts's breach/hunt/catch handling. Each anomalyId can only appear once in this list at a time; different anomalies can be loose simultaneously. */
   looseAnomalies: LooseAnomaly[];
   /**

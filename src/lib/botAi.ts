@@ -1,18 +1,29 @@
 import { getTile } from '../data/board';
+import { ROGUE_SEIZE_PREMIUM_MULTIPLIER } from '../game/engine';
 import type { ColorGroup, GamePlayerState, GameState } from '../types/game';
 import type { BotDifficulty } from '../types/room';
 import {
   acknowledgeCardAndSync,
+  acknowledgePocketDimensionLandingAndSync,
   buildHouseAndSync,
+  buyAdministratorRemoteTileAndSync,
   buyTileAndSync,
   catRedirectCardAndSync,
   chooseCardFromChoicesAndSync,
+  chooseNewPersonnelAndSync,
   declareBankruptcyAndSync,
+  declineAdministratorRemoteBuyAndSync,
   declinePurchaseAndSync,
+  declineRecontainmentAndSync,
   drawFromPileAndSync,
   endTurnAndSync,
   mortgageTileAndSync,
+  payRentInsteadOfSeizingAndSync,
+  payToRecontainAndSync,
+  resolveMtfEncounterAndSync,
+  resolveRubberDuckEncounterAndSync,
   rollDiceAndSync,
+  seizeRogueAnomalyTileAndSync,
   sellHouseAndSync,
   settleDebtAndSync,
 } from './gameSync';
@@ -182,6 +193,67 @@ export async function runBotStep(
       case 'debtSettlement':
         await resolveDebt(roomCode, game, botId, decision.amountOwed, forceFallback);
         return;
+
+      case 'rogueSeizure': {
+        if (forceFallback) {
+          await payRentInsteadOfSeizingAndSync(roomCode, game, botId);
+          return;
+        }
+        const tile = getTile(decision.tileId);
+        const price = tile.kind === 'wing' || tile.kind === 'tunnel' || tile.kind === 'utility' ? tile.price : 0;
+        const premium = Math.ceil(price * ROGUE_SEIZE_PREMIUM_MULTIPLIER);
+        if (shouldBuy(difficulty, player.credits, premium)) {
+          await seizeRogueAnomalyTileAndSync(roomCode, game, botId);
+        } else {
+          await payRentInsteadOfSeizingAndSync(roomCode, game, botId);
+        }
+        return;
+      }
+
+      case 'pocketDimensionLanded':
+        await acknowledgePocketDimensionLandingAndSync(roomCode, game);
+        return;
+
+      case 'administratorRemoteBuy': {
+        if (forceFallback) {
+          await declineAdministratorRemoteBuyAndSync(roomCode, game);
+          return;
+        }
+        const affordable = decision.sectorTileIds
+          .map((tileId) => ({ tileId, price: getTile(tileId).kind === 'wing' ? (getTile(tileId) as { price: number }).price : 0 }))
+          .filter(({ price }) => shouldBuy(difficulty, player.credits, price))
+          .sort((a, b) => a.price - b.price)[0];
+        if (affordable) {
+          await buyAdministratorRemoteTileAndSync(roomCode, game, botId, affordable.tileId);
+        } else {
+          await declineAdministratorRemoteBuyAndSync(roomCode, game);
+        }
+        return;
+      }
+    }
+    return;
+  }
+
+  // Independent of pendingDecision, same reasoning as GameBoard.tsx's
+  // encounter banners - each of these can be open at the same time as
+  // something else entirely, and blocks endTurn globally until answered.
+  if (game.mtfEncounter?.mtfPlayerId === botId) {
+    await resolveMtfEncounterAndSync(roomCode, game, !forceFallback);
+    return;
+  }
+  if (game.rubberDuckEncounter?.rubberDuckPlayerId === botId) {
+    await resolveRubberDuckEncounterAndSync(roomCode, game, !forceFallback);
+    return;
+  }
+  if (game.pendingPieceChoice?.playerId === botId) {
+    await chooseNewPersonnelAndSync(roomCode, game, botId, randomPick(game.pendingPieceChoice.availablePieceIds));
+    return;
+  }
+  if (game.specialistRecontainOffer?.playerId === botId) {
+    if (!forceFallback && player.credits >= game.specialistRecontainOffer.fee + 100) {
+      await payToRecontainAndSync(roomCode, game, botId);
+    } else {
+      await declineRecontainmentAndSync(roomCode, game);
     }
     return;
   }
@@ -212,6 +284,10 @@ export async function runBotStep(
 /** A fingerprint for "what runBotStep is about to attempt" - used by useBotDriver's stuck-action safety net alongside gameProgressSignature to detect a repeat attempt against unchanged state (a no-op write) and force a fallback next time. Doesn't need to be exhaustive per-option, just fine-grained enough that a genuinely different situation gets a different fingerprint. */
 export function botDecisionFingerprint(game: GameState, botId: string): string {
   if (game.pendingDecision) return game.pendingDecision.type;
+  if (game.mtfEncounter?.mtfPlayerId === botId) return 'mtfEncounter';
+  if (game.rubberDuckEncounter?.rubberDuckPlayerId === botId) return 'rubberDuckEncounter';
+  if (game.pendingPieceChoice?.playerId === botId) return 'pendingPieceChoice';
+  if (game.specialistRecontainOffer?.playerId === botId) return 'specialistRecontainOffer';
   if (game.turnOrder[game.currentTurnIndex] === botId) {
     return !game.lastRoll || game.lastRollWasDoubles ? 'roll' : 'endTurn';
   }

@@ -691,7 +691,7 @@ export function useMicroHid(
 /** Specialist's "Recontainment": pays the offered fee to immediately purge the specific Hostile Anomaly that just caught them - see resolveAnomalyCatch/specialistRecontainOffer. A no-op if they can't afford it; declineRecontainment is the only way to clear the offer (and unblock endTurn) without paying. */
 export function payToRecontain(state: GameState, playerId: string): GameState {
   const offer = state.specialistRecontainOffer;
-  if (!offer || pieceOf(state, playerId) !== 'penguin') return state;
+  if (!offer || offer.playerId !== playerId) return state;
   if (!canAfford(state, playerId, offer.fee)) return state;
 
   const charged = chargePlayer({ ...state, specialistRecontainOffer: null }, playerId, offer.fee, null);
@@ -1740,7 +1740,7 @@ function resolveAnomalyCatch(state: GameState, anomalyId: string, targetPlayerId
   const next = updateAnomaly(caught, anomalyId, { status: 'dormant', targetPlayerId: null, tileId: caughtAtTileId });
 
   if (pieceOf(next, finalTargetId) === 'penguin' && !next.players[finalTargetId].isSpectating) {
-    return { ...next, specialistRecontainOffer: { anomalyId, fee: SPECIALIST_RECONTAIN_FEE } };
+    return { ...next, specialistRecontainOffer: { playerId: finalTargetId, anomalyId, fee: SPECIALIST_RECONTAIN_FEE } };
   }
   return next;
 }
@@ -2458,9 +2458,29 @@ export function devRevivePlayer(state: GameState, playerId: string): GameState {
   return updatePlayer({ ...state, winnerId: null }, playerId, { isSpectating: false, isAfkSpectating: false });
 }
 
-/** Forces the current turn to end right now, discarding any pending decision - a rescue tool for a genuinely stuck game. */
+/**
+ * Forces the current turn to end right now, discarding any pending
+ * decision - a rescue tool for a genuinely stuck game. Also discards
+ * every decision that runs independently of pendingDecision
+ * (mtfEncounter, rubberDuckEncounter, specialistRecontainOffer) and any
+ * open pendingPieceChoice - each of those blocks endTurn just as hard
+ * as pendingDecision does (see endTurn's own guard), so clearing only
+ * pendingDecision wouldn't actually unstick a game stalled on one of
+ * these instead.
+ */
 export function devForceSkipTurn(state: GameState, rng: () => number = Math.random): GameState {
-  return endTurn({ ...state, pendingDecision: null, lastRollWasDoubles: false }, rng);
+  return endTurn(
+    {
+      ...state,
+      pendingDecision: null,
+      lastRollWasDoubles: false,
+      mtfEncounter: null,
+      rubberDuckEncounter: null,
+      specialistRecontainOffer: null,
+      pendingPieceChoice: null,
+    },
+    rng,
+  );
 }
 
 /** Forces a containment breach right now, bypassing the random per-turn chance - a no-op if that anomaly is already loose. */

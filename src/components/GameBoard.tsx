@@ -8,7 +8,9 @@ import type { CardDeck, GameState } from '../types/game';
 import {
   acknowledgeCardAndSync,
   acknowledgePocketDimensionLandingAndSync,
+  buyAdministratorRemoteTileAndSync,
   buyTileAndSync,
+  declineAdministratorRemoteBuyAndSync,
   declinePurchaseAndSync,
   endTurnAndSync,
   induceBreachAndSync,
@@ -44,6 +46,7 @@ import PocketDimensionBoard from './PocketDimensionBoard';
 import MtfEncounterBanner from './MtfEncounterBanner';
 import RubberDuckEncounterBanner from './RubberDuckEncounterBanner';
 import SnakeGame from './SnakeGame';
+import SpecialistRecontainBanner from './SpecialistRecontainBanner';
 import TradePanel from './TradePanel';
 import YourTurnBanner from './YourTurnBanner';
 import { useAfkSelfCheck } from './useAfkSelfCheck';
@@ -517,6 +520,32 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             </ActionModal>
           )}
 
+          {isMyTurn && game.pendingDecision?.type === 'administratorRemoteBuy' && (
+            <ActionModal>
+              <div className="purchase-prompt">
+                <p>Already own a Wing here - requisition another still-unowned Wing in this Sector?</p>
+                <div className="liquidation-choice-group">
+                  {game.pendingDecision.sectorTileIds.map((tileId) => {
+                    const tile = getTile(tileId);
+                    const price = 'price' in tile ? tile.price : 0;
+                    return (
+                      <button
+                        key={tileId}
+                        onClick={() => buyAdministratorRemoteTileAndSync(roomCode, game, playerId, tileId)}
+                        disabled={!me || me.credits < price}
+                      >
+                        {tile.name} (₡{price})
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="purchase-prompt-actions">
+                  <button onClick={() => declineAdministratorRemoteBuyAndSync(roomCode, game)}>Skip</button>
+                </div>
+              </div>
+            </ActionModal>
+          )}
+
           {pendingCard && game.pendingDecision?.type === 'cardDrawn' && (
             <ActionModal>
               <div key={game.pendingDecision.cardId} className="purchase-prompt card-prompt card-reveal">
@@ -574,6 +603,7 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
 
           <RubberDuckEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
           <MtfEncounterBanner room={room} roomCode={roomCode} playerId={playerId} game={game} />
+          <SpecialistRecontainBanner playerId={playerId} roomCode={roomCode} game={game} />
 
           {game.pocketDimensionOrdeal && (
             <div className="purchase-prompt card-prompt">

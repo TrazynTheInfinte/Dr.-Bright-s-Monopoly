@@ -9,6 +9,7 @@ import {
   acknowledgePocketDimensionLanding,
   afkSkipTurn,
   buildHouse,
+  buyAdministratorRemoteTile,
   buyTile,
   catRedirectCard,
   chooseCardFromChoices,
@@ -16,7 +17,9 @@ import {
   confirmStillHere,
   createInitialGameState,
   declareBankruptcy,
+  declineAdministratorRemoteBuy,
   declinePurchase,
+  declineRecontainment,
   declineTrade,
   devForceSkipTurn,
   devJumpToTile,
@@ -36,6 +39,7 @@ import {
   payEscapeFee,
   proposeTrade,
   payRentInsteadOfSeizing,
+  payToRecontain,
   purgeAnomalies,
   rejoinFromAfk,
   resolveMtfEncounter,
@@ -129,6 +133,22 @@ export async function seizeRogueAnomalyTileAndSync(roomCode: string, game: GameS
 
 export async function payRentInsteadOfSeizingAndSync(roomCode: string, game: GameState, playerId: string) {
   await writeGameState(roomCode, payRentInsteadOfSeizing(game, playerId));
+}
+
+export async function buyAdministratorRemoteTileAndSync(roomCode: string, game: GameState, playerId: string, tileId: number) {
+  await writeGameState(roomCode, buyAdministratorRemoteTile(game, playerId, tileId));
+}
+
+export async function declineAdministratorRemoteBuyAndSync(roomCode: string, game: GameState) {
+  await writeGameState(roomCode, declineAdministratorRemoteBuy(game));
+}
+
+export async function payToRecontainAndSync(roomCode: string, game: GameState, playerId: string) {
+  await writeGameState(roomCode, payToRecontain(game, playerId));
+}
+
+export async function declineRecontainmentAndSync(roomCode: string, game: GameState) {
+  await writeGameState(roomCode, declineRecontainment(game));
 }
 
 export async function endTurnAndSync(roomCode: string, game: GameState) {

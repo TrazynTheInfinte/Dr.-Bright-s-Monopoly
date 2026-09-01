@@ -21,6 +21,17 @@ function pickActiveBotId(room: Room, game: GameState): string | null {
     const forId = 'forPlayerId' in decision ? decision.forPlayerId : currentTurnPlayerId;
     return bots.includes(forId) ? forId : null;
   }
+  // Independent of pendingDecision (see GameBoard.tsx's encounter
+  // banners) - each of these can block endTurn globally on its own,
+  // regardless of whose turn it technically is.
+  if (game.mtfEncounter) return bots.includes(game.mtfEncounter.mtfPlayerId) ? game.mtfEncounter.mtfPlayerId : null;
+  if (game.rubberDuckEncounter) {
+    return bots.includes(game.rubberDuckEncounter.rubberDuckPlayerId) ? game.rubberDuckEncounter.rubberDuckPlayerId : null;
+  }
+  if (game.pendingPieceChoice) return bots.includes(game.pendingPieceChoice.playerId) ? game.pendingPieceChoice.playerId : null;
+  if (game.specialistRecontainOffer) {
+    return bots.includes(game.specialistRecontainOffer.playerId) ? game.specialistRecontainOffer.playerId : null;
+  }
 
   return bots.includes(currentTurnPlayerId) ? currentTurnPlayerId : null;
 }
