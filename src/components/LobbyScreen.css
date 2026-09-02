@@ -87,8 +87,11 @@
 }
 
 .player-list li.is-you {
-  border-color: var(--color-red);
-  color: var(--color-red);
+  /* Red is reserved for danger/anomalies everywhere else in the game -
+     using it here too easily reads as a warning instead of "this is
+     you". */
+  border-color: var(--color-white);
+  color: var(--color-white);
   text-shadow: 0 0 4px currentColor;
 }
 
@@ -138,6 +141,31 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 0.85em;
+}
+
+.lobby-match-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(420px, 90vw);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.lobby-match-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.85em;
+}
+
+.lobby-match-settings .lobby-hint {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85em;
+  margin: 0;
 }
 
 .piece-picker {

@@ -136,6 +136,7 @@ function Hand({ room, roomCode, playerId, game }: HandProps) {
                     isMyTurn={isMyTurn}
                     countermeasureArmed={me.hasCountermeasureArmed}
                     evasionActive={me.hasEvasionActive}
+                    curedTurnsRemaining={me.curedTurnsRemaining}
                   />
                 )}
               </div>
@@ -272,6 +273,7 @@ interface ObjectAnomalyActionProps {
   isMyTurn: boolean;
   countermeasureArmed: boolean;
   evasionActive: boolean;
+  curedTurnsRemaining: number;
 }
 
 // Each Object Anomaly defines its own usability window (see
@@ -287,9 +289,18 @@ function ObjectAnomalyAction({
   isMyTurn,
   countermeasureArmed,
   evasionActive,
+  curedTurnsRemaining,
 }: ObjectAnomalyActionProps) {
   if (!isMyTurn) {
     return <p className="hint">Usable on your own turn.</p>;
+  }
+  // Every Object Anomaly shares this same restriction in the engine
+  // (see useGamersFuel/useBadComposition/useMicroHid/useJailbird/
+  // useCountermeasure/useEvasion's curedTurnsRemaining guard) - without
+  // this hint, the button looked fully usable and clicking it just did
+  // nothing, with no indication why.
+  if (curedTurnsRemaining > 0) {
+    return <p className="hint">Diminished by SCP-049's Cure - unusable for {curedTurnsRemaining} more turn{curedTurnsRemaining === 1 ? '' : 's'}.</p>;
   }
 
   switch (objectId) {

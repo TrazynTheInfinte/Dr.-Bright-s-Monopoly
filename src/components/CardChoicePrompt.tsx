@@ -46,9 +46,9 @@ function CardChoicePrompt({ deck, choiceCardIds, roomCode, game, playerId, isMin
               className="card-choice-card"
               style={style}
               onClick={() => chooseCardFromChoicesAndSync(roomCode, game, playerId, cardId)}
-              title={card.text}
             >
-              {card.title}
+              <span className="card-choice-card-title">{card.title}</span>
+              <span className="card-choice-card-text">{card.text}</span>
             </button>
           );
         })}

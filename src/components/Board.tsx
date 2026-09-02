@@ -113,15 +113,17 @@ function BoardPopup({
   children: ReactNode;
 }) {
   const { row, col } = gridPositionOf(tileId);
-  const side = sideOf(tileId);
-  // Centering the popup over a tile in the left/right columns means
-  // roughly half of it hangs off the edge of the (often narrow, on
-  // mobile) screen. Anchor it to grow inward from the tile's own inner
-  // edge instead for those two columns; top/bottom/corner tiles have
-  // room on both sides, so those stay centered.
-  const leftPercent =
-    side === 'left' ? (col / 11) * 100 : side === 'right' ? ((col - 1) / 11) * 100 : ((col - 0.5) / 11) * 100;
-  const translateX = side === 'left' ? '8px' : side === 'right' ? 'calc(-100% - 8px)' : '-50%';
+  // Centering the popup over a tile in the leftmost/rightmost column
+  // means roughly half of it hangs off the edge of the (often narrow,
+  // on mobile) screen. Anchor it to grow inward from the tile's own
+  // inner edge instead for those two columns - checked by the actual
+  // grid column, not sideOf's Side enum, since sideOf buckets all four
+  // corner tiles into their own 'corner' case regardless of which edge
+  // column they're actually in, which fell through to the centered
+  // branch and clipped exactly like this at every corner. Every other
+  // column has room on both sides, so those stay centered.
+  const leftPercent = col === 1 ? (col / 11) * 100 : col === 11 ? ((col - 1) / 11) * 100 : ((col - 0.5) / 11) * 100;
+  const translateX = col === 1 ? '8px' : col === 11 ? 'calc(-100% - 8px)' : '-50%';
 
   // Growing upward from a top-row tile (the default - see
   // --popup-translate-y below) pushes the popup above the board entirely,

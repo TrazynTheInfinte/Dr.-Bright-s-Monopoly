@@ -3,7 +3,7 @@ import { STARTING_PIECES } from '../data/pieces';
 import { startGame } from '../lib/gameSync';
 import { isPlayerAway } from '../lib/presence';
 import { addBotToLobby, choosePiece, closeLobby, leaveRoom, shufflePieces } from '../lib/rooms';
-import type { PieceId } from '../types/game';
+import type { GameState, PieceId } from '../types/game';
 import type { BotDifficulty, Room } from '../types/room';
 import RoomQrCode from './RoomQrCode';
 import './LobbyScreen.css';
@@ -20,10 +20,26 @@ function pieceName(pieceId: PieceId): string {
   return STARTING_PIECES.find((piece) => piece.id === pieceId)?.name ?? pieceId;
 }
 
+/** Flavor names for each session-length preset (see SESSION_LENGTH_MULTIPLIERS in game/engine.ts for the actual scaling each maps to) and a short explainer of what picking it actually changes. */
+const SESSION_LENGTH_LABELS: Record<GameState['sessionLengthPreset'], { name: string; hint: string }> = {
+  quick: { name: 'Rapid Containment Protocol', hint: 'Steeper rent and fees - bankruptcies (and eliminations) come faster.' },
+  standard: { name: 'Standard Operating Procedure', hint: "Today's usual balance, unchanged." },
+  extended: { name: 'Extended Field Study', hint: 'Gentler rent and fees, for a longer, slower-burning match.' },
+};
+
 function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
   const [error, setError] = useState('');
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('normal');
-  const players = Object.entries(room.players);
+  const [terminationRule, setTerminationRule] = useState<GameState['terminationRule']>('terminate');
+  const [sessionLengthPreset, setSessionLengthPreset] = useState<GameState['sessionLengthPreset']>('standard');
+  // Object.entries(room.players) isn't a stable order across Firestore
+  // snapshots - a write touching only one player's sub-field can come
+  // back with the whole map re-serialized in a different key order,
+  // making the roster visibly shuffle. joinedAt gives a real, stable
+  // order to sort by instead.
+  const players = Object.entries(room.players).sort(
+    ([, a], [, b]) => (a.joinedAt?.toMillis() ?? 0) - (b.joinedAt?.toMillis() ?? 0),
+  );
   const isHost = room.hostId === playerId;
   const me = room.players[playerId];
   const claimedPieceIds = players.map(([, player]) => player.pieceId);
@@ -43,7 +59,7 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
     const assignments = players
       .filter(([, player]) => player.pieceId !== null)
       .map(([id, player]) => ({ playerId: id, pieceId: player.pieceId! }));
-    void startGame(roomCode, assignments);
+    void startGame(roomCode, assignments, { terminationRule, sessionLengthPreset });
   }
 
   function handleCloseLobby() {
@@ -169,6 +185,38 @@ function LobbyScreen({ room, roomCode, playerId, onLeave }: LobbyScreenProps) {
       )}
 
       {error && <p className="error">{error}</p>}
+
+      {isHost && (
+        <div className="lobby-match-settings">
+          <label>
+            Session Length
+            <select
+              value={sessionLengthPreset}
+              onChange={(event) => setSessionLengthPreset(event.target.value as GameState['sessionLengthPreset'])}
+            >
+              {(Object.keys(SESSION_LENGTH_LABELS) as GameState['sessionLengthPreset'][]).map((preset) => (
+                <option key={preset} value={preset}>
+                  {SESSION_LENGTH_LABELS[preset].name}
+                </option>
+              ))}
+            </select>
+            <span className="lobby-hint">{SESSION_LENGTH_LABELS[sessionLengthPreset].hint}</span>
+          </label>
+
+          <label>
+            Termination Rule
+            <select value={terminationRule} onChange={(event) => setTerminationRule(event.target.value as GameState['terminationRule'])}>
+              <option value="terminate">Standard Termination Protocol</option>
+              <option value="jail">Jailed, Not Terminated</option>
+            </select>
+            <span className="lobby-hint">
+              {terminationRule === 'jail'
+                ? 'A would-be Termination sends that player to the Containment Chamber instead - everything they own stays theirs.'
+                : 'A real Termination seizes everything and either reassigns a new Personnel or ends that player for good.'}
+            </span>
+          </label>
+        </div>
+      )}
 
       {isHost && (
         <button onClick={handleStartGame} disabled={players.length < 2 || !everyoneHasAPiece}>

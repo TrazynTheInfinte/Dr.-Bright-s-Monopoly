@@ -98,6 +98,8 @@ export interface PieceDefinition {
   title: string;
   /** Null for a piece whose old power depended on a mechanic this build doesn't have (see CONTEXT.md) - to be redesigned later. */
   powerDescription: string | null;
+  /** Same power(s), same order, with the flavor stripped out - just what each one actually does mechanically. Shown instead of powerDescription when the viewer has switched to "Dr. Gears" mode (see useNarrativeMode). */
+  powerDescriptionGears: string | null;
 }
 
 /** One player's state within an in-progress game (as opposed to RoomPlayer, which is just their lobby name). */
@@ -143,6 +145,8 @@ export interface GamePlayerState {
   curedTurnsRemaining: number;
   /** True once SCP-049 has already "cured" this player once - a second catch is fatal (reanimated as SCP-049-2) instead of another temporary cure. */
   hasBeenCuredBy049: boolean;
+  /** "Jailed, Not Terminated" mode (see GameState.terminationRule): true while serving out a Containment Chamber stay in place of what would otherwise be a real Termination - exempts them from the Holding Fee and from paying/using their way out early (see chargeHoldingFee/payEscapeFee/useGetOutOfJailCard), same as inJail/turnsInJail, clears the moment they're actually released. */
+  isTerminationJailed: boolean;
 }
 
 /**
@@ -160,11 +164,9 @@ export interface GamePlayerState {
  * awaitingCardDraw is landing on an Anomalous Event/Foundation
  * Directive tile itself - the deck doesn't actually get drawn from
  * until the player clicks the matching pile (see drawFromPile in
- * game/engine.ts), which turns into cardChoice (Car/Dog) or cardDrawn
- * (everyone else) next.
- *
- * cardDrawn carries `forPlayerId` - normally the drawer, but when Cat
- * redirects a card, this is whoever they gave it to instead.
+ * game/engine.ts), which turns into cardChoice (Car/Dog) or resolves
+ * immediately (everyone else - see GameState.lastDrawnCard, resolved
+ * via resolveDrawnCard).
  *
  * debtSettlement is a player who owes more than they can currently
  * pay: they can sell houses/mortgage properties (the existing
@@ -177,7 +179,6 @@ export type PendingDecision =
   | { type: 'awaitingCardDraw'; deck: CardDeck }
   | { type: 'cardChoice'; deck: CardDeck; choiceCardIds: string[] }
   | { type: 'catRedirect'; cardId: string }
-  | { type: 'cardDrawn'; cardId: string; forPlayerId: string }
   | { type: 'debtSettlement'; forPlayerId: string; amountOwed: number; creditorId: string | null }
   | { type: 'pocketDimensionLanded'; forPlayerId: string }
   | { type: 'rogueSeizure'; tileId: number; ownerId: string }
@@ -305,6 +306,58 @@ export interface GameState {
    * summary's elimination timeline.
    */
   eliminations: EliminationRecord[];
+  /**
+   * Personnel that have been permanently retired this match - once
+   * someone is actually Terminated while playing a given piece (not
+   * just reassigned away from it, which leaves it back in circulation),
+   * it's never offered as a reassignment option again for the rest of
+   * the match. See availablePersonnelIds in game/engine.ts.
+   */
+  retiredPieceIds: PieceId[];
+  /**
+   * The most recently drawn card, if any - a reveal marker, not a
+   * blocking pendingDecision. Its effect has already been applied by
+   * the time this is set (see resolveDrawnCard in game/engine.ts);
+   * dismissing the reveal popup is purely local to each viewer's own
+   * browser (see GameBoard.tsx), which is why this never needs an
+   * "acknowledge" action or per-player dismissed-tracking of its own.
+   * `sequence` disambiguates the rare case of the exact same card being
+   * drawn twice in a row, which a plain cardId comparison would miss.
+   */
+  lastDrawnCard: { cardId: string; forPlayerId: string; sequence: number } | null;
+  /** Backs lastDrawnCard.sequence - see GameState.scp0492NextId for the same "counter lives in state, not a module-level variable" reasoning. */
+  nextDrawSequence: number;
+  /**
+   * Chosen once by the host before the match starts (see
+   * createInitialGameState), fixed for its whole duration. 'terminate'
+   * is the normal rule (assets seized, real elimination or
+   * reassignment - see applyCatchConsequence/declareBankruptcy).
+   * 'jail' is the "Jailed, Not Terminated" mode: every Termination that
+   * would otherwise happen instead sends that player to the
+   * Containment Chamber for a real, unavoidable stay (no Holding Fee,
+   * no paying/using their way out early), keeping everything they own
+   * - see sendToTerminationJail. Unlimited uses per player; there's no
+   * separate cap on top of this.
+   */
+  terminationRule: 'terminate' | 'jail';
+  /**
+   * Chosen once by the host before the match starts, fixed for its
+   * whole duration - see SESSION_LENGTH_MULTIPLIERS in game/engine.ts
+   * for what each preset actually maps to. Kept on GameState (rather
+   * than derived from moneyDrainMultiplier alone) purely so the lobby/
+   * in-game UI can show which preset is active by name.
+   */
+  sessionLengthPreset: 'quick' | 'standard' | 'extended';
+  /**
+   * Derived from sessionLengthPreset at creation time - a flat
+   * multiplier applied to every money-drain constant that scales with
+   * game length (rent, the Holding Fee, the Escape Fee, Rogue
+   * Anomaly's Containment Overhead). 1 for 'standard' (today's
+   * balance, untouched). Stored directly rather than recomputed from
+   * the preset on every charge, since it's simpler for every call site
+   * that needs it to just read one number.
+   */
+  moneyDrainMultiplier: number;
 }
 
 /** One player's permanent Termination - see GameState.eliminations. */

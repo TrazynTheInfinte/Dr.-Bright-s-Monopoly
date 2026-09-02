@@ -3,7 +3,6 @@ import { ROGUE_SEIZE_PREMIUM_MULTIPLIER } from '../game/engine';
 import type { ColorGroup, GamePlayerState, GameState } from '../types/game';
 import type { BotDifficulty } from '../types/room';
 import {
-  acknowledgeCardAndSync,
   acknowledgePocketDimensionLandingAndSync,
   buildHouseAndSync,
   buyAdministratorRemoteTileAndSync,
@@ -185,10 +184,6 @@ export async function runBotStep(
         // Always kept, never handed off - proposing/negotiating handoffs
         // to a specific opponent is out of scope, same as trading.
         await catRedirectCardAndSync(roomCode, game, botId, null);
-        return;
-
-      case 'cardDrawn':
-        await acknowledgeCardAndSync(roomCode, game);
         return;
 
       case 'debtSettlement':

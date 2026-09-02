@@ -6,7 +6,6 @@ import { findCard } from '../data/cards';
 import { OLD_MAN_POCKET_DIMENSION_SPEED, ROGUE_SEIZE_PREMIUM_MULTIPLIER } from '../game/engine';
 import type { CardDeck, GameState } from '../types/game';
 import {
-  acknowledgeCardAndSync,
   acknowledgePocketDimensionLandingAndSync,
   buyAdministratorRemoteTileAndSync,
   buyTileAndSync,
@@ -128,6 +127,12 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   // (layoutActionsRef below) - purely cosmetic, cleared once the flight
   // animation finishes on its own (see FlyingCard).
   const [cardFlight, setCardFlight] = useState<{ deck: CardDeck; from: DOMRect; to: DOMRect } | null>(null);
+  // A drawn card's effect already applies the instant it's drawn (see
+  // resolveDrawnCard in game/engine.ts) - the reveal popup that follows
+  // is purely a local "have I actually seen this one yet" per viewer,
+  // not a shared decision anyone else waits on. Keyed by sequence, not
+  // cardId, since the same card can be drawn twice in a row.
+  const [dismissedDrawSequence, setDismissedDrawSequence] = useState<number | null>(null);
   const layoutActionsRef = useRef<HTMLElement>(null);
   // Only consulted below a screen-width breakpoint (see GameBoard.css) -
   // above it, CSS shows every section regardless of this and the tab
@@ -205,15 +210,15 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
   const pendingSeizureTile = game.pendingDecision?.type === 'rogueSeizure' ? getTile(game.pendingDecision.tileId) : null;
   const seizurePremium =
     pendingSeizureTile && 'price' in pendingSeizureTile ? Math.ceil(pendingSeizureTile.price * ROGUE_SEIZE_PREMIUM_MULTIPLIER) : 0;
-  // Shown to EVERY viewer, not just whoever's resolving it - a drawn
-  // card used to only render for pendingDecision.forPlayerId, so
-  // everyone else just saw nothing happen until the drawer clicked
-  // Continue. Only the actual resolver gets the button (see the
-  // isPendingCardMine check below); everyone else gets a read-only
-  // "waiting on" view of the same card.
-  const pendingCard = game.pendingDecision?.type === 'cardDrawn' ? findCard(game.pendingDecision.cardId) : null;
-  const isPendingCardMine =
-    game.pendingDecision?.type === 'cardDrawn' && game.pendingDecision.forPlayerId === playerId;
+  // Shown to EVERY viewer, not just whoever it's actually for - the
+  // card's effect already applied the instant it was drawn (see
+  // resolveDrawnCard in game/engine.ts), so there's no reason for
+  // anyone else to be blocked waiting on the drawer to click Continue
+  // anymore. Each viewer dismisses their own popup independently
+  // (dismissedDrawSequence, purely local - no engine call at all).
+  const pendingDrawSequence = game.lastDrawnCard?.sequence ?? null;
+  const pendingCard =
+    game.lastDrawnCard && pendingDrawSequence !== dismissedDrawSequence ? findCard(game.lastDrawnCard.cardId) : null;
   const me = game.players[playerId];
 
   const isDevPanelUnlocked = playerId === room.hostId;
@@ -400,11 +405,14 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
                   breached on), but an early Keep Watch earlier in the round
                   still holds until then. Choosing it skips rolling entirely
                   and ends the turn on the spot. */}
-              {!game.lastRoll && !me?.inJail && game.looseAnomalies.some((a) => a.anomalyId === 'theSculpture') && (
-                <button onClick={() => keepWatchOnSculptureAndSync(roomCode, game, playerId)}>
-                  Keep Watch on SCP-173
-                </button>
-              )}
+              {!game.lastRoll &&
+                !me?.inJail &&
+                me?.pieceId !== 'trex' && // permanently immune to every Hostile Anomaly - nothing to watch out for
+                game.looseAnomalies.some((a) => a.anomalyId === 'theSculpture') && (
+                  <button onClick={() => keepWatchOnSculptureAndSync(roomCode, game, playerId)}>
+                    Keep Watch on SCP-173
+                  </button>
+                )}
               {/* Only before rolling - once they've rolled, resolveJailRoll
                   already charged the Holding Fee for this turn (or freed
                   them), so there's nothing left to pay here. */}
@@ -546,19 +554,13 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             </ActionModal>
           )}
 
-          {pendingCard && game.pendingDecision?.type === 'cardDrawn' && (
+          {pendingCard && game.lastDrawnCard && (
             <ActionModal>
-              <div key={game.pendingDecision.cardId} className="purchase-prompt card-prompt card-reveal">
+              <div key={game.lastDrawnCard.sequence} className="purchase-prompt card-prompt card-reveal">
                 <CardRevealSound />
                 <p className="card-title">{pendingCard.title}</p>
                 <p>{pendingCard.text}</p>
-                {isPendingCardMine ? (
-                  <button onClick={() => acknowledgeCardAndSync(roomCode, game)}>Continue</button>
-                ) : (
-                  <p className="hint">
-                    Waiting for {room.players[game.pendingDecision.forPlayerId]?.name}...
-                  </p>
-                )}
+                <button onClick={() => setDismissedDrawSequence(pendingDrawSequence)}>Continue</button>
               </div>
             </ActionModal>
           )}
@@ -678,8 +680,6 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
             </div>
           </div>
 
-          {isDesktop && <DiceRoller game={room.game ?? game} rollTrigger={rollTrigger} />}
-
           {isDevPanelUnlocked && <DevPanel room={room} roomCode={roomCode} game={game} />}
         </section>
 
@@ -692,10 +692,19 @@ function GameBoard({ room, roomCode, playerId, onLeave }: GameBoardProps) {
         </div>
 
         <div className="dice-column layout-dice">
-          {/* Live, not staged - the dice should start tumbling the
-              instant a roll happens, not wait for the token's walk to
-              finish revealing everything else. */}
-          {!isDesktop && <DiceRoller game={room.game ?? game} rollTrigger={rollTrigger} />}
+          {/* Always here now, on both layouts - previously desktop kept
+              this at the bottom of layout-log instead, sharing that
+              section's height with the (variable-length) event log and
+              the DevPanel. A piece with an unusually tall layout-actions
+              block (Rogue Anomaly, especially - Induce a Breach, a
+              seizure prompt, etc. can all stack up at once) squeezes the
+              CSS grid's 1fr log row down to fit, pushing the dice below
+              it out of view and forcing a scroll to find them. Its own
+              dedicated grid column doesn't compete for space with either
+              of those. Live, not staged - the dice should start tumbling
+              the instant a roll happens, not wait for the token's walk
+              to finish revealing everything else. */}
+          <DiceRoller game={room.game ?? game} rollTrigger={rollTrigger} />
         </div>
       </div>
 

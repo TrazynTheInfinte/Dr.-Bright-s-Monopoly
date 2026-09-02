@@ -5,7 +5,6 @@ import type { GameState, PieceId, TradeOffer } from '../types/game';
 import type { Room } from '../types/room';
 import {
   acceptTrade,
-  acknowledgeCard,
   acknowledgePocketDimensionLanding,
   afkSkipTurn,
   buildHouse,
@@ -72,8 +71,12 @@ async function writeGameState(roomCode: string, game: GameState) {
   await updateDoc(doc(db, 'rooms', roomCode), { game });
 }
 
-export async function startGame(roomCode: string, playerAssignments: { playerId: string; pieceId: PieceId }[]) {
-  await writeGameState(roomCode, createInitialGameState(playerAssignments, Math.random));
+export async function startGame(
+  roomCode: string,
+  playerAssignments: { playerId: string; pieceId: PieceId }[],
+  options?: { terminationRule?: GameState['terminationRule']; sessionLengthPreset?: GameState['sessionLengthPreset'] },
+) {
+  await writeGameState(roomCode, createInitialGameState(playerAssignments, Math.random, options));
 }
 
 /**
@@ -111,7 +114,13 @@ export async function startNewMatch(roomCode: string, room: Room) {
   }
   await updateDoc(doc(db, 'rooms', roomCode), {
     mode: 'experienced',
-    game: createInitialGameState(assignments, Math.random),
+    // Carries the just-finished match's own settings forward rather
+    // than silently resetting to the defaults - the group already
+    // chose these once for this room.
+    game: createInitialGameState(assignments, Math.random, {
+      terminationRule: room.game?.terminationRule,
+      sessionLengthPreset: room.game?.sessionLengthPreset,
+    }),
   });
 }
 
@@ -153,10 +162,6 @@ export async function declineRecontainmentAndSync(roomCode: string, game: GameSt
 
 export async function endTurnAndSync(roomCode: string, game: GameState) {
   await writeGameState(roomCode, endTurn(game));
-}
-
-export async function acknowledgeCardAndSync(roomCode: string, game: GameState) {
-  await writeGameState(roomCode, acknowledgeCard(game));
 }
 
 export async function chooseCardFromChoicesAndSync(roomCode: string, game: GameState, playerId: string, cardId: string) {

@@ -1,0 +1,9 @@
+.narrative-mode-toggle {
+  padding: 0.5em 0.9em;
+}
+
+@media (max-width: 900px) {
+  .narrative-mode-toggle {
+    padding: 0.4em 0.7em;
+  }
+}

@@ -119,7 +119,7 @@ const DECAYING_PASSAGE_COST = 150;
 const SITE_WARHEAD_TILE_ID = 12;
 const SITE_WARHEAD_PURGE_COST = 500;
 /** Intern's "On a Learning Curve": laps of the board needed before they're cleared to roll both dice unsupervised - a real handicap (half the movement, half the chances to land on anything) for as long as it lasts, so kept short rather than dragging across a big chunk of the game. */
-const INTERN_GRADUATION_LAPS = 1;
+export const INTERN_GRADUATION_LAPS = 1;
 /**
  * Intern's "Unpaid Overtime": extra Credits collected on top of the
  * standard Go bonus every time they pass the Site Entrance. Raised from
@@ -186,11 +186,20 @@ function sectorOf(tileId: number): ColorGroup | null {
   return tile.kind === 'wing' ? tile.colorGroup : null;
 }
 
+/** How aggressively each session-length preset scales every money-drain constant that affects pacing (rent, the Holding Fee, the Escape Fee, Rogue Anomaly's Containment Overhead) - see GameState.moneyDrainMultiplier. 'standard' is exactly today's balance, untouched. The exact multipliers are a starting point pending an actual bot-simulation tuning pass, not a final balance decision. */
+export const SESSION_LENGTH_MULTIPLIERS: Record<GameState['sessionLengthPreset'], number> = {
+  quick: 2,
+  standard: 1,
+  extended: 0.75,
+};
+
 /** Sets up a fresh game: every player starts on the Site Entrance with 1500 Credits and the Personnel they were assigned, and both card decks get shuffled. */
 export function createInitialGameState(
   playerAssignments: { playerId: string; pieceId: PieceId }[],
   rng: () => number = Math.random,
+  options: { terminationRule?: GameState['terminationRule']; sessionLengthPreset?: GameState['sessionLengthPreset'] } = {},
 ): GameState {
+  const sessionLengthPreset = options.sessionLengthPreset ?? 'standard';
   const players: Record<string, GamePlayerState> = {};
   for (const { playerId, pieceId } of playerAssignments) {
     players[playerId] = {
@@ -215,6 +224,7 @@ export function createInitialGameState(
       hasCountermeasureArmed: false,
       hasEvasionActive: false,
       curedTurnsRemaining: 0,
+      isTerminationJailed: false,
       hasBeenCuredBy049: false,
     };
   }
@@ -255,6 +265,12 @@ export function createInitialGameState(
     doctorSpeedBoostActive: false,
     peakNetWorth: Object.fromEntries(playerAssignments.map(({ playerId }) => [playerId, STARTING_CREDITS])),
     eliminations: [],
+    retiredPieceIds: [],
+    lastDrawnCard: null,
+    nextDrawSequence: 0,
+    terminationRule: options.terminationRule ?? 'terminate',
+    sessionLengthPreset,
+    moneyDrainMultiplier: SESSION_LENGTH_MULTIPLIERS[sessionLengthPreset],
   };
 }
 
@@ -283,10 +299,21 @@ function updatePeakNetWorth(state: GameState): GameState {
   return next;
 }
 
-/** Records a permanent Termination for the post-game summary's elimination timeline - see GameState.eliminations. Called at both real-Termination sites (applyCatchConsequence, declareBankruptcy), right where isSpectating is actually set. */
+/**
+ * Records a permanent Termination for the post-game summary's
+ * elimination timeline (see GameState.eliminations) and permanently
+ * retires the piece they were playing from the reassignment pool (see
+ * retirePiece/availablePersonnelIds) - a real Termination is exactly
+ * the one moment that piece is gone for good, distinct from simply
+ * being reassigned away from it (which leaves it in circulation).
+ * Called at every real-Termination site (applyCatchConsequence,
+ * declareBankruptcy, devKickPlayer), right where isSpectating is
+ * actually set.
+ */
 function recordElimination(state: GameState, playerId: string, cause: string): GameState {
-  const record: EliminationRecord = { playerId, pieceId: pieceOf(state, playerId), turnCount: state.turnCount, cause };
-  return { ...state, eliminations: [...state.eliminations, record] };
+  const pieceId = pieceOf(state, playerId);
+  const record: EliminationRecord = { playerId, pieceId, turnCount: state.turnCount, cause };
+  return retirePiece({ ...state, eliminations: [...state.eliminations, record] }, pieceId);
 }
 
 /** Player IDs still actually in the game - excludes anyone permanently isSpectating (Terminated) or benched for being AFK. Used anywhere a random pick or completion count must never land on someone who's already out. */
@@ -498,10 +525,10 @@ function chargeEscapeFee(state: GameState, playerId: string): GameState {
       { usedMasterKey: true },
     );
   }
-  return chargePlayer(state, playerId, ESCAPE_FEE, null);
+  return chargePlayer(state, playerId, Math.round(ESCAPE_FEE * state.moneyDrainMultiplier), null);
 }
 
-/** Charges the Holding Fee (50 Credits) for another turn stuck in the Containment Chamber - D-Class and Security Officer (Security Clearance) are exempt. */
+/** Charges the Holding Fee (50 Credits) for another turn stuck in the Containment Chamber - D-Class, Security Officer (Security Clearance), and anyone jailed in place of a Termination (the "Jailed, Not Terminated" mode - see isTerminationJailed) are exempt. */
 function chargeHoldingFee(state: GameState, playerId: string): GameState {
   const piece = pieceOf(state, playerId);
   if (piece === 'boot') {
@@ -510,12 +537,15 @@ function chargeHoldingFee(state: GameState, playerId: string): GameState {
   if (piece === 'rubberDuck') {
     return logEvent(state, "Security Clearance - Security Officer isn't billed the Holding Fee.");
   }
-  return chargePlayer(state, playerId, HOLDING_FEE, null);
+  if (state.players[playerId].isTerminationJailed) {
+    return logEvent(state, "Jailed in place of a Termination - no Holding Fee while serving it out.");
+  }
+  return chargePlayer(state, playerId, Math.round(HOLDING_FEE * state.moneyDrainMultiplier), null);
 }
 
 function resolveJailRoll(state: GameState, playerId: string, roll: [number, number], isDoubles: boolean): GameState {
   if (isDoubles) {
-    const freed = updatePlayer(state, playerId, { inJail: false, turnsInJail: 0 });
+    const freed = updatePlayer(state, playerId, { inJail: false, turnsInJail: 0, isTerminationJailed: false });
     return moveAndResolve(logEvent(freed, 'Rolled doubles - released from the Containment Chamber.'), playerId, roll[0] + roll[1]);
   }
 
@@ -527,26 +557,28 @@ function resolveJailRoll(state: GameState, playerId: string, roll: [number, numb
 
   const turnsInJail = charged.players[playerId].turnsInJail + 1;
   if (turnsInJail >= MAX_TURNS_IN_JAIL) {
-    const freed = updatePlayer(charged, playerId, { inJail: false, turnsInJail: 0 });
+    const freed = updatePlayer(charged, playerId, { inJail: false, turnsInJail: 0, isTerminationJailed: false });
     return moveAndResolve(logEvent(freed, `Failed to roll doubles ${MAX_TURNS_IN_JAIL} times - released.`), playerId, roll[0] + roll[1]);
   }
 
   return logEvent(updatePlayer(charged, playerId, { turnsInJail }), 'Still in the Containment Chamber.');
 }
 
-/** Voluntarily pays the Escape Fee to leave the Containment Chamber right away, before rolling. */
+/** Voluntarily pays the Escape Fee to leave the Containment Chamber right away, before rolling. Refused outright for anyone jailed in place of a Termination - the whole point of that mode is a real, unavoidable stay, not a fee away from resuming immediately. */
 export function payEscapeFee(state: GameState, playerId: string): GameState {
   if (state.pendingDecision || !state.players[playerId].inJail) return state;
   if (currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].isTerminationJailed) return state;
   const charged = chargeEscapeFee(state, playerId);
   if (charged.pendingDecision) return charged;
   return updatePlayer(logEvent(charged, 'Paid the Escape Fee.'), playerId, { inJail: false, turnsInJail: 0 });
 }
 
-/** Spends a held "Get Out of Containment Free" card to leave immediately, before rolling. */
+/** Spends a held "Get Out of Containment Free" card to leave immediately, before rolling. Refused for the same reason as payEscapeFee above while jailed in place of a Termination. */
 export function useGetOutOfJailCard(state: GameState, playerId: string, cardId: string): GameState {
   if (state.pendingDecision || !state.players[playerId].inJail) return state;
   if (currentPlayerId(state) !== playerId) return state;
+  if (state.players[playerId].isTerminationJailed) return state;
   const player = state.players[playerId];
   if (!player.heldCardIds.includes(cardId)) return state;
 
@@ -900,7 +932,10 @@ function resolveOwnableLanding(state: GameState, playerId: string, tileId: numbe
   const piece = pieceOf(state, playerId);
 
   if (!owner) {
-    if (piece === 'trex') return state; // T-Rex can't buy - just sits there unowned
+    // T-Rex can't buy - just sits there unowned. Logged explicitly
+    // rather than silently doing nothing, since a bot-tester once
+    // mistook the total silence here for the game having frozen.
+    if (piece === 'trex') return logEvent(state, "Uncontained: can't be trusted with a purchase request through normal channels - stays unclaimed.");
     if (piece === 'wheelBarrel' && isLogisticsSeizeSector(tileId)) {
       return logEvent(transferTile(state, tileId, playerId), `Logistics Officer automatically requisitioned ${getTile(tileId).name}.`);
     }
@@ -966,10 +1001,15 @@ function calculateRent(state: GameState, tileId: number, owner: string): number 
   } else {
     // utility: 4x the roll if the owner has one, 10x if both.
     const roll = state.lastRoll ? state.lastRoll[0] + state.lastRoll[1] : 0;
-    return utilitiesOwnedBy(state, owner) >= 2 ? roll * 10 : roll * 4;
+    rent = utilitiesOwnedBy(state, owner) >= 2 ? roll * 10 : roll * 4;
   }
 
-  return rent;
+  // Game-length preset scaling (see GameState.moneyDrainMultiplier) - a
+  // faster-paced session leans on steeper rent (the game's single
+  // biggest money-transfer mechanic) to force bankruptcies, and so real
+  // eliminations, sooner, without needing a whole separate win
+  // condition on top of the existing last-player-standing rule.
+  return Math.round(rent * state.moneyDrainMultiplier);
 }
 
 // --- Buying ----------------------------------------------------------------
@@ -1110,18 +1150,20 @@ function drawSpecificCard(state: GameState, playerId: string, cardId: string): G
 function applyDrawnCard(state: GameState, playerId: string, cardId: string): GameState {
   const card = findCard(cardId);
   const discardKey = card.deck === 'anomalousEvent' ? 'anomalousEventDiscardPile' : 'foundationDirectiveDiscardPile';
-  let next: GameState = { ...state, [discardKey]: [...state[discardKey], cardId] } as GameState;
+  const next: GameState = { ...state, [discardKey]: [...state[discardKey], cardId] } as GameState;
 
   // Chaos Insurgency Spy's power works every time; Site Director's
   // "Redirect Without Exposure" is the same choice screen but only
-  // available once per game (see catRedirectCard).
+  // available once per game (see catRedirectCard). Only these two ever
+  // need a real, state-blocking decision here - whose effect it
+  // actually is isn't settled yet. Everyone else's draw resolves
+  // immediately; there's nobody left to ask.
   const piece = pieceOf(next, playerId);
   if (piece === 'cat' || (piece === 'car' && !next.players[playerId].usedRedirect)) {
     return { ...next, pendingDecision: { type: 'catRedirect', cardId } };
   }
 
-  next = { ...next, pendingDecision: { type: 'cardDrawn', cardId, forPlayerId: playerId } };
-  return next;
+  return resolveDrawnCard(next, playerId, cardId);
 }
 
 /** Chaos Insurgency Spy's (Cat's) Special Power, also Site Director's one-time "Redirect Without Exposure": keep the drawn card themselves, or hand its whole effect to another player instead. Nothing in the resulting log names who made the call, matching Site Director's flavor - it's simply how the two Personnel are described to begin with, no extra code needed for that part. */
@@ -1129,20 +1171,33 @@ export function catRedirectCard(state: GameState, playerId: string, targetPlayer
   if (state.pendingDecision?.type !== 'catRedirect') return state;
   const { cardId } = state.pendingDecision;
   const forPlayerId = targetPlayerId && state.players[targetPlayerId] && targetPlayerId !== playerId ? targetPlayerId : playerId;
-  let next = state;
+  let next: GameState = { ...state, pendingDecision: null };
   if (pieceOf(state, playerId) === 'car' && forPlayerId !== playerId) {
     next = updatePlayer(next, playerId, { usedRedirect: true });
   }
-  return { ...next, pendingDecision: { type: 'cardDrawn', cardId, forPlayerId } };
+  return resolveDrawnCard(next, forPlayerId, cardId);
 }
 
-/** Applies a drawn card's effect to whoever it's actually for, then clears the decision. */
-export function acknowledgeCard(state: GameState): GameState {
-  if (state.pendingDecision?.type !== 'cardDrawn') return state;
-  const { cardId, forPlayerId } = state.pendingDecision;
+/**
+ * Applies a drawn card's effect immediately, to whoever it's actually
+ * for, and records it as lastDrawnCard - a reveal marker, not a
+ * blocking pendingDecision. The effect already happened by the time
+ * anyone sees the reveal popup, so "dismissing" it is purely a local,
+ * per-viewer UI action (see GameBoard.tsx) rather than something that
+ * needs a further engine call at all - every viewer used to be stuck
+ * waiting on whoever drew the card to click Continue before play could
+ * continue for anyone.
+ */
+function resolveDrawnCard(state: GameState, playerId: string, cardId: string): GameState {
   const card = findCard(cardId);
   const cleared: GameState = { ...state, pendingDecision: null };
-  return applyCardEffect(logEvent(cleared, `Drew: ${card.title}.`), forPlayerId, cardId, card.effect);
+  const logged = logEvent(cleared, `Drew: ${card.title}.`);
+  const withEffect = applyCardEffect(logged, playerId, cardId, card.effect);
+  return {
+    ...withEffect,
+    lastDrawnCard: { cardId, forPlayerId: playerId, sequence: state.nextDrawSequence },
+    nextDrawSequence: state.nextDrawSequence + 1,
+  };
 }
 
 function applyCardEffect(state: GameState, playerId: string, cardId: string, effect: CardEffect): GameState {
@@ -1501,8 +1556,14 @@ function seizeAssets(state: GameState, playerId: string, creditorId: string | nu
 /** Gives up rather than settling a debt: every asset (Credits, Wings, houses/hotels, mortgages, held cards) is either handed to the creditor (if a specific player) or returned to the Foundation, and this player is permanently out. */
 export function declareBankruptcy(state: GameState, playerId: string): GameState {
   if (state.pendingDecision?.type !== 'debtSettlement' || state.pendingDecision.forPlayerId !== playerId) return state;
+  const cleared: GameState = { ...state, pendingDecision: null };
+
+  if (cleared.terminationRule === 'jail') {
+    return sendToTerminationJail(cleared, playerId);
+  }
+
   const { creditorId } = state.pendingDecision;
-  let next: GameState = seizeAssets({ ...state, pendingDecision: null }, playerId, creditorId);
+  let next: GameState = seizeAssets(cleared, playerId, creditorId);
 
   // D-Class's "Standard Expendability Clause": the first Termination is
   // survivable - requisitioned back into play instead of going out for
@@ -1517,6 +1578,8 @@ export function declareBankruptcy(state: GameState, playerId: string): GameState
       inJail: false,
       turnsInJail: 0,
       usedExpendabilityClause: true,
+      curedTurnsRemaining: 0,
+      hasBeenCuredBy049: false,
     });
     return logEvent(next, 'Requisitioned a replacement D-Class - back in play with reduced funding.');
   }
@@ -1619,7 +1682,13 @@ function stepTowardEitherWay(from: number, to: number, maxSteps: number): number
 
 function availablePersonnelIds(state: GameState): PieceId[] {
   const claimed = new Set(Object.values(state.players).filter((p) => !p.isSpectating).map((p) => p.pieceId));
-  return STARTING_PIECES.map((p) => p.id).filter((id) => !claimed.has(id));
+  return STARTING_PIECES.map((p) => p.id).filter((id) => !claimed.has(id) && !state.retiredPieceIds.includes(id));
+}
+
+/** Permanently retires a Personnel from the reassignment pool - called the instant someone is actually Terminated while playing it (not simply reassigned away from, which leaves it in circulation for someone else). Bounded at 12 entries, so cheap to keep synced. */
+function retirePiece(state: GameState, pieceId: PieceId): GameState {
+  if (state.retiredPieceIds.includes(pieceId)) return state;
+  return { ...state, retiredPieceIds: [...state.retiredPieceIds, pieceId] };
 }
 
 /**
@@ -1642,6 +1711,27 @@ function checkCountermeasureRedirect(
   const disarmed = updatePlayer(state, targetPlayerId, { hasCountermeasureArmed: false });
   const logged = logEvent(disarmed, "SCP-963 discharged just in time - its grip lands on someone else entirely.");
   return checkCountermeasureRedirect(logged, redirectedId, rng);
+}
+
+/**
+ * "Jailed, Not Terminated" mode's whole substitute for the normal
+ * catch/bankruptcy consequence: sent to the Containment Chamber
+ * instead, keeping every Credit, Wing, house, and held card exactly as
+ * they were - nothing seized, no reassignment, no real Termination at
+ * all. See isTerminationJailed for the exemptions this gets from the
+ * normal jail fees/early-escape options while it's active, and
+ * MAX_TURNS_IN_JAIL for the fixed release point if no doubles come up
+ * first. Repeatable with no cap - this can happen as many times as a
+ * game actually calls for it.
+ */
+function sendToTerminationJail(state: GameState, playerId: string): GameState {
+  const next = updatePlayer(state, playerId, {
+    inJail: true,
+    position: JAIL_POSITION,
+    turnsInJail: 0,
+    isTerminationJailed: true,
+  });
+  return applyContainmentInsurance(logEvent(next, 'Jailed, Not Terminated: reassigned to the Containment Chamber instead - everything they had stays theirs.'), playerId);
 }
 
 /**
@@ -1670,6 +1760,11 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
   targetPlayerId = redirected.targetPlayerId;
 
   let next = logEvent(state, openingMessage);
+
+  if (next.terminationRule === 'jail') {
+    return sendToTerminationJail(next, targetPlayerId);
+  }
+
   next = seizeAssets(next, targetPlayerId, null);
 
   if (pieceOf(next, targetPlayerId) === 'boot' && !next.players[targetPlayerId].usedExpendabilityClause) {
@@ -1681,6 +1776,11 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
       inJail: false,
       turnsInJail: 0,
       usedExpendabilityClause: true,
+      // A fresh body shouldn't inherit the old one's ongoing medical
+      // status from SCP-049 - see the matching reset in the
+      // reassignment branch below for why.
+      curedTurnsRemaining: 0,
+      hasBeenCuredBy049: false,
     });
     next = logEvent(next, 'Requisitioned a replacement D-Class - back in play with reduced funding.');
   } else {
@@ -1698,8 +1798,11 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
     } else {
       // Still actively playing as a freshly requisitioned Personnel -
       // same starting funds as D-Class's own automatic respawn above,
-      // not 0 (they haven't actually left the game).
-      next = updatePlayer(next, targetPlayerId, { credits: RESPAWN_CREDITS });
+      // not 0 (they haven't actually left the game). A brand new
+      // Personnel identity has no history with SCP-049 either - it
+      // wasn't the one that got cured (or ran out its "Cured" status)
+      // before this catch, so neither should carry over.
+      next = updatePlayer(next, targetPlayerId, { credits: RESPAWN_CREDITS, curedTurnsRemaining: 0, hasBeenCuredBy049: false });
       next = { ...next, pendingPieceChoice: { playerId: targetPlayerId, availablePieceIds: available } };
       next = logEvent(next, 'Requisitioning a new Personnel assignment.');
     }
@@ -1832,7 +1935,14 @@ function designateScp0492Target(state: GameState, targetPlayerId: string): GameS
   const doctor = state.looseAnomalies.find((a) => a.anomalyId === 'theDoctor');
   if (!doctor) return state;
   const target = state.players[targetPlayerId];
-  if (!target || target.isSpectating || target.isAfkSpectating || target.hasEvasionActive || pieceOf(state, targetPlayerId) === 'trex') {
+  if (
+    !target ||
+    target.isSpectating ||
+    target.isAfkSpectating ||
+    target.hasEvasionActive ||
+    pieceOf(state, targetPlayerId) === 'trex' ||
+    state.pocketDimensionOrdeal?.trappedPlayerId === targetPlayerId
+  ) {
     return state;
   }
 
@@ -1869,7 +1979,18 @@ function advanceScp0492Instances(state: GameState, rng: () => number, idsToMove:
 /** Every player eligible to be hunted at all, by anything - excludes Rogue Anomaly (always immune), anyone with SCP-268 active (temporarily immune, see useEvasion), and anyone AFK-benched. Shared by nearestHuntableTarget and randomHuntableTarget below. */
 function huntableCandidates(state: GameState): string[] {
   return activePlayerIds(state).filter(
-    (id) => !state.players[id].isAfkSpectating && !state.players[id].hasEvasionActive && pieceOf(state, id) !== 'trex',
+    (id) =>
+      !state.players[id].isAfkSpectating &&
+      !state.players[id].hasEvasionActive &&
+      pieceOf(state, id) !== 'trex' &&
+      // Already off in SCP-106's own Pocket Dimension - their main-board
+      // position is frozen and meaningless for a catch, and their turn
+      // already belongs entirely to that ordeal (see movePocketDimension).
+      // A second anomaly catching (and reassigning) them mid-ordeal was a
+      // real bug this excludes: two hunts landing on the same player at
+      // once, one of them completely invisible since the trapped player's
+      // token never visibly moves.
+      state.pocketDimensionOrdeal?.trappedPlayerId !== id,
   );
 }
 
@@ -1906,10 +2027,18 @@ function advanceHuntingAnomalies(state: GameState, rng: () => number): GameState
     if (!current || current.status !== 'hunting' || !current.targetPlayerId) continue;
 
     const target = next.players[current.targetPlayerId];
-    if (!target || target.isSpectating || target.hasEvasionActive || pieceOf(next, current.targetPlayerId) === 'trex') {
+    if (
+      !target ||
+      target.isSpectating ||
+      target.hasEvasionActive ||
+      pieceOf(next, current.targetPlayerId) === 'trex' ||
+      next.pocketDimensionOrdeal?.trappedPlayerId === current.targetPlayerId
+    ) {
       // Target's really gone (Terminated some other way), was just
-      // reassigned into Rogue Anomaly ("Uncontained") mid-hunt, or just
-      // went invisible via SCP-268 (see useEvasion) - same treatment as
+      // reassigned into Rogue Anomaly ("Uncontained") mid-hunt, just went
+      // invisible via SCP-268 (see useEvasion), or SCP-106 beat this
+      // anomaly to them and dragged them into its own Pocket Dimension -
+      // same treatment as
       // Rogue Anomaly's permanent immunity, just temporary. SCP-106
       // never needed a "look" to start engaging in the first place, so
       // losing a target doesn't put it back to sleep either - it
@@ -1980,7 +2109,13 @@ function advanceVoices(state: GameState, endingPlayerId: string, rng: () => numb
 
   let next = anchorGone ? updateAnomaly(state, 'theVoices', { spawnedOnPlayerId: endingPlayerId }) : state;
   const target = next.players[voices.targetPlayerId];
-  if (!target || target.isSpectating || target.hasEvasionActive || pieceOf(next, voices.targetPlayerId) === 'trex') {
+  if (
+    !target ||
+    target.isSpectating ||
+    target.hasEvasionActive ||
+    pieceOf(next, voices.targetPlayerId) === 'trex' ||
+    next.pocketDimensionOrdeal?.trappedPlayerId === voices.targetPlayerId
+  ) {
     const reacquired = nearestHuntableTarget(next, voices.tileId);
     return updateAnomaly(next, 'theVoices', reacquired ? { targetPlayerId: reacquired } : { status: 'dormant', targetPlayerId: null });
   }
@@ -2195,6 +2330,7 @@ export function viewAnomaly(state: GameState, playerId: string, anomalyId: strin
   const anomaly = state.looseAnomalies.find((a) => a.anomalyId === anomalyId);
   if (!anomaly || anomaly.status !== 'dormant') return state;
   if (pieceOf(state, playerId) === 'trex' || state.players[playerId].hasEvasionActive) return state;
+  if (state.pocketDimensionOrdeal?.trappedPlayerId === playerId) return state;
   return logEvent(
     updateAnomaly(state, anomalyId, { status: 'hunting', targetPlayerId: playerId }),
     `${findAnomaly(anomalyId as AnomalyId).name} noticed it was being watched.`,
@@ -2251,7 +2387,37 @@ function nextTradeId(): string {
   return `trade-${Date.now()}-${tradeIdCounter}`;
 }
 
+/**
+ * A trade is only ever worth proposing (or still honorable to accept)
+ * if both sides can actually go through with it. Checked at both ends:
+ * proposeTrade rejects an impossible offer immediately (offering
+ * Credits/tiles/cards the proposer doesn't have, or asking the other
+ * side for more Credits than they could ever cover even by liquidating
+ * everything they own), and acceptTrade re-checks the exact same thing
+ * in case anything changed in the meantime (a tile got mortgaged or
+ * sold, Credits got spent elsewhere, a card got used) - a trade that
+ * looked fine when proposed can still go stale before anyone accepts
+ * it.
+ */
+function isTradeStillPossible(state: GameState, trade: Omit<TradeOffer, 'id'>): boolean {
+  const from = state.players[trade.fromPlayerId];
+  const to = state.players[trade.toPlayerId];
+  if (!from || !to || from.isSpectating || to.isSpectating) return false;
+  if (trade.offerCredits < 0 || trade.requestCredits < 0) return false;
+  if (from.credits < trade.offerCredits) return false;
+  // The requested side doesn't need this much sitting in Credits right
+  // now (real trades often expect someone to mortgage/sell something to
+  // cover it) - just capped at what they could ever actually raise.
+  if (netWorthOf(state, trade.toPlayerId) < trade.requestCredits) return false;
+  if (!trade.offerTileIds.every((id) => from.ownedTileIds.includes(id))) return false;
+  if (!trade.requestTileIds.every((id) => to.ownedTileIds.includes(id))) return false;
+  if (!trade.offerCardIds.every((id) => from.heldCardIds.includes(id))) return false;
+  if (!trade.requestCardIds.every((id) => to.heldCardIds.includes(id))) return false;
+  return true;
+}
+
 export function proposeTrade(state: GameState, offer: Omit<TradeOffer, 'id'>): GameState {
+  if (!isTradeStillPossible(state, offer)) return state;
   const trade: TradeOffer = { ...offer, id: nextTradeId() };
   return { ...state, activeTrades: [...state.activeTrades, trade] };
 }
@@ -2267,8 +2433,10 @@ export function declineTrade(state: GameState, tradeId: string): GameState {
 export function acceptTrade(state: GameState, tradeId: string): GameState {
   const trade = state.activeTrades.find((t) => t.id === tradeId);
   if (!trade) return state;
-  if (!canAfford(state, trade.fromPlayerId, trade.offerCredits) || !canAfford(state, trade.toPlayerId, trade.requestCredits)) {
-    return state;
+  if (!isTradeStillPossible(state, trade)) {
+    // Gone stale since it was proposed - auto-decline rather than leave
+    // a trade nobody can actually go through with sitting there forever.
+    return { ...state, activeTrades: state.activeTrades.filter((t) => t.id !== tradeId) };
   }
 
   let next: GameState = { ...state, activeTrades: state.activeTrades.filter((t) => t.id !== tradeId) };
@@ -2337,7 +2505,10 @@ export function endTurn(state: GameState, rng: () => number = Math.random): Game
       ? chargePlayer(
           logEvent(cleared, 'Containment Overhead: Foundation resources diverted to keep an Uncontained anomaly tracked.'),
           playerId,
-          ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE + cleared.players[playerId].ownedTileIds.length * ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE,
+          Math.round(
+            (ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_BASE + cleared.players[playerId].ownedTileIds.length * ROGUE_ANOMALY_CONTAINMENT_OVERHEAD_PER_TILE) *
+              cleared.moneyDrainMultiplier,
+          ),
           null,
         )
       : cleared;
@@ -2394,6 +2565,10 @@ export function keepWatchOnSculpture(state: GameState, playerId: string, rng: ()
   if (currentPlayerId(state) !== playerId || state.lastRoll) return state;
   if (state.players[playerId].inJail) return state; // resolve the Containment Chamber the normal way first
   if (!state.looseAnomalies.some((a) => a.anomalyId === 'theSculpture')) return state;
+  // Rogue Anomaly can never actually be caught by SCP-173 in the first
+  // place (permanently immune to every Hostile Anomaly) - there's
+  // nothing for it to watch out for.
+  if (pieceOf(state, playerId) === 'trex') return state;
 
   const watching = logEvent({ ...state, scp173Watched: true }, 'Kept watch on SCP-173 instead of taking a turn.');
   return endTurn(watching, rng);

@@ -1,4 +1,5 @@
 import AnomalyGuideButton from './AnomalyGuideButton';
+import NarrativeModeToggle from './NarrativeModeToggle';
 import RuleBookButton from './RuleBookButton';
 import SoundToggle from './SoundToggle';
 import './AppHeader.css';
@@ -10,14 +11,15 @@ interface AppHeaderProps {
 
 // The fixed top-left corner cluster (mobile: a full-width header bar
 // instead - see AppHeader.css) shared by every screen. Owns the
-// positioning; SoundToggle/RuleBookButton/AnomalyGuideButton just lay out
-// their own content within it.
+// positioning; SoundToggle/RuleBookButton/AnomalyGuideButton/
+// NarrativeModeToggle just lay out their own content within it.
 function AppHeader({ showRuleBook = false }: AppHeaderProps) {
   return (
     <div className="app-header">
       <SoundToggle />
       {showRuleBook && <RuleBookButton />}
       {showRuleBook && <AnomalyGuideButton />}
+      {showRuleBook && <NarrativeModeToggle />}
     </div>
   );
 }

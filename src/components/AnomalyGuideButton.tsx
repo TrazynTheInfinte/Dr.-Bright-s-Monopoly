@@ -6,6 +6,7 @@ import { OBJECT_ANOMALIES } from '../data/objectAnomalies';
 import AnomalyIcon from './AnomalyIcon';
 import InfoModalShell from './InfoModalShell';
 import ObjectAnomalyIcon from './ObjectAnomalyIcon';
+import { useNarrativeMode } from './useNarrativeMode';
 import './AnomalyGuideButton.css';
 
 // Deliberately distinct copy from data/anomalies.ts's flavorText (which
@@ -69,8 +70,42 @@ const OBJECT_REDACTED_BRIEFS: Record<ObjectAnomalyId, string> = {
     "uses before mandatory decommissioning, malfunction or not.",
 };
 
+// Dr. Gears' version of the same briefing - the actual, unredacted
+// mechanic, plainly, for anyone who's switched off the flavor (see
+// useNarrativeMode). No censor blocks - this is meant to be read
+// straight.
+const GEARS_BRIEFS: Record<AnomalyId, string> = {
+  shyGuy:
+    'Starts dormant and harmless. If any player clicks to view it, it immediately targets that player and starts moving toward them every turn until it catches them. Once caught, the target is reassigned/Terminated as usual.',
+  theSculpture:
+    "Moves automatically at the end of every round unless the current player uses Keep Watch that round (skipping their own roll) to freeze it instead. Always visible on the board, never concealed.",
+  theOldMan:
+    "Hunts immediately from the moment it breaches, moving toward its target every turn at half normal speed. Catching someone doesn't apply the usual catch consequence right away - it drags both of them into a separate Pocket Dimension mini-game instead, which can end in an escape or a Termination.",
+  theVoices:
+    'Never shown on the board while hunting - invisible until it actually catches someone and goes dormant. Moves once per full round (not on every turn), at normal hunt speed, toward its target.',
+  theDoctor:
+    "Targets a random active player, unrelated to board position, and moves toward them every turn at half normal speed (doubled if redirected by an SCP-049-2 collision). A first catch temporarily 'Cures' the target - they roll only 1 die and lose access to several actions for a few turns. A second catch on that same target is fatal: they're reassigned/Terminated, and a slow, independently roaming SCP-049-2 instance is left behind.",
+};
+
+// Same idea as GEARS_BRIEFS above, applied to Object Anomalies.
+const OBJECT_GEARS_BRIEFS: Record<ObjectAnomalyId, string> = {
+  gamersFuel:
+    'Usable on your own turn. Rolls again and moves the extra distance immediately, resolving whatever tile is landed on. Costs a flat Credit amount per extra space moved, charged regardless of outcome.',
+  badComposition:
+    'Usable on your own turn. Most uses grant a flat Credit reward. A small chance instead sends the user to the Containment Chamber and charges a Credit cost.',
+  countermeasure:
+    "Usable on your own turn. Arms a one-time redirect: the next time the holder would be caught by a Hostile Anomaly, the catch (and its full consequence) lands on a random other active player instead.",
+  evasionHat:
+    'Usable on your own turn. Makes the holder untargetable by every Hostile Anomaly until the start of their next turn.',
+  microHid:
+    'Usable on your own turn. Standard Fire recontains a loose anomaly within a limited range, for free, guaranteed. Overcharge reaches any loose anomaly regardless of range, but has a real chance of backfiring (a Credit cost, no effect) instead of connecting. Single use either way.',
+  jailbird:
+    'Usable on your own turn. Strikes a loose anomaly, an SCP-049-2 instance, or another player within a limited range. Breaks permanently after 3 uses, and every swing has a chance of malfunctioning instead of connecting.',
+};
+
 function AnomalyGuideButton() {
   const [open, setOpen] = useState(false);
+  const mode = useNarrativeMode();
 
   return (
     <>
@@ -80,9 +115,13 @@ function AnomalyGuideButton() {
 
       {open && (
         <InfoModalShell
-          eyebrow="Redacted Personnel Briefing - Distribute on a Need-to-Know Basis"
+          eyebrow={
+            mode === 'gears'
+              ? 'Dr. Gears\' Mechanics Briefing - The Actual Rules, No Narration'
+              : 'Redacted Personnel Briefing - Distribute on a Need-to-Know Basis'
+          }
           title="Anomaly Guide"
-          closing="If Contained, or Recovered, Report Immediately."
+          closing={mode === 'gears' ? "That's everything - go play." : 'If Contained, or Recovered, Report Immediately.'}
           onClose={() => setOpen(false)}
         >
           <h2 className="anomaly-guide-group-heading">Hostile Anomalies</h2>
@@ -92,7 +131,7 @@ function AnomalyGuideButton() {
                 <AnomalyIcon anomalyId={anomaly.id} className="anomaly-guide-icon" />
                 <div className="anomaly-guide-entry-body">
                   <h3>{anomaly.name}</h3>
-                  <p>{REDACTED_BRIEFS[anomaly.id]}</p>
+                  <p>{mode === 'gears' ? GEARS_BRIEFS[anomaly.id] : REDACTED_BRIEFS[anomaly.id]}</p>
                 </div>
               </section>
             ))}
@@ -105,7 +144,7 @@ function AnomalyGuideButton() {
                 <ObjectAnomalyIcon objectId={object.id} className="anomaly-guide-icon" />
                 <div className="anomaly-guide-entry-body">
                   <h3>{object.name}</h3>
-                  <p>{OBJECT_REDACTED_BRIEFS[object.id]}</p>
+                  <p>{mode === 'gears' ? OBJECT_GEARS_BRIEFS[object.id] : OBJECT_REDACTED_BRIEFS[object.id]}</p>
                 </div>
               </section>
             ))}

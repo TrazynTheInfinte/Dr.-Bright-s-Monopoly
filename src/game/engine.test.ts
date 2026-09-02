@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { getTile } from '../data/board';
 import {
   acceptTrade,
-  acknowledgeCard,
   acknowledgePocketDimensionLanding,
   afkSkipTurn,
   buildHouse,
@@ -351,15 +350,14 @@ describe('houses and mortgages', () => {
 });
 
 describe('cards', () => {
-  it('a collect-effect card pays out to the drawer', () => {
+  it('a collect-effect card pays out to the drawer immediately, no acknowledgement needed', () => {
     let game = makeGame();
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'hazardPayBonus');
     game = drawFromPile(game, 'p1');
-    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p1' });
-    game = acknowledgeCard(game);
     expect(game.players.p1.credits).toBe(1550);
     expect(game.pendingDecision).toBeNull();
+    expect(game.lastDrawnCard).toEqual({ cardId: 'hazardPayBonus', forPlayerId: 'p1', sequence: 0 });
   });
 
   it('a moveTo-effect card relocates the player and can award passing the Site Entrance', () => {
@@ -368,7 +366,6 @@ describe('cards', () => {
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'realityAnchorMalfunction'); // moveTo tile 0
     game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
     expect(game.players.p1.position).toBe(0);
     expect(game.players.p1.credits).toBe(1700);
   });
@@ -378,7 +375,6 @@ describe('cards', () => {
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
     game = devSetForcedCard(game, 'reassignedToContainmentDuty');
     game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
     expect(game.players.p1.inJail).toBe(true);
     expect(game.players.p1.position).toBe(10);
   });
@@ -388,7 +384,6 @@ describe('cards', () => {
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'clearanceRevokedAnomalous');
     game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
     expect(game.players.p1.heldCardIds).toEqual(['clearanceRevokedAnomalous']);
   });
 
@@ -397,7 +392,6 @@ describe('cards', () => {
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
     game = devSetForcedCard(game, 'foundersDayGala');
     game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
     expect(game.players.p1.credits).toBe(1550);
     expect(game.players.p2.credits).toBe(1450);
   });
@@ -416,17 +410,29 @@ describe('cards', () => {
     expect(game.pendingDecision?.type).toBe('catRedirect');
   });
 
-  it('Chaos Insurgency Spy (Cat) can hand a drawn card off to another player', () => {
+  it('Chaos Insurgency Spy (Cat) can hand a drawn card off to another player, resolving immediately once redirected', () => {
     let game = makeGame(['cat', 'boot']);
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'hazardPayBonus');
     game = drawFromPile(game, 'p1');
     expect(game.pendingDecision?.type).toBe('catRedirect');
     game = catRedirectCard(game, 'p1', 'p2');
-    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p2' });
-    game = acknowledgeCard(game);
+    expect(game.pendingDecision).toBeNull();
     expect(game.players.p2.credits).toBe(1550);
     expect(game.players.p1.credits).toBe(1500);
+    expect(game.lastDrawnCard).toEqual({ cardId: 'hazardPayBonus', forPlayerId: 'p2', sequence: 0 });
+  });
+
+  it('drawing the same card twice in a row still gets a fresh sequence number, so a repeat draw is never mistaken for the same reveal', () => {
+    let game = makeGame();
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    expect(game.lastDrawnCard?.sequence).toBe(0);
+    game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
+    game = devSetForcedCard(game, 'hazardPayBonus');
+    game = drawFromPile(game, 'p1');
+    expect(game.lastDrawnCard?.sequence).toBe(1);
   });
 });
 
@@ -479,6 +485,16 @@ describe('special powers', () => {
     expect(game.pendingDecision).toEqual({ type: 'rogueSeizure', tileId: 6, ownerId: 'p2' });
     expect(game.players.p1.ownedTileIds).toEqual([]); // not seized yet
     expect(game.players.p2.ownedTileIds).toEqual([6]);
+  });
+
+  it("logs why Rogue Anomaly's landing on an unowned Wing does nothing, instead of silently doing nothing", () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withPlayer(game, 'p1', { position: 0 });
+    game = devSetForcedRoll(game, [6, 0]);
+    game = rollDice(game);
+    expect(game.players.p1.ownedTileIds).toEqual([]);
+    expect(game.pendingDecision).toBeNull();
+    expect(game.log[game.log.length - 1]).toMatch(/stays unclaimed/);
   });
 
   it("Security Officer (Rubber Duck) can send an occupant to the Containment Chamber", () => {
@@ -825,7 +841,8 @@ describe("Site Director's Executive Authority and Redirect Without Exposure", ()
     game = drawFromPile(game, 'p1');
     expect(game.pendingDecision?.type).toBe('catRedirect');
     game = catRedirectCard(game, 'p1', 'p2');
-    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p2' });
+    expect(game.pendingDecision).toBeNull();
+    expect(game.lastDrawnCard?.forPlayerId).toBe('p2');
     expect(game.players.p1.usedRedirect).toBe(true);
   });
 
@@ -844,7 +861,8 @@ describe("Site Director's Executive Authority and Redirect Without Exposure", ()
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'hazardPayBonus');
     game = drawFromPile(game, 'p1');
-    expect(game.pendingDecision).toEqual({ type: 'cardDrawn', cardId: 'hazardPayBonus', forPlayerId: 'p1' });
+    expect(game.pendingDecision).toBeNull();
+    expect(game.lastDrawnCard?.forPlayerId).toBe('p1');
   });
 });
 
@@ -1190,6 +1208,156 @@ describe('trading', () => {
     game = withdrawTrade(game, game.activeTrades[0].id);
     expect(game.activeTrades).toHaveLength(0);
   });
+
+  it("refuses to propose a trade offering a tile the proposer doesn't actually own", () => {
+    let game = makeGame();
+    const before = game;
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [1], // p1 doesn't own this
+      offerCredits: 0,
+      offerCardIds: [],
+      requestTileIds: [],
+      requestCredits: 0,
+      requestCardIds: [],
+    });
+    expect(game).toEqual(before);
+  });
+
+  it('refuses to propose a trade offering more Credits than the proposer has', () => {
+    let game = makeGame();
+    const before = game;
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [],
+      offerCredits: 999999,
+      offerCardIds: [],
+      requestTileIds: [],
+      requestCredits: 0,
+      requestCardIds: [],
+    });
+    expect(game).toEqual(before);
+  });
+
+  it("refuses to propose a trade requesting more Credits than the other player could ever cover, even by liquidating everything", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { ownedTileIds: [1, 3], credits: 100 }); // net worth well under a million
+    const before = game;
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [],
+      offerCredits: 0,
+      offerCardIds: [],
+      requestTileIds: [],
+      requestCredits: 2_000_000,
+      requestCardIds: [],
+    });
+    expect(game).toEqual(before);
+  });
+
+  it('acceptTrade auto-declines a trade that went stale (a tile changed hands since it was proposed)', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 1000 });
+    game = proposeTrade(game, {
+      fromPlayerId: 'p1',
+      toPlayerId: 'p2',
+      offerTileIds: [1],
+      offerCredits: 0,
+      offerCardIds: [],
+      requestTileIds: [],
+      requestCredits: 0,
+      requestCardIds: [],
+    });
+    const tradeId = game.activeTrades[0].id;
+    // p1 no longer owns tile 1 by the time p2 gets around to accepting
+    // (sold it, lost it to a seizure, whatever) - the trade is now stale.
+    game = withPlayer(game, 'p1', { ownedTileIds: [] });
+    game = acceptTrade(game, tradeId);
+    expect(game.activeTrades).toHaveLength(0); // auto-declined, not executed
+    expect(game.players.p2.ownedTileIds).toEqual([]); // nothing transferred
+  });
+});
+
+describe('"Jailed, Not Terminated" mode', () => {
+  it('a would-be Termination by a Hostile Anomaly instead jails the player, keeping every asset', () => {
+    let game = makeGame(); // p1 'dog', p2 'car'
+    game = { ...game, terminationRule: 'jail' };
+    game = withPlayer(game, 'p2', { position: 10, credits: 1000, ownedTileIds: [6], heldCardIds: ['recoveredGamersFuel'] });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p2.inJail).toBe(true);
+    expect(game.players.p2.position).toBe(10);
+    expect(game.players.p2.isTerminationJailed).toBe(true);
+    // Nothing seized - the whole point of the mode.
+    expect(game.players.p2.credits).toBe(1000);
+    expect(game.players.p2.ownedTileIds).toEqual([6]);
+    expect(game.players.p2.heldCardIds).toEqual(['recoveredGamersFuel']);
+    expect(game.players.p2.isSpectating).toBe(false);
+    expect(game.pendingPieceChoice).toBeNull();
+  });
+
+  it('a would-be Termination by bankruptcy also jails instead, forgiving the debt rather than seizing anything', () => {
+    let game = makeGame();
+    game = { ...game, terminationRule: 'jail' };
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 10 });
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: 'p2' } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.inJail).toBe(true);
+    expect(game.players.p1.isTerminationJailed).toBe(true);
+    expect(game.players.p1.credits).toBe(10); // untouched
+    expect(game.players.p1.ownedTileIds).toEqual([1]); // untouched
+    expect(game.players.p2.ownedTileIds).toEqual([]); // creditor never actually collects in this mode
+    expect(game.players.p1.isSpectating).toBe(false);
+  });
+
+  it('no Holding Fee while serving out a termination-jail stay, and no way to pay or card their way out early', () => {
+    let game = makeGame(['car', 'boot']); // neither piece has its own fee exemption
+    game = withPlayer(game, 'p1', {
+      inJail: true,
+      isTerminationJailed: true,
+      position: 10,
+      credits: 5, // couldn't afford the normal Holding Fee anyway
+      heldCardIds: ['requisitionedGetOutOfJail'],
+    });
+    game = devSetForcedRoll(game, [2, 3]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(5); // no Holding Fee charged
+    expect(game.pendingDecision).toBeNull(); // never opened a debtSettlement either
+    expect(game.players.p1.inJail).toBe(true);
+
+    const before = game;
+    expect(payEscapeFee(game, 'p1')).toEqual(before);
+    expect(useGetOutOfJailCard(game, 'p1', 'requisitionedGetOutOfJail')).toEqual(before);
+  });
+
+  it('rolling doubles or serving the full 3 turns still releases a termination-jailed player normally', () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p1', { inJail: true, isTerminationJailed: true, position: 10 });
+    game = devSetForcedRoll(game, [3, 3]);
+    game = rollDice(game);
+    expect(game.players.p1.inJail).toBe(false);
+    expect(game.players.p1.isTerminationJailed).toBe(false);
+  });
+
+  it('scales the Holding Fee with the session-length preset (moneyDrainMultiplier), unrelated to terminationRule', () => {
+    let game = makeGame();
+    game = { ...game, moneyDrainMultiplier: 2 };
+    game = withPlayer(game, 'p1', { inJail: true, position: 10, credits: 1000 });
+    game = devSetForcedRoll(game, [2, 3]);
+    game = rollDice(game);
+    expect(game.players.p1.credits).toBe(1000 - 100); // 50 Holding Fee, doubled
+  });
+
+  it("scales Rogue Anomaly's Containment Overhead with the session-length preset too", () => {
+    let game = makeGame(['trex', 'boot']);
+    game = { ...game, moneyDrainMultiplier: 2, currentTurnIndex: 0 };
+    game = withPlayer(game, 'p1', { credits: 1000, ownedTileIds: [1] }); // base 11 + 1*5 = 16, doubled = 32
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.players.p1.credits).toBe(1000 - 32);
+  });
 });
 
 describe('debt and bankruptcy', () => {
@@ -1533,6 +1701,24 @@ describe('hostile anomalies', () => {
     expect(game.pendingPieceChoice).toBeNull();
     expect(game.winnerId).toBeNull(); // 11 players still active
     expect(game.eliminations).toEqual([{ playerId: caughtId, pieceId: 'battleship', turnCount: game.turnCount, cause: 'SCP-096 "The Shy Guy" caught up with someone' }]);
+    expect(game.retiredPieceIds).toEqual(['battleship']);
+  });
+
+  it('a retired Personnel never comes back into the reassignment pool, even once its old player is isSpectating (so no longer "claiming" it)', () => {
+    let game = makeGame(['boot', 'battleship', 'car']); // plenty of other pieces stay unclaimed
+    // Simulates the exact state a real Termination leaves behind:
+    // battleship's old player is isSpectating (so it's no longer in the
+    // "claimed" set at all) and, separately, the piece itself is
+    // retired. Without retiredPieceIds, isSpectating alone would make
+    // it look free again the instant anyone else needs a reassignment.
+    game = withPlayer(game, 'p2', { isSpectating: true });
+    game = { ...game, retiredPieceIds: ['battleship'] };
+
+    game = withPlayer(game, 'p3', { position: 10 });
+    game = withLooseAnomalies(game, [{ anomalyId: 'shyGuy', tileId: 8, status: 'hunting', targetPlayerId: 'p3', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.pendingPieceChoice?.playerId).toBe('p3');
+    expect(game.pendingPieceChoice?.availablePieceIds).not.toContain('battleship');
   });
 
   it('chooseNewPersonnel reassigns to any available Personnel and clears the choice', () => {
@@ -1812,6 +1998,12 @@ describe('hostile anomalies', () => {
     expect(keepWatchOnSculpture(nothingLoose, 'p1')).toEqual(nothingLoose);
   });
 
+  it("refuses Keep Watch for Rogue Anomaly - permanently immune to SCP-173 already, nothing to watch out for", () => {
+    let game = makeGame(['trex', 'boot']);
+    game = withLooseAnomalies(game, [{ anomalyId: 'theSculpture', tileId: 0, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 }]);
+    expect(keepWatchOnSculpture(game, 'p1', NO_BREACH_RNG)).toEqual(game);
+  });
+
   it("lets a non-anchor player keep watch too - everyone's a potential target, so it holds until the round's actual check turn", () => {
     let game = makeGame();
     game = withPlayer(game, 'p1', { position: 5 }); // would otherwise be caught outright on the anchor's turn
@@ -1849,6 +2041,29 @@ describe('SCP-106 and the Pocket Dimension', () => {
     game = devSpawnAnomaly(game, 'theOldMan');
     expect(game.looseAnomalies[0].status).toBe('hunting');
     expect(game.looseAnomalies[0].targetPlayerId).toBe('p2');
+  });
+
+  it("a player trapped in the Pocket Dimension can't also be caught by a different hunting anomaly at the same time", () => {
+    let game = makeGame(['dog', 'car', 'iron']); // p3 is a third player, so there's someone else to reacquire
+    game = withPlayer(game, 'p2', { position: 8 });
+    game = withPlayer(game, 'p3', { position: 10 });
+    game = {
+      ...game,
+      pocketDimensionOrdeal: { trappedPlayerId: 'p2', track: ['neutral'], playerTrackPosition: 0, anomalyTrackPosition: 0, speedRamp: 0 },
+      looseAnomalies: [
+        { anomalyId: 'theOldMan', tileId: 34, status: 'inPocketDimension', targetPlayerId: null, breachedOnTurnCount: 0 },
+        { anomalyId: 'shyGuy', tileId: 6, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 },
+      ],
+    };
+    game = endTurn(game, NO_BREACH_RNG);
+    // shyGuy lost its target (p2 is off-limits while trapped) and either
+    // reacquired someone else or went dormant - it must NOT have caught
+    // p2, who's still exactly where the ordeal left them, not reassigned.
+    const shyGuy = game.looseAnomalies.find((a) => a.anomalyId === 'shyGuy')!;
+    expect(shyGuy.targetPlayerId).not.toBe('p2');
+    expect(game.pocketDimensionOrdeal?.trappedPlayerId).toBe('p2'); // still trapped, ordeal untouched
+    expect(game.pendingPieceChoice).toBeNull(); // never reassigned mid-ordeal
+    expect(game.players.p2.position).toBe(8); // frozen, untouched
   });
 
   it('hunts at half of Shy Guy\'s speed once engaged', () => {
@@ -2170,7 +2385,6 @@ describe('Object Anomalies', () => {
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'anomalousEvent' } };
     game = devSetForcedCard(game, 'recoveredGamersFuel');
     game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
     expect(game.players.p1.heldCardIds).toEqual(['recoveredGamersFuel']);
   });
 
@@ -2269,7 +2483,6 @@ describe('Object Anomalies', () => {
     game = { ...game, pendingDecision: { type: 'awaitingCardDraw', deck: 'foundationDirective' } };
     game = devSetForcedCard(game, 'requisitionedCountermeasure');
     game = drawFromPile(game, 'p1');
-    game = acknowledgeCard(game);
     expect(game.players.p1.heldCardIds).toEqual(['requisitionedCountermeasure']);
     expect(game.foundationDirectiveDiscardPile).not.toContain('requisitionedCountermeasure');
   });
@@ -2580,6 +2793,25 @@ describe('SCP-049 "The Plague Doctor"', () => {
     // reassigned, not really excluded, so either player is a valid pick).
     expect(game.looseAnomalies[0].status).toBe('hunting');
     expect(game.looseAnomalies[0].targetPlayerId).not.toBeNull();
+  });
+
+  it("a fatal catch's reassignment resets the new body's Cure status - it doesn't inherit the old one's diminished dice", () => {
+    let game = makeGame();
+    game = withPlayer(game, 'p2', { position: 10, curedTurnsRemaining: 2, hasBeenCuredBy049: true });
+    game = withLooseAnomalies(game, [{ anomalyId: 'theDoctor', tileId: 8, status: 'hunting', targetPlayerId: 'p2', breachedOnTurnCount: 0 }]);
+    game = endTurn(game, NO_BREACH_RNG);
+    expect(game.pendingPieceChoice?.playerId).toBe('p2');
+    expect(game.players.p2.curedTurnsRemaining).toBe(0);
+    expect(game.players.p2.hasBeenCuredBy049).toBe(false);
+  });
+
+  it("D-Class's own respawn (Standard Expendability Clause) resets Cure status the same way", () => {
+    let game = makeGame(['boot', 'car']);
+    game = withPlayer(game, 'p1', { ownedTileIds: [1], credits: 5, curedTurnsRemaining: 2, hasBeenCuredBy049: true });
+    game = { ...game, pendingDecision: { type: 'debtSettlement', forPlayerId: 'p1', amountOwed: 999, creditorId: null } };
+    game = declareBankruptcy(game, 'p1');
+    expect(game.players.p1.curedTurnsRemaining).toBe(0);
+    expect(game.players.p1.hasBeenCuredBy049).toBe(false);
   });
 
   it("an armed Countermeasure redirects even a first-time Cure onto a random other living player", () => {

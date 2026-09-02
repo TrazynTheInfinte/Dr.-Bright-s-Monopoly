@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getTile } from '../data/board';
 import { findCard } from '../data/cards';
+import { netWorthOf } from '../game/engine';
 import { acceptTradeAndSync, declineTradeAndSync, proposeTradeAndSync, withdrawTradeAndSync } from '../lib/gameSync';
 import type { GameState } from '../types/game';
 import type { Room } from '../types/room';
@@ -161,6 +162,13 @@ function TradePanel({ playerId, roomCode, room, game }: TradePanelProps) {
                 <input
                   type="number"
                   min={0}
+                  // Capped at their full net worth (Credits plus
+                  // everything they own, liquidated) - the engine
+                  // refuses to even propose a trade asking for more
+                  // than that (see isTradeStillPossible in
+                  // game/engine.ts), so there's no point letting the
+                  // input reach a value that would just silently fail.
+                  max={effectiveTargetId ? netWorthOf(game, effectiveTargetId) : 0}
                   value={theirCredits}
                   onChange={(event) => setTheirCredits(Math.max(0, Number(event.target.value) || 0))}
                 />

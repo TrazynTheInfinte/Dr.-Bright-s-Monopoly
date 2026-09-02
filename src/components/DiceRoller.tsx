@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { INTERN_GRADUATION_LAPS } from '../game/engine';
 import { playDiceLand, playDiceTick } from '../lib/sound';
 import type { GameState } from '../types/game';
 import './DiceRoller.css';
@@ -82,7 +83,19 @@ function DieFace({ value }: { value: number }) {
  */
 function DiceRoller({ game, rollTrigger }: DiceRollerProps) {
   const currentPlayerId = game.turnOrder[game.currentTurnIndex];
-  const diceCount = game.players[currentPlayerId]?.pieceId === 'thimble' ? 1 : 2;
+  const currentPlayer = game.players[currentPlayerId];
+  // Mirrors rollDice's own rollingOneDie condition exactly (game/
+  // engine.ts) - this used to just check pieceId === 'thimble', which
+  // meant the real second die kept rolling under the hood the whole
+  // time (game.lastRoll was already correct) but never actually got
+  // shown once Intern graduated, and any piece under SCP-049's Cure
+  // status got the opposite bug: a phantom, always-blank second die.
+  const diceCount =
+    currentPlayer &&
+    ((currentPlayer.pieceId === 'thimble' && currentPlayer.lapsCompleted < INTERN_GRADUATION_LAPS) ||
+      currentPlayer.curedTurnsRemaining > 0)
+      ? 1
+      : 2;
   const rollSignature = game.lastRoll ? `${game.lastRoll[0]}-${game.lastRoll[1]}` : null;
 
   const [isRolling, setIsRolling] = useState(false);
