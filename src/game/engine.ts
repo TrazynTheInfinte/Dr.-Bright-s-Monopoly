@@ -303,12 +303,13 @@ function updatePeakNetWorth(state: GameState): GameState {
  * Records a permanent Termination for the post-game summary's
  * elimination timeline (see GameState.eliminations) and permanently
  * retires the piece they were playing from the reassignment pool (see
- * retirePiece/availablePersonnelIds) - a real Termination is exactly
- * the one moment that piece is gone for good, distinct from simply
- * being reassigned away from it (which leaves it in circulation).
- * Called at every real-Termination site (applyCatchConsequence,
- * declareBankruptcy, devKickPlayer), right where isSpectating is
- * actually set.
+ * retirePiece/availablePersonnelIds). Surviving a catch via
+ * reassignment also retires the old piece (see applyCatchConsequence's
+ * own retirePiece call), but doesn't belong in the elimination
+ * timeline - nobody was actually eliminated - so that case calls
+ * retirePiece directly instead of going through here. Called at every
+ * real-Termination site (applyCatchConsequence, declareBankruptcy,
+ * devKickPlayer), right where isSpectating is actually set.
  */
 function recordElimination(state: GameState, playerId: string, cause: string): GameState {
   const pieceId = pieceOf(state, playerId);
@@ -1685,7 +1686,7 @@ function availablePersonnelIds(state: GameState): PieceId[] {
   return STARTING_PIECES.map((p) => p.id).filter((id) => !claimed.has(id) && !state.retiredPieceIds.includes(id));
 }
 
-/** Permanently retires a Personnel from the reassignment pool - called the instant someone is actually Terminated while playing it (not simply reassigned away from, which leaves it in circulation for someone else). Bounded at 12 entries, so cheap to keep synced. */
+/** Permanently retires a Personnel from the reassignment pool - called the instant anyone actually leaves it behind, whether that's a real Termination or surviving a catch by reassigning to a new Personnel. Not called for D-Class's own respawn (Standard Expendability Clause) or "Jailed, Not Terminated" mode (sendToTerminationJail) - neither actually changes which Personnel the player is on, so there's nothing to retire. Bounded at 12 entries, so cheap to keep synced. */
 function retirePiece(state: GameState, pieceId: PieceId): GameState {
   if (state.retiredPieceIds.includes(pieceId)) return state;
   return { ...state, retiredPieceIds: [...state.retiredPieceIds, pieceId] };
@@ -1803,6 +1804,13 @@ function applyCatchConsequence(state: GameState, targetPlayerId: string, rng: ()
       // wasn't the one that got cured (or ran out its "Cured" status)
       // before this catch, so neither should carry over.
       next = updatePlayer(next, targetPlayerId, { credits: RESPAWN_CREDITS, curedTurnsRemaining: 0, hasBeenCuredBy049: false });
+      // Retires the Personnel they're leaving behind, same as a real
+      // Termination does - once someone's been caught and has to move
+      // on from a piece, it's gone from the pool for good, whether they
+      // personally survived the catch or not. Captured before
+      // pendingPieceChoice resolves (chooseNewPersonnel), while
+      // pieceOf still reports the one they're actually leaving.
+      next = retirePiece(next, pieceOf(next, targetPlayerId));
       next = { ...next, pendingPieceChoice: { playerId: targetPlayerId, availablePieceIds: available } };
       next = logEvent(next, 'Requisitioning a new Personnel assignment.');
     }

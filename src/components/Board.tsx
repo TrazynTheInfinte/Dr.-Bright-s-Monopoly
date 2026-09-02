@@ -125,12 +125,13 @@ function BoardPopup({
   const leftPercent = col === 1 ? (col / 11) * 100 : col === 11 ? ((col - 1) / 11) * 100 : ((col - 0.5) / 11) * 100;
   const translateX = col === 1 ? '8px' : col === 11 ? 'calc(-100% - 8px)' : '-50%';
 
-  // Growing upward from a top-row tile (the default - see
-  // --popup-translate-y below) pushes the popup above the board entirely,
-  // clipped by the viewport - there's nothing above row 1 to grow into.
-  // Anchor those to the tile's bottom edge and grow downward instead, on
-  // both desktop and mobile.
-  const isTopRow = row === 1;
+  // Growing upward from a tile near the top of the board (the default -
+  // see --popup-translate-y below) pushes the popup above the board
+  // entirely, clipped by the viewport - there isn't enough room above
+  // row 1 (or even row 2, for a Wing tile's taller popup - name, price,
+  // and a full rent table) to grow into. Anchor those to the tile's
+  // bottom edge and grow downward instead, on both desktop and mobile.
+  const isTopRow = row <= 2;
   const topPercent = isTopRow ? (row / 11) * 100 : ((row - 0.5) / 11) * 100;
   const translateY = isTopRow ? '12px' : '-160%';
 

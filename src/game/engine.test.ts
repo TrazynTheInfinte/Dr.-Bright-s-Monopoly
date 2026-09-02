@@ -1297,6 +1297,7 @@ describe('"Jailed, Not Terminated" mode', () => {
     expect(game.players.p2.heldCardIds).toEqual(['recoveredGamersFuel']);
     expect(game.players.p2.isSpectating).toBe(false);
     expect(game.pendingPieceChoice).toBeNull();
+    expect(game.retiredPieceIds).toEqual([]); // still playing the same Personnel - nothing was left behind
   });
 
   it('a would-be Termination by bankruptcy also jails instead, forgiving the debt rather than seizing anything', () => {
@@ -1671,6 +1672,10 @@ describe('hostile anomalies', () => {
     expect(game.pendingPieceChoice?.availablePieceIds).not.toContain('car'); // can't "reassign" to the piece they already had
     expect(game.looseAnomalies[0]).toEqual({ anomalyId: 'shyGuy', tileId: 10, status: 'dormant', targetPlayerId: null, breachedOnTurnCount: 0 });
     expect(game.players.p2.position).toBe(0); // sent back to the Site Entrance - no Go bonus, just reset
+    // 'car' is retired even though p2 survived - once someone's caught
+    // and has to move on, that Personnel is gone from the pool for
+    // good, not just "in circulation until reassigned."
+    expect(game.retiredPieceIds).toEqual(['car']);
   });
 
   it('a D-Class survives being caught via its own Standard Expendability Clause instead', () => {
@@ -1683,6 +1688,7 @@ describe('hostile anomalies', () => {
     expect(game.players.p2.usedExpendabilityClause).toBe(true);
     expect(game.players.p2.isSpectating).toBe(false);
     expect(game.pendingPieceChoice).toBeNull();
+    expect(game.retiredPieceIds).toEqual([]); // still playing as D-Class - nothing was actually left behind
   });
 
   it('is a real Termination if every Personnel is already claimed', () => {
